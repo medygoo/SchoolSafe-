@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#243a6b">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<title>Créer votre mot de passe — SchoolSafe</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17213b;background:#eef3fb}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(circle at 15% 5%,#d7e9ff 0,transparent 38%),linear-gradient(145deg,#f7faff,#e8effa)}
+.card{width:min(100%,430px);background:#fff;border-radius:26px;padding:30px 24px;box-shadow:0 24px 70px rgba(32,55,105,.18);border:1px solid rgba(74,104,164,.12)}
+.logo{display:block;width:74px;height:74px;object-fit:contain;margin:0 auto 16px}
+h1{font-size:26px;line-height:1.15;text-align:center;margin:0 0 10px;color:#243a6b}
+.subtitle{text-align:center;color:#64708a;font-size:14px;line-height:1.55;margin:0 0 24px}
+.email{font-weight:750;color:#25385f;overflow-wrap:anywhere}
+.status{display:flex;align-items:center;justify-content:center;gap:10px;color:#5c6b87;text-align:center;min-height:90px;line-height:1.5}
+.spinner{width:24px;height:24px;border:3px solid #dfe7f5;border-top-color:#3c77dd;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.field{margin-bottom:14px}
+label{display:block;font-size:13px;font-weight:750;margin:0 0 7px;color:#334463}
+input{width:100%;border:1.5px solid #cdd8ea;border-radius:13px;padding:14px 15px;font-size:16px;outline:none;background:#fbfdff;color:#14213d}
+input:focus{border-color:#3978de;box-shadow:0 0 0 4px rgba(57,120,222,.12)}
+.hint{font-size:12px;color:#6b7890;line-height:1.5;margin:2px 2px 14px}
+.message{min-height:22px;margin:2px 0 12px;font-size:13px;font-weight:650;text-align:center;color:#c13838}
+button,.link-button{width:100%;border:0;border-radius:13px;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;text-decoration:none;display:block;text-align:center}
+.primary{background:#276fdb;color:#fff;box-shadow:0 9px 24px rgba(39,111,219,.23)}
+.primary:disabled{opacity:.65;cursor:wait}
+.secondary{margin-top:11px;background:#edf3fd;color:#315c9d}
+.notice{border-radius:15px;padding:15px;text-align:center;line-height:1.55;font-size:14px}
+.notice.error{background:#fff1f1;color:#992e2e;border:1px solid #f4c8c8}
+.notice.success{background:#eaf9f0;color:#17643a;border:1px solid #bde8cc}
+.hidden{display:none!important}
+.secure{display:flex;justify-content:center;gap:7px;color:#71809a;font-size:11px;margin-top:20px}
+</style>
+</head>
+<body>
+<main class="card">
+  <img class="logo" src="logo-schoolsafe.png" alt="SchoolSafe">
+  <section id="loading">
+    <h1>Vérification du lien</h1>
+    <p class="subtitle">SchoolSafe prépare votre accès sécurisé.</p>
+    <div class="status"><span class="spinner"></span><span>Veuillez patienter…</span></div>
+  </section>
+
+  <section id="passwordForm" class="hidden">
+    <h1 id="title">Créez votre mot de passe</h1>
+    <p class="subtitle">Compte : <span class="email" id="email"></span></p>
+    <form id="form" novalidate>
+      <div class="field">
+        <label for="password">Nouveau mot de passe</label>
+        <input id="password" type="password" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="field">
+        <label for="confirmation">Confirmer le mot de passe</label>
+        <input id="confirmation" type="password" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="hint">Utilisez au moins 8 caractères. Ne communiquez jamais ce mot de passe à quelqu’un.</div>
+      <div class="message" id="message" role="alert"></div>
+      <button class="primary" id="save" type="submit">Enregistrer le mot de passe</button>
+    </form>
+  </section>
+
+  <section id="errorPanel" class="hidden">
+    <h1>Lien non valide</h1>
+    <div class="notice error" id="errorMessage">Ce lien a expiré ou a déjà été utilisé.</div>
+    <a class="link-button secondary" href="./index.html">Retourner à la connexion</a>
+  </section>
+
+  <section id="successPanel" class="hidden">
+    <h1>Mot de passe enregistré</h1>
+    <div class="notice success">Votre nouveau mot de passe est actif. Ouverture de la connexion…</div>
+    <a class="link-button primary" style="margin-top:14px" href="./index.html?password_changed=1">Se connecter maintenant</a>
+  </section>
+
+  <div class="secure">🔒 Lien sécurisé par Supabase Auth</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"></script>
+<script>
+(function(){
+  'use strict';
+  const SUPABASE_URL="https://lcnronymkccgyltttqry.supabase.co";
+  const SUPABASE_KEY="sb_publishable_riSfIF1hT5-imh4uq4bUmQ_b5poe7hG";
+  const initialUrl=new URL(location.href);
+  const hashParams=new URLSearchParams(initialUrl.hash.replace(/^#/,''));
+  const callbackType=hashParams.get('type')||initialUrl.searchParams.get('type')||'';
+  const callbackError=hashParams.get('error_description')||initialUrl.searchParams.get('error_description')||'';
+  const client=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
+    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+  });
+  let activeSession=null;
+
+  const byId=id=>document.getElementById(id);
+  const show=id=>{
+    ['loading','passwordForm','errorPanel','successPanel'].forEach(name=>byId(name).classList.toggle('hidden',name!==id));
+  };
+  const friendlyError=error=>{
+    const msg=String(error?.message||error||'').toLowerCase();
+    if(msg.includes('expired')||msg.includes('token')||msg.includes('session')) return 'Ce lien a expiré ou a déjà été utilisé. Demandez un nouveau lien depuis l’application.';
+    if(msg.includes('different from the old')) return 'Choisissez un mot de passe différent de l’ancien.';
+    if(msg.includes('password')&&(msg.includes('least')||msg.includes('short'))) return 'Le mot de passe doit contenir au moins 8 caractères.';
+    if(msg.includes('rate limit')||msg.includes('too many')) return 'Trop de tentatives. Attendez quelques minutes puis recommencez.';
+    return 'Impossible de valider le lien. Demandez un nouveau lien depuis l’application.';
+  };
+  const fail=message=>{
+    byId('errorMessage').textContent=message;
+    show('errorPanel');
+  };
+  const cleanAddress=()=>{
+    try{
+      const clean=new URL(location.href);
+      clean.hash='';
+      ['code','token','token_hash','type','error','error_code','error_description'].forEach(key=>clean.searchParams.delete(key));
+      history.replaceState({},document.title,clean.pathname+clean.search);
+    }catch(_){}
+  };
+
+  async function initialize(){
+    if(callbackError){
+      fail(decodeURIComponent(callbackError.replace(/\+/g,' ')));
+      return;
+    }
+    try{
+      const code=initialUrl.searchParams.get('code');
+      if(code){
+        const exchanged=await client.auth.exchangeCodeForSession(code);
+        if(exchanged.error) throw exchanged.error;
+      }else{
+        const tokenHash=initialUrl.searchParams.get('token_hash');
+        const type=initialUrl.searchParams.get('type');
+        if(tokenHash&&type){
+          const verified=await client.auth.verifyOtp({token_hash:tokenHash,type});
+          if(verified.error) throw verified.error;
+        }
+      }
+
+      const result=await client.auth.getSession();
+      if(result.error) throw result.error;
+      activeSession=result.data?.session||null;
+      if(!activeSession?.user){
+        fail('Ce lien a expiré ou a déjà été utilisé. Demandez un nouveau lien depuis l’application.');
+        return;
+      }
+
+      byId('email').textContent=activeSession.user.email||'votre adresse e-mail';
+      byId('title').textContent=callbackType==='recovery'?'Choisissez un nouveau mot de passe':'Créez votre mot de passe';
+      cleanAddress();
+      show('passwordForm');
+      byId('password').focus();
+    }catch(error){
+      fail(friendlyError(error));
+    }
+  }
+
+  byId('form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    const password=byId('password').value;
+    const confirmation=byId('confirmation').value;
+    const message=byId('message');
+    if(password.length<8){
+      message.textContent='Choisissez au moins 8 caractères.';
+      return;
+    }
+    if(password!==confirmation){
+      message.textContent='Les deux mots de passe ne sont pas identiques.';
+      return;
+    }
+    if(!activeSession?.user){
+      fail('Votre session a expiré. Demandez un nouveau lien.');
+      return;
+    }
+
+    const button=byId('save');
+    button.disabled=true;
+    button.textContent='Enregistrement…';
+    message.textContent='';
+    try{
+      const updated=await client.auth.updateUser({password});
+      if(updated.error) throw updated.error;
+      localStorage.setItem('_schoolsafe_password_ready:'+activeSession.user.id,'1');
+      sessionStorage.setItem('_schoolsafe_reset_email',activeSession.user.email||'');
+      await client.auth.signOut({scope:'local'});
+      byId('password').value='';
+      byId('confirmation').value='';
+      show('successPanel');
+      setTimeout(()=>location.replace('./index.html?password_changed=1'),1800);
+    }catch(error){
+      message.textContent=friendlyError(error);
+      button.disabled=false;
+      button.textContent='Enregistrer le mot de passe';
+    }
+  });
+
+  initialize();
+})();
+</script>
+</body>
+</html>
