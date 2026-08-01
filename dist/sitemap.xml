@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://medt121.github.io/zalavrai/site.html</loc>
+    <lastmod>2025-05-25</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://medt121.github.io/zalavrai/photo4.jpg</image:loc>
+      <image:title>Élèves du Complexe Scolaire Le Sage en uniforme</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://medt121.github.io/zalavrai/logo.jpg</image:loc>
+      <image:title>Logo du Complexe Scolaire Le Sage — The Wise School International</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://medt121.github.io/zalavrai/promoteur.jpg</image:loc>
+      <image:title>Ekombe Wole Wolher — Promoteur du Complexe Scolaire Le Sage</image:title>
+    </image:image>
+  </url>
+</urlset>

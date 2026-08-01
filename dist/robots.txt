@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Disallow app (requires login)
+Disallow: /index.html
+
+Sitemap: https://medt121.github.io/zalavrai/sitemap.xml
