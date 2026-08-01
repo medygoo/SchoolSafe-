@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 const CACHE_PREFIX = 'schoolsafe-';
-const CACHE = `${CACHE_PREFIX}v65`;
+const CACHE = `${CACHE_PREFIX}v66`;
 
 // Ressources à mettre en cache au démarrage
 const PRECACHE = [
