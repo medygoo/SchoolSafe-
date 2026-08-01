@@ -32,6 +32,7 @@ window._GUARDIAN_VID = null;
 </script>
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito+Sans:opsz,wght@6..12,700;6..12,800;6..12,900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});}</script>
 <script>
 // Capture le prompt d'installation PWA dès que possible (Android/Desktop
@@ -1178,13 +1179,13 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
     <p class="login-subtitle">Connectez-vous à votre espace sécurisé</p>
     <div class="login-field">
       <span class="lfi">👤</span>
-      <input class="login-input" id="LN" type="text" placeholder="Votre nom" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="_updateLoginPinHint()">
+      <input class="login-input" id="LN" type="email" placeholder="Adresse e-mail" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
     </div>
     <div class="login-field" style="margin-bottom:4px">
       <span class="lfi">🔒</span>
-      <input class="login-input pin" id="LP" placeholder="Code PIN (6 chiffres)" type="password" maxlength="32" autocomplete="off">
+      <input class="login-input" id="LP" placeholder="Mot de passe" type="password" autocomplete="current-password">
     </div>
-    <div id="LP_HINT" style="font-size:11px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:12px;min-height:16px"></div>
+    <div id="LP_HINT" style="font-size:11px;color:rgba(255,255,255,.55);text-align:center;margin-bottom:12px;min-height:16px">Utilisez l’e-mail invité et votre mot de passe.</div>
     <div class="pin-message" id="PM"></div>
     <div id="NO_SCHOOL_WARN" style="display:none;font-size:12px;line-height:1.5;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.4);color:#fde68a;border-radius:10px;padding:10px 12px;margin-bottom:12px">
       ⚠️ Aucune école associée à ce lien — la connexion se fera hors ligne.
@@ -1578,14 +1579,14 @@ const SCHOOL_KEY = (() => { try { return localStorage.getItem('_active_school_ke
 // fois le projet central et l'Edge Function déployés (supabase/functions/login).
 // Nom réel de la fonction déployée sur le central (`dynamic-api` est le nom
 // par défaut proposé par Supabase à la création).
-const LOGIN_FN_URL = '/functions/v1/dynamic-api';
+const LOGIN_FN_URL = '';
 // Projet Supabase central OPÉRATIONNEL (les 41 tables métier + RLS, voir
 // supabase_multitenant_migration.sql) — distinct de CENTRAL_URL/CENTRAL_KEY
 // ci-dessus (qui sert le site marketing). Vide par défaut = aucune connexion
 // réelle, comportement actuel (local pur) inchangé. Une fois renseigné,
 // l'app charge/écrit réellement via ce projet pour les écoles basculées.
-const OPS_SUPA_URL = '';
-const OPS_SUPA_KEY = '';
+const OPS_SUPA_URL = 'https://lcnronymkccgyltttqry.supabase.co';
+const OPS_SUPA_KEY = 'sb_publishable_riSfIF1hT5-imh4uq4bUmQ_b5poe7hG';
 window.SCHOOL_LOGO = null;
 window._OPERATOR_WA = localStorage.getItem('_operator_wa') || '243978444167';
 window._imgFallback = el => { try { const p=el.parentNode; if(!p) return; p.innerHTML='<div style="width:100%;height:100%;background:'+el.dataset.bg+';color:'+el.dataset.cc+';display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:800">'+el.dataset.ini+'</div>'; } catch(e){} };
@@ -2393,12 +2394,22 @@ let SUPA_KEY='';
 window.DB_ONLINE = false;
 let _H = {};
 // Applique dynamiquement une nouvelle connexion Supabase (multi-tenant)
-window._updateSupabase = (url, key) => {
+window._updateSupabase = (url, key, accessToken = '') => {
   SUPA_URL = url.replace(/\/$/,''); SUPA_KEY = key;
-  _H = {'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+key,'Prefer':'return=minimal'};
+  _H = {'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+(accessToken || key),'Prefer':'return=minimal'};
 };
-window._supaConfigured = () => true; // plus d'écran de setup manuel — projet central configuré en dur (OPS_SUPA_URL)
+window._authClient = (OPS_SUPA_URL && OPS_SUPA_KEY && window.supabase?.createClient)
+  ? window.supabase.createClient(OPS_SUPA_URL, OPS_SUPA_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    })
+  : null;
+window._supaConfigured = () => !!window._authClient;
 if (OPS_SUPA_URL) window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY);
+if (window._authClient) {
+  window._authClient.auth.onAuthStateChange((_event, session) => {
+    if (session?.access_token) window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY, session.access_token);
+  });
+}
 (function _clearOldSupaKeys(){
   localStorage.removeItem('_school_supa_url');
   localStorage.removeItem('_school_supa_key');
@@ -3802,20 +3813,51 @@ async function _hashPinSalted(pin, uid) {
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 const _isDirRole = r => r==='direction'||r==='direction2'||r==='direction3';
-window._updateLoginPinHint = () => {
-  const normName = s => (s||'').trim().toLowerCase().replace(/\s+/g,' ').normalize('NFD').replace(/[̀-ͯ]/g,'');
-  const name = normName($('LN')?.value||'');
-  const hint = $('LP_HINT'); const lp = $('LP'); if(!hint||!lp) return;
-  if(!name){hint.textContent=''; lp.placeholder='Code PIN (6 chiffres)'; lp.inputMode='numeric'; return;}
-  const u = (DB.users||[]).find(u=>normName(u.name)===name||(u.initials&&normName(u.initials)===name)||normName(ini(u.name))===name);
-  if(u && _isDirRole(u.role)){
-    lp.placeholder='Mot de passe (lettres + chiffres)'; lp.inputMode='text';
-    hint.textContent='Direction : mot de passe alphanumérique (min. 6 caractères)';
-  } else {
-    lp.placeholder='Code PIN (6 chiffres)'; lp.inputMode='numeric';
-    hint.textContent=u?'Code PIN à 6 chiffres':'';
+function _authErrorMessage(error) {
+  const msg = String(error?.message || '').toLowerCase();
+  if (msg.includes('invalid login credentials')) return 'E-mail ou mot de passe incorrect';
+  if (msg.includes('email not confirmed')) return 'Confirmez d’abord votre adresse e-mail';
+  if (msg.includes('too many requests')) return 'Trop de tentatives — attendez quelques minutes';
+  return 'Connexion impossible — réessayez';
+}
+
+async function _loginWithSupabaseAuth(email, password) {
+  const { data, error } = await window._authClient.auth.signInWithPassword({ email, password });
+  if (error || !data?.session || !data?.user) {
+    $('PM').textContent = _authErrorMessage(error);
+    $('LP').value = '';
+    return;
   }
-};
+
+  window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY, data.session.access_token);
+  window.DB_ONLINE = true;
+
+  const rows = await _get(
+    'users',
+    'select=id,auth_user_id,email,name,role,initials,phone,photo_url,status&auth_user_id=eq.' +
+      encodeURIComponent(data.user.id) + '&limit=1'
+  );
+  const user = Array.isArray(rows) ? rows[0] : null;
+  if (!user || user.status !== 'active' || !NAV[user.role]) {
+    await window._authClient.auth.signOut();
+    $('PM').textContent = 'Compte non autorisé ou désactivé';
+    return;
+  }
+
+  await _initAESKeyFromPIN(password);
+  const loaded = await loadFromSupabase();
+  if (!loaded) {
+    await window._authClient.auth.signOut();
+    $('PM').textContent = 'Données indisponibles — vérifiez votre connexion';
+    return;
+  }
+
+  const currentUser = (DB.users || []).find(u => u.id === user.id) || user;
+  $('PM').textContent = '';
+  $('LP').value = '';
+  await loginAs(currentUser);
+}
+
 window.tryLogin = async () => {
   // Verrou de ré-entrance : une connexion un peu lente invitait à appuyer
   // plusieurs fois, et chaque appui relançait tout le cycle — d'où plusieurs
@@ -3835,9 +3877,20 @@ window.tryLogin = async () => {
 };
 
 async function _tryLoginInner() {
-  const normName = s => (s||'').trim().toLowerCase().replace(/\s+/g,' ').normalize('NFD').replace(/[̀-ͯ]/g,'');
-  const name = normName($('LN')?.value||'');
-  const pin = ($('LP')?.value||'').trim();
+  const rawLogin = ($('LN')?.value || '').trim();
+  const rawSecret = $('LP')?.value || '';
+
+  if (window._authClient) {
+    if (!rawLogin) { $('PM').textContent = 'Entrez votre adresse e-mail'; return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawLogin)) { $('PM').textContent = 'Adresse e-mail invalide'; return; }
+    if (!rawSecret) { $('PM').textContent = 'Entrez votre mot de passe'; return; }
+    await _loginWithSupabaseAuth(rawLogin.toLowerCase(), rawSecret);
+    return;
+  }
+
+  const normName = value => (value||'').trim().toLowerCase().replace(/\s+/g,' ').normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const name = normName(rawLogin);
+  const pin = rawSecret.trim();
   if (!name) { $('PM').textContent='Entrez votre nom'; return; }
   if (!pin) { $('PM').textContent='Entrez votre code'; return; }
   // Vérification du lockout (persisté localStorage — résiste au F5)
@@ -4011,6 +4064,7 @@ window.loginAs = async user => {
   }
 };
 window.logout = () => {
+  if (window._authClient) window._authClient.auth.signOut().catch(()=>{});
   window._stopAppBgRotation&&window._stopAppBgRotation();
   try { stopScan(); } catch(e) {}
   if(typeof window._stopIdleTimer==='function') window._stopIdleTimer();
@@ -27576,29 +27630,9 @@ document.addEventListener('DOMContentLoaded', () => {
     splash.addEventListener('click', goLogin, {once:true});
     document.addEventListener('keydown', e=>{ if(e.key==='Enter') goLogin(); });
   }
-  // Supabase charge en arrière-plan — n'est plus bloquant
+  // Les données protégées ne sont chargées qu'après une connexion Supabase Auth réussie.
   const ind=$('LOAD_IND');
-  if(ind) ind.style.display='';
-  // Signale explicitement l'absence de contexte école : sans le ?school=… du
-  // lien de l'école, l'app ne peut pas joindre le central et retombe en local.
-  if (!SCHOOL_KEY && LOGIN_FN_URL) {
-    const _w = $('NO_SCHOOL_WARN'); if (_w) _w.style.display = '';
-  }
-  if (SCHOOL_KEY && LOGIN_FN_URL) {
-    // École migrée au central : RLS bloque toute lecture tant qu'aucun JWT
-    // n'est posé (anon key = aucune ligne). Pas de préchargement ici —
-    // loadFromSupabase() est appelé après tryLogin(), une fois le JWT
-    // (et school_id) connus. On restaure seulement l'instantané chiffré
-    // local éventuel en attendant.
-    loadFromCrypt().catch(()=>{}).then(()=>{ if(ind) ind.style.display='none'; });
-  } else {
-    loadFromSupabase()
-      .then(ok=>{
-        if(ind) ind.style.display='none';
-        if(!ok) console.log('[SB] démarrage hors ligne');
-      })
-      .catch(()=>{ if(ind) ind.style.display='none'; });
-  }
+  if(ind) ind.style.display='none';
 });
 </script>
 
