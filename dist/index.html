@@ -3976,7 +3976,7 @@ window._requestPasswordReset = async function() {
   window._passwordResetBusy = true;
   _setAuthMessage('PM', 'Envoi du lien sécurisé…');
   try {
-    const redirectTo = location.origin + location.pathname;
+    const redirectTo = 'https://medygoo.github.io/SchoolSafe-/auth.html?v=1';
     const { error } = await window._authClient.auth.resetPasswordForEmail(email, { redirectTo });
     if (error) {
       _setAuthMessage('PM', _authErrorMessage(error));
@@ -27835,6 +27835,23 @@ document.addEventListener('DOMContentLoaded', () => {
     splash.addEventListener('touchend', function(e){ e.preventDefault(); goLogin(); }, {once:true, passive:false});
     splash.addEventListener('click', goLogin, {once:true});
     document.addEventListener('keydown', e=>{ if(e.key==='Enter') goLogin(); });
+  }
+
+  // Retour de la page dédiée après création ou changement du mot de passe.
+  if(new URLSearchParams(location.search).get('password_changed') === '1'){
+    const resetEmail = sessionStorage.getItem('_schoolsafe_reset_email') || '';
+    sessionStorage.removeItem('_schoolsafe_reset_email');
+    try {
+      const clean = new URL(location.href);
+      clean.searchParams.delete('password_changed');
+      history.replaceState({}, document.title, clean.pathname + clean.search);
+    } catch(_) {}
+    setTimeout(async()=>{
+      await goLogin();
+      if(resetEmail && $('LN')) $('LN').value = resetEmail;
+      _setAuthMessage('PM', 'Mot de passe enregistré — connectez-vous avec votre e-mail et ce nouveau mot de passe.');
+      if($('LP')) $('LP').focus();
+    }, 50);
   }
   // Les données protégées ne sont chargées qu'après une connexion Supabase Auth réussie.
   const ind=$('LOAD_IND');
