@@ -1191,7 +1191,9 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
       ⚠️ Aucune école associée à ce lien — la connexion se fera hors ligne.
       Ouvre l'application depuis le lien fourni par ton école (il contient <code>?school=…</code>).
     </div>
-    <button class="btn-login" onclick="tryLogin()">🔓 Se connecter</button>
+    <button class="btn-login" id="LOGIN_BUTTON" onclick="tryLogin()">🔓 Se connecter</button>
+    <button type="button" class="btn-outline-login" onclick="window._requestPasswordReset()">🔑 Mot de passe oublié ?</button>
+    <button type="button" class="btn-outline-login" onclick="window._resumeInvitation()">✉️ Première connexion / invitation</button>
     <a href="site.html" class="btn-outline-login">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
       Visiter le site de l'école
@@ -1207,6 +1209,25 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
       <span><span class="lbi">💬</span>Messages</span>
       <span><span class="lbi">📊</span>Suivi</span>
     </div>
+  </div>
+  <div class="login-container" id="PASSWORD_SETUP" style="display:none">
+    <div class="login-logo-wrap"><span class="lring"></span><span class="lring r2"></span>
+      <img src="logo-schoolsafe.png" alt="SchoolSafe" style="width:60px;height:60px;display:block;margin:0 auto 8px;animation:logoRainbow 8s linear infinite">
+    </div>
+    <h1 class="login-title" id="PASSWORD_SETUP_TITLE">Créez votre mot de passe</h1>
+    <p class="login-subtitle">Compte : <strong id="INVITE_EMAIL"></strong></p>
+    <div class="login-field">
+      <span class="lfi">🔒</span>
+      <input class="login-input" id="NEW_PASSWORD" type="password" placeholder="Nouveau mot de passe" autocomplete="new-password" minlength="8">
+    </div>
+    <div class="login-field" style="margin-bottom:4px">
+      <span class="lfi">🔒</span>
+      <input class="login-input" id="CONFIRM_PASSWORD" type="password" placeholder="Confirmer le mot de passe" autocomplete="new-password" minlength="8">
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,.72);text-align:center;margin-bottom:12px;min-height:16px">Choisissez au moins 8 caractères. Gardez ce mot de passe secret.</div>
+    <div class="pin-message" id="SET_PASSWORD_MESSAGE"></div>
+    <button class="btn-login" id="SET_PASSWORD_BUTTON" type="button" onclick="window._completePasswordSetup()">✅ Enregistrer le mot de passe</button>
+    <button type="button" class="btn-outline-login" onclick="window._cancelPasswordSetup()">Retour à la connexion</button>
   </div>
 </div>
 
@@ -2398,6 +2419,14 @@ window._updateSupabase = (url, key, accessToken = '') => {
   SUPA_URL = url.replace(/\/$/,''); SUPA_KEY = key;
   _H = {'Content-Type':'application/json','apikey':key,'Authorization':'Bearer '+(accessToken || key),'Prefer':'return=minimal'};
 };
+window._authCallbackType = (() => {
+  try {
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const query = new URLSearchParams(location.search);
+    return hash.get('type') || query.get('type') || '';
+  } catch (_) { return ''; }
+})();
+window._pendingAuthSession = null;
 window._authClient = (OPS_SUPA_URL && OPS_SUPA_KEY && window.supabase?.createClient)
   ? window.supabase.createClient(OPS_SUPA_URL, OPS_SUPA_KEY, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -2408,6 +2437,9 @@ if (OPS_SUPA_URL) window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY);
 if (window._authClient) {
   window._authClient.auth.onAuthStateChange((_event, session) => {
     if (session?.access_token) window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY, session.access_token);
+    if (session && (_event === 'PASSWORD_RECOVERY' || window._authCallbackType === 'invite' || window._authCallbackType === 'recovery')) {
+      window._pendingAuthSession = session;
+    }
   });
 }
 (function _clearOldSupaKeys(){
@@ -3778,6 +3810,9 @@ window._applyLoginBranding = async function(){
 
 window.showLogin = () => {
   const sp=$('SPLASH'), ls=$('LS');
+  const loginForm=$('login-form'), passwordSetup=$('PASSWORD_SETUP');
+  if(loginForm) loginForm.style.display='';
+  if(passwordSetup) passwordSetup.style.display='none';
   window._applyLoginBranding();
 
   // Splash disparaît instantanément
@@ -3817,9 +3852,190 @@ function _authErrorMessage(error) {
   const msg = String(error?.message || '').toLowerCase();
   if (msg.includes('invalid login credentials')) return 'E-mail ou mot de passe incorrect';
   if (msg.includes('email not confirmed')) return 'Confirmez d’abord votre adresse e-mail';
-  if (msg.includes('too many requests')) return 'Trop de tentatives — attendez quelques minutes';
+  if (msg.includes('too many requests') || msg.includes('rate limit')) return 'Trop de tentatives — attendez quelques minutes';
+  if (msg.includes('different from the old')) return 'Choisissez un mot de passe différent de l’ancien';
+  if (msg.includes('password') && (msg.includes('least') || msg.includes('short'))) return 'Le mot de passe doit contenir au moins 8 caractères';
+  if (msg.includes('session') || msg.includes('expired') || msg.includes('token')) return 'Le lien a expiré — demandez une nouvelle invitation';
   return 'Connexion impossible — réessayez';
 }
+
+const _passwordReadyKey = userId => '_schoolsafe_password_ready:' + userId;
+
+function _setAuthMessage(messageId, message) {
+  const el = $(messageId);
+  if (el) el.textContent = message || '';
+}
+
+async function _openSupabaseSession(session, password, messageId) {
+  const target = messageId || 'PM';
+  const authUser = session?.user;
+  if (!session?.access_token || !authUser?.id) {
+    _setAuthMessage(target, 'Session invalide — ouvrez de nouveau le lien reçu par e-mail');
+    return false;
+  }
+
+  window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY, session.access_token);
+  window.DB_ONLINE = true;
+
+  const rows = await _get(
+    'users',
+    'select=id,auth_user_id,email,name,role,initials,phone,photo_url,status&auth_user_id=eq.' +
+      encodeURIComponent(authUser.id) + '&limit=1'
+  );
+  const user = Array.isArray(rows) ? rows[0] : null;
+  if (!user || user.status !== 'active' || !NAV[user.role]) {
+    await window._authClient.auth.signOut();
+    _setAuthMessage(target, 'Compte non autorisé ou désactivé');
+    return false;
+  }
+
+  await _initAESKeyFromPIN(password);
+  const loaded = await loadFromSupabase();
+  if (!loaded) {
+    await window._authClient.auth.signOut();
+    _setAuthMessage(target, 'Données indisponibles — vérifiez votre connexion');
+    return false;
+  }
+
+  const currentUser = (DB.users || []).find(u => u.id === user.id) || user;
+  _setAuthMessage(target, '');
+  if ($('LP')) $('LP').value = '';
+  await loginAs(currentUser);
+  return true;
+}
+
+window._showPendingPasswordSetup = async function(force) {
+  if (!window._authClient) return false;
+  let session = window._pendingAuthSession;
+  if (!session) {
+    const { data, error } = await window._authClient.auth.getSession();
+    if (error) {
+      if (force) _setAuthMessage('PM', _authErrorMessage(error));
+      return false;
+    }
+    session = data?.session || null;
+  }
+  if (!session?.user) {
+    if (force) _setAuthMessage('PM', 'Ouvrez d’abord le lien reçu par e-mail. S’il a expiré, demandez une nouvelle invitation.');
+    return false;
+  }
+
+  const callbackType = window._authCallbackType;
+  const callbackNeedsPassword = callbackType === 'invite' || callbackType === 'recovery';
+  const alreadyReady = localStorage.getItem(_passwordReadyKey(session.user.id)) === '1';
+  if (!force && !callbackNeedsPassword && alreadyReady) return false;
+
+  window._pendingAuthSession = session;
+  const sp=$('SPLASH'), ls=$('LS'), loginForm=$('login-form'), setup=$('PASSWORD_SETUP');
+  if(sp){ sp.style.transition='none'; sp.style.opacity='0'; sp.style.pointerEvents='none'; sp.style.display='none'; }
+  if(ls){ ls.style.transition='none'; ls.style.display='flex'; ls.style.opacity='1'; ls.style.pointerEvents=''; ls.classList.remove('hidden'); }
+  if(loginForm) loginForm.style.display='none';
+  if(setup) setup.style.display='';
+  if($('PASSWORD_SETUP_TITLE')) $('PASSWORD_SETUP_TITLE').textContent = callbackType === 'recovery' ? 'Choisissez un nouveau mot de passe' : 'Créez votre mot de passe';
+  if($('INVITE_EMAIL')) $('INVITE_EMAIL').textContent = session.user.email || 'votre adresse e-mail';
+  if($('NEW_PASSWORD')) $('NEW_PASSWORD').value='';
+  if($('CONFIRM_PASSWORD')) $('CONFIRM_PASSWORD').value='';
+  _setAuthMessage('SET_PASSWORD_MESSAGE', '');
+  window._startLoginHeroRotation&&window._startLoginHeroRotation();
+  setTimeout(()=>{ if($('NEW_PASSWORD')) $('NEW_PASSWORD').focus(); },250);
+
+  if (callbackNeedsPassword) {
+    try {
+      const clean = new URL(location.href);
+      clean.hash = '';
+      ['code','token','token_hash','type'].forEach(key => clean.searchParams.delete(key));
+      history.replaceState({}, document.title, clean.pathname + clean.search);
+    } catch (_) {}
+    window._authCallbackType = '';
+  }
+  return true;
+};
+
+window._resumeInvitation = async function() {
+  _setAuthMessage('PM', '');
+  await window._showPendingPasswordSetup(true);
+};
+
+window._cancelPasswordSetup = function() {
+  _setAuthMessage('SET_PASSWORD_MESSAGE', '');
+  window.showLogin();
+};
+
+window._requestPasswordReset = async function() {
+  if (window._passwordResetBusy || !window._authClient) return;
+  const email = ($('LN')?.value || '').trim().toLowerCase();
+  if (!email) {
+    _setAuthMessage('PM', 'Entrez d’abord votre adresse e-mail');
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    _setAuthMessage('PM', 'Adresse e-mail invalide');
+    return;
+  }
+
+  window._passwordResetBusy = true;
+  _setAuthMessage('PM', 'Envoi du lien sécurisé…');
+  try {
+    const redirectTo = location.origin + location.pathname;
+    const { error } = await window._authClient.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) {
+      _setAuthMessage('PM', _authErrorMessage(error));
+      return;
+    }
+    _setAuthMessage('PM', 'E-mail envoyé. Ouvrez le lien reçu pour choisir un nouveau mot de passe.');
+  } catch (error) {
+    _setAuthMessage('PM', _authErrorMessage(error));
+  } finally {
+    window._passwordResetBusy = false;
+  }
+};
+
+window._completePasswordSetup = async function() {
+  if (window._passwordSetupBusy || !window._authClient) return;
+  const password = $('NEW_PASSWORD')?.value || '';
+  const confirmation = $('CONFIRM_PASSWORD')?.value || '';
+  if (password.length < 8) {
+    _setAuthMessage('SET_PASSWORD_MESSAGE', 'Choisissez un mot de passe d’au moins 8 caractères');
+    return;
+  }
+  if (password !== confirmation) {
+    _setAuthMessage('SET_PASSWORD_MESSAGE', 'Les deux mots de passe ne sont pas identiques');
+    return;
+  }
+
+  window._passwordSetupBusy = true;
+  const button = $('SET_PASSWORD_BUTTON');
+  const oldText = button?.textContent || '';
+  if (button) { button.disabled=true; button.textContent='Enregistrement en cours…'; }
+  try {
+    let session = window._pendingAuthSession;
+    if (!session) session = (await window._authClient.auth.getSession()).data?.session || null;
+    if (!session?.user) {
+      _setAuthMessage('SET_PASSWORD_MESSAGE', 'Le lien a expiré — demandez une nouvelle invitation');
+      return;
+    }
+
+    const { error } = await window._authClient.auth.updateUser({ password });
+    if (error) {
+      _setAuthMessage('SET_PASSWORD_MESSAGE', _authErrorMessage(error));
+      return;
+    }
+
+    const refreshed = (await window._authClient.auth.getSession()).data?.session || session;
+    localStorage.setItem(_passwordReadyKey(session.user.id), '1');
+    window._pendingAuthSession = refreshed;
+    const opened = await _openSupabaseSession(refreshed, password, 'SET_PASSWORD_MESSAGE');
+    if (opened) {
+      if ($('NEW_PASSWORD')) $('NEW_PASSWORD').value='';
+      if ($('CONFIRM_PASSWORD')) $('CONFIRM_PASSWORD').value='';
+    }
+  } catch (error) {
+    _setAuthMessage('SET_PASSWORD_MESSAGE', _authErrorMessage(error));
+  } finally {
+    window._passwordSetupBusy = false;
+    if (button) { button.disabled=false; button.textContent=oldText; }
+  }
+};
 
 async function _loginWithSupabaseAuth(email, password) {
   const { data, error } = await window._authClient.auth.signInWithPassword({ email, password });
@@ -3829,33 +4045,8 @@ async function _loginWithSupabaseAuth(email, password) {
     return;
   }
 
-  window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY, data.session.access_token);
-  window.DB_ONLINE = true;
-
-  const rows = await _get(
-    'users',
-    'select=id,auth_user_id,email,name,role,initials,phone,photo_url,status&auth_user_id=eq.' +
-      encodeURIComponent(data.user.id) + '&limit=1'
-  );
-  const user = Array.isArray(rows) ? rows[0] : null;
-  if (!user || user.status !== 'active' || !NAV[user.role]) {
-    await window._authClient.auth.signOut();
-    $('PM').textContent = 'Compte non autorisé ou désactivé';
-    return;
-  }
-
-  await _initAESKeyFromPIN(password);
-  const loaded = await loadFromSupabase();
-  if (!loaded) {
-    await window._authClient.auth.signOut();
-    $('PM').textContent = 'Données indisponibles — vérifiez votre connexion';
-    return;
-  }
-
-  const currentUser = (DB.users || []).find(u => u.id === user.id) || user;
-  $('PM').textContent = '';
-  $('LP').value = '';
-  await loginAs(currentUser);
+  const opened = await _openSupabaseSession(data.session, password, 'PM');
+  if (opened) localStorage.setItem(_passwordReadyKey(data.user.id), '1');
 }
 
 window.tryLogin = async () => {
@@ -27616,14 +27807,29 @@ document.addEventListener('DOMContentLoaded', () => {
   if(laWa) laWa.href = 'https://wa.me/' + (window._OPERATOR_WA || '243978444167');
 
   // Login keyboard
-  const lp=$('LP'), ln=$('LN');
+  const lp=$('LP'), ln=$('LN'), np=$('NEW_PASSWORD'), cp=$('CONFIRM_PASSWORD');
   if(lp) lp.addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
   if(ln) ln.addEventListener('keydown', e=>{ if(e.key==='Enter' && lp) lp.focus(); });
+  if(np) np.addEventListener('keydown', e=>{ if(e.key==='Enter' && cp) cp.focus(); });
+  if(cp) cp.addEventListener('keydown', e=>{ if(e.key==='Enter') window._completePasswordSetup(); });
 
   // Splash — tap immédiat ou auto après 1.5s
   const splash=$('SPLASH');
   window._splashGone = false;
-  const goLogin=()=>{ if(window._splashGone) return; window._splashGone=true; if(!window._supaConfigured()){showSupaSetup();}else{showLogin();} };
+  const goLogin=async()=>{ 
+    if(window._splashGone || window._splashTransitionBusy) return;
+    window._splashTransitionBusy=true;
+    window._splashGone=true;
+    try {
+      if(!window._supaConfigured()) showSupaSetup();
+      else if(!(await window._showPendingPasswordSetup(false))) showLogin();
+    } catch(error) {
+      console.warn('[AUTH CALLBACK]', error?.message || error);
+      showLogin();
+    } finally {
+      window._splashTransitionBusy=false;
+    }
+  };
   if(splash){
     // touchend + preventDefault évite que le geste continue vers l'écran suivant
     splash.addEventListener('touchend', function(e){ e.preventDefault(); goLogin(); }, {once:true, passive:false});
