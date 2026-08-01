@@ -24,7 +24,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify public artifact
         run: |
-          test "$(find dist -type f | wc -l)" -eq 143
+          test "$(find dist -type f | wc -l)" -eq 144
+          test -f dist/auth.html
           test ! -e dist/admin.html
           test ! -e dist/diagnostic.html
           test ! -d dist/supabase
