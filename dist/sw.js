@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 const CACHE_PREFIX = 'schoolsafe-';
-const CACHE = `${CACHE_PREFIX}v66`;
+const CACHE = `${CACHE_PREFIX}v67`;
 
 // Ressources à mettre en cache au démarrage
 const PRECACHE = [
@@ -37,7 +37,7 @@ const BYPASS_EXTENSIONS = ['.mp4', '.webm', '.mov', '.avi'];
 
 // Fichiers toujours servis du réseau : un outil de diagnostic mis en cache
 // diagnostiquerait sa propre version périmée.
-const BYPASS_PATHS = ['diagnostic.html'];
+const BYPASS_PATHS = ['diagnostic.html', 'auth.html'];
 
 // ── Installation ──────────────────────────────────────────────────────────────
 self.addEventListener('install', evt => {
