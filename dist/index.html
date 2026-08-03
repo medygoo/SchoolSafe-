@@ -4973,7 +4973,7 @@ function dashboardDirection() {
 
   // Scans today
   const scansToday = (DB.scan_log||[]).filter(s => s.date === d);
-  const entries    = scansToday.filter(s => s.type==='entry').length;
+  const entries    = scansToday.filter(_estEntree).length;
   const exits      = scansToday.filter(s => s.type==='exit').length;
 
   // Caisse today
@@ -5637,7 +5637,7 @@ function dashboardEnseignant() {
   const students = cl ? (DB.students?.filter(s=>s.cid===cl.id)||[]) : [];
   const d = today();
   const todayAtt = DB.attendance?.filter(a=>a.date===d&&students.some(s=>s.id===a.sid))||[];
-  const scannedToday = cl ? (DB.scan_log?.filter(l=>l.date===d&&l.type==='entry'&&students.some(s=>s.id===l.sid))||[]) : [];
+  const scannedToday = cl ? (DB.scan_log?.filter(l=>l.date===d&&_estEntree(l)&&students.some(s=>s.id===l.sid))||[]) : [];
   const validatedToday = todayAtt.some(a=>a.teacher_validated);
   const present = todayAtt.filter(a=>a.status==='ontime').length;
   const late = todayAtt.filter(a=>a.status==='late').length;
@@ -6894,7 +6894,7 @@ function dashboardDirection3() {
 function dashboardGardien() {
   const d = today();
   const todayScans = (DB.scan_log||[]).filter(l=>l.date===d);
-  const entries = todayScans.filter(l=>l.type==='entry');
+  const entries = todayScans.filter(_estEntree);
   const exits = todayScans.filter(l=>l.type==='exit');
   const ontime = entries.filter(l=>l.status==='ontime').length;
   const lateG = entries.filter(l=>l.status==='late').length;
@@ -6912,11 +6912,11 @@ function dashboardGardien() {
   const teacherAbsTodayG = (DB.teacher_absences||[]).filter(a=>a.date===d);
 
   // Refus d'entrée aujourd'hui
-  const refusedEntries = todayScans.filter(l=>l.type==='entry'&&l.status==='refused').slice(-5).reverse();
+  const refusedEntries = todayScans.filter(_estIncident).slice(-5).reverse();
 
   // Retardataires fréquents ce mois — gardien
   const moisGardien = d.slice(0,7);
-  const moisScansLate = (DB.scan_log||[]).filter(l=>l.type==='entry'&&l.status==='late'&&l.date&&l.date.startsWith(moisGardien));
+  const moisScansLate = (DB.scan_log||[]).filter(l=>_estEntree(l)&&l.status==='late'&&l.date&&l.date.startsWith(moisGardien));
   const lateCountBySid = {};
   moisScansLate.forEach(l=>{lateCountBySid[l.sid]=(lateCountBySid[l.sid]||0)+1;});
   const freqLateG = Object.entries(lateCountBySid).map(([sid,cnt])=>({sid,cnt,s:(DB.students||[]).find(x=>x.id===sid)})).filter(x=>x.s&&x.cnt>=2).sort((a,b)=>b.cnt-a.cnt).slice(0,5);
@@ -6925,7 +6925,7 @@ function dashboardGardien() {
   const studentsNoAP = (DB.students||[]).filter(s=>!s.archived&&!_estBloque(s)&&!(DB.aps||[]).some(a=>a.sid===s.id&&a.active!==false)).slice(0,6);
 
   // Retardataires du jour — liste détaillée (aujourd'hui)
-  const todayLateList = todayScans.filter(l=>l.type==='entry'&&l.status==='late').sort((a,b)=>(a.time||'').localeCompare(b.time||'')).slice(0,6);
+  const todayLateList = todayScans.filter(l=>_estEntree(l)&&l.status==='late').sort((a,b)=>(a.time||'').localeCompare(b.time||'')).slice(0,6);
 
   // Sorties autorisées du jour — liste détaillée
   const todayExitsList = todayScans.filter(l=>l.type==='exit'&&l.status==='authorized').sort((a,b)=>(b.time||'').localeCompare(a.time||'')).slice(0,6);
@@ -7013,7 +7013,7 @@ function dashboardGardien() {
 
   ${(()=>{
     const exitSids=new Set(todayScans.filter(l=>l.type==='exit').map(l=>l.sid));
-    const stillIn=todayScans.filter(l=>l.type==='entry'&&!exitSids.has(l.sid));
+    const stillIn=todayScans.filter(l=>_estEntree(l)&&!exitSids.has(l.sid));
     const h=parseInt((nowTime()||'00:00').split(':')[0],10);
     const isLate=h>=15;
     if(!stillIn.length) return '';
@@ -7046,9 +7046,9 @@ function dashboardGardien() {
     ${todayScans.slice(-6).reverse().map(l=>{
       const statusColor={ontime:'var(--green)',late:'var(--gold)',refused:'var(--pink)',authorized:'var(--green)',unauthorized:'var(--pink)'}[l.status]||'var(--text-3)';
       return `<div class="dp-list-item">
-        <div class="dp-list-avatar" style="background:${statusColor}14;color:${statusColor};font-size:10px;font-weight:700">${l.type==='entry'?'IN':'OUT'}</div>
+        <div class="dp-list-avatar" style="background:${statusColor}14;color:${statusColor};font-size:10px;font-weight:700">${_estIncident(l)?'✕':l.type==='entry'?'IN':'OUT'}</div>
         <div style="flex:1;min-width:0"><div class="dp-list-title">${esc(l.name||'—')}</div><div class="dp-list-sub">${l.time||''}</div></div>
-        <span class="dp-badge" style="background:${statusColor}14;color:${statusColor}">${l.type==='entry'?'Entrée':'Sortie'}</span>
+        <span class="dp-badge" style="background:${statusColor}14;color:${statusColor}">${_libelleScan(l)}</span>
       </div>`;
     }).join('')}
   </div>`:'<div class="dp-section dp-section-dark" style="animation:fadeInUp .35s .2s ease both"><div style="padding:var(--sp-5);text-align:center;color:var(--text-2);font-size:var(--text-sm)">Aucun scan pour aujourd\'hui</div></div>'}
@@ -11589,7 +11589,7 @@ R.attendance = () => {
   // Teacher scan validation block
   let teacherScanBlock='';
   if(role==='enseignant' && myClass){
-    const todayScans=(DB.scan_log||[]).filter(l=>l.date===today()&&l.type==='entry');
+    const todayScans=(DB.scan_log||[]).filter(l=>l.date===today()&&_estEntree(l));
     const scannedSids=todayScans.map(l=>l.sid);
     const myScanned=students.filter(s=>scannedSids.includes(s.id));
     const notScanned=students.filter(s=>!scannedSids.includes(s.id));
@@ -11662,7 +11662,7 @@ R.attendance = () => {
     <div class="ww-section-header"><span class="ww-section-title">Présence du jour${isDir&&window._attClassFilter?(()=>{const cl=DB.classes.find(c=>c.id===window._attClassFilter);return cl?' — '+esc(cl.name):'';})():''}</span></div>
     ${students.map((s,i)=>{
       const c=gc(s.cid);const a=att.find(x=>x.sid===s.id);
-      const scanEntry=(DB.scan_log||[]).find(l=>l.sid===s.id&&l.date===today()&&l.type==='entry');
+      const scanEntry=(DB.scan_log||[]).find(l=>l.sid===s.id&&l.date===today()&&_estEntree(l));
       const [cc,cbg]=clsColor(c?c.name:'');
       const st=a?(a.status==='ontime'?{b:'#d8f3e6',c:'#065f46',l:t("À l'heure",'On time'),i:''}:a.status==='late'?{b:'#fdeccd',c:'#92400e',l:t('Retard','Late'),i:''}:a.status==='excused'?{b:'#dbeafe',c:'#205fae',l:t('Justifié','Excused'),i:''}:a.status==='sick'?{b:'#fce7f3',c:'#9d174d',l:t('Malade','Sick'),i:''}:{b:'#fee2e2',c:'#991b1b',l:t('Refusé','Refused'),i:''}):{b:'#f6ede0',c:'#5c5346',l:t('Absent','Absent'),i:''};
       return `<div class="ww-item" data-sid="${s.id}" style="animation-delay:${i*.04}s">
@@ -11679,7 +11679,7 @@ R.attendance = () => {
 window.validateScanPresence = () => {
   const mc=getMyClass(); if(!mc.cl) return;
   const students=DB.students.filter(s=>s.cid===mc.cl.id);
-  const todayScans=(DB.scan_log||[]).filter(l=>l.date===today()&&l.type==='entry');
+  const todayScans=(DB.scan_log||[]).filter(l=>l.date===today()&&_estEntree(l));
   const scannedSids=todayScans.map(l=>l.sid);
   let confirmed=0, absentMarked=0;
   students.forEach(s=>{
@@ -11708,7 +11708,7 @@ window.signalAbsencesToDir = (cid) => {
   const cl=gc(cid); if(!cl) return;
   if(!S.user||S.user.role!=='enseignant'||(cl.teacher_id!==S.user.id&&cl.teacher_id_en!==S.user.id)){toast('Accès non autorisé','error');return;}
   const students=DB.students.filter(s=>s.cid===cid);
-  const scannedSids=(DB.scan_log||[]).filter(l=>l.date===today()&&l.type==='entry').map(l=>l.sid);
+  const scannedSids=(DB.scan_log||[]).filter(l=>l.date===today()&&_estEntree(l)).map(l=>l.sid);
   const absents=students.filter(s=>!scannedSids.includes(s.id));
   if(!absents.length){toast('Tous les élèves sont présents','info');return;}
   const names=absents.map(s=>s.name).join(', ');
@@ -16061,6 +16061,32 @@ window.manualScanEntry = () => {
   if($('scanInput')) $('scanInput').value='';
 };
 
+// Statut d'accès au portail. Le navigateur ne le calcule JAMAIS : il le
+// demande, le garde cinq minutes, puis le redemande.
+//
+// Passé ce délai il n'est plus utilisable — l'écran affiche « contrôle manuel
+// requis » plutôt qu'une décision périmée. Et le cache ne transforme jamais un
+// « en retard » en « bloqué » : un blocage vient d'une décision serveur
+// enregistrée et auditée, jamais d'une déduction locale.
+window._cacheAcces = {};
+const _ACCES_TTL = 5 * 60 * 1000;
+
+window._statutPortail = async (sid) => {
+  const c = window._cacheAcces[sid];
+  if (c && (Date.now() - c.at) < _ACCES_TTL) return c.r;
+
+  if (window.DB_ONLINE) {
+    const r = await _rpc('check_gate_access_status', { p_sid: sid, p_source: 'qr' });
+    if (r.ok && r.data) {
+      window._cacheAcces[sid] = { r: r.data, at: Date.now() };
+      return r.data;
+    }
+  }
+  // Hors ligne, serveur muet, ou décision expirée : on ne devine pas.
+  return { access_status:'unavailable', allowed:true,
+           instruction:'Contrôle manuel requis' };
+};
+
 window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
   // Tout le personnel scanne — gardien, enseignant, direction, caisse. Seul
   // un parent ne peut pas enregistrer une entrée.
@@ -16119,24 +16145,52 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
   const existingRefused=(DB.scan_log||[]).find(l=>l.sid===student.id&&l.date===today()&&l.status==='refused');
   if(existingRefused){showScanResult('red','✕','Déjà refusé',student.name,`Retard grave — refusé à ${existingRefused.time}`,time);return;}
 
-  // ── CONTRÔLE FRAIS SCOLAIRES ──────────────────────────────────────────────
-  const fc=DB.settings.feesControl||{};
-  if(fc.active){
-    const hasPaidFc=(DB.payments||[]).some(p=>p.sid===student.id&&p.t===fc.trimestre&&p.paid);
-    if(!hasPaidFc){
-      const log={id:_uid('sl_'),sid:student.id,date:today(),time,name:student.name,status:'refused_fees',label:`Frais ${fc.trimestre} non réglés 💰`,type:'entry',by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role};
+  // ── CONTRÔLE D'ACCÈS — LE SERVEUR DÉCIDE ────────────────────────────────
+  //
+  // Avant : le navigateur décidait, sur un booléen « payé » par trimestre.
+  // Une famille ayant versé 80 % était traitée EXACTEMENT comme une famille
+  // n'ayant rien versé, et l'enfant repartait à la maison. Sur le jeu d'essai
+  // de 350 élèves, cela fait 141 familles sur 350.
+  //
+  // Et l'écran du Gardien nommait le motif : « FRAIS NON RÉGLÉS », le symbole
+  // de la devise, le trimestre impayé. Le dossier du point 19 §3.3 et §5.3
+  // l'interdisent — le Gardien ne reçoit ni montant, ni devise, ni trimestre,
+  // ni raison financière. Direction 2 recevait la même chose en notification,
+  // ÉCRITE EN BASE : la masquer à l'affichage n'aurait rien réglé.
+  {
+    const acces = await _statutPortail(student.id);
+
+    if (acces.access_status === 'unavailable') {
+      showScanResult('gray','?','CONTRÔLE MANUEL',student.name, acces.instruction, time);
+      return;
+    }
+    if (acces.allowed === false) {
+      const log={id:_uid('sl_'),sid:student.id,date:today(),time,name:student.name,
+                 status:'refused_access',label:'Accès non autorisé',type:'entry',
+                 by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role};
       (DB.scan_log=DB.scan_log||[]).unshift(log); pushSync('scan_log','post',log);
-      // Notifier Direction
-      DB.users.filter(u=>u.role==='direction'||u.role==='direction2').forEach(u=>{
-        const n={id:'n'+Date.now()+Math.random().toString(36).slice(2,5),uid:u.id,
-          msg:`💰 Frais non réglés — ${student.name} (${cls?cls.name:''}) refusé(e) à l'entrée · ${fc.trimestre}`,
+
+      // Direction 1 SEULEMENT. Direction 2 est exclue de toute information
+      // financière, y compris du motif d'un refus.
+      (DB.users||[]).filter(u=>u.role==='direction').forEach(u=>{
+        const n={id:_uid('n_'),uid:u.id,
+          msg:`⛔ ${student.name} (${cls?cls.name:''}) — accès refusé au portail`,
           time,date:today(),read:false,type:'alert'};
         DB.notifs.unshift(n); pushSync('notifs','post',n);
       });
-      if(student.pid) await pushNotif(student.pid,`🔴 ${student.name} n'a pas pu entrer à l'école — Frais ${fc.trimestre} non réglés. Veuillez régulariser.`);
-      showScanResult('red',_cur(),'FRAIS NON RÉGLÉS',student.name,`Frais ${fc.trimestre} non payés — Entrée refusée`,time);
+      // La famille est prévenue sans détail chiffré : elle obtient le sien
+      // dans son espace « Frais scolaires », qui vient du serveur.
+      if(student.pid) await pushNotif(student.pid,
+        `🔴 ${student.name} n'a pas pu entrer à l'école. Rapprochez-vous de la Caisse.`);
+
+      // Aucune devise, aucun trimestre, aucun montant : l'instruction du
+      // serveur, et rien d'autre.
+      showScanResult('red','⛔','ACCÈS NON AUTORISÉ',student.name, acces.instruction, time);
       saveToCrypt();
       return;
+    }
+    if (acces.access_status === 'orient') {
+      _qrWarn = acces.instruction;      // l'entrée se poursuit, avec le rappel
     }
   }
 
@@ -16484,6 +16538,24 @@ function showExitDone(color,icon,title,name,sub,time) {
 // le motif : refused, refused_fees, refused_access, refused_fake_qr.
 window._estIncident = (l) => !!l && (l.status==='unauthorized' || String(l.status||'').indexOf('refused')===0);
 
+// UN REFUS N'EST PAS UN PASSAGE.
+//
+// Tous les refus s'enregistrent avec type:'entry' — refus de frais, sanction,
+// accès bloqué, QR falsifié, retard grave. Vingt-cinq lectures filtraient sur
+// ce seul type, et comptaient donc un enfant RENVOYÉ DU PORTAIL comme arrivé :
+//
+//   · l'espace parent affichait « Arrivé(e) à l'école à 07h15 » ;
+//   · la validation des présences le donnait présent ;
+//   · le tableau du Gardien le comptait encore DANS l'école.
+//
+// L'enfant avait été renvoyé à la maison, et l'application affirmait le
+// contraire à tout le monde. Une seule fonction répond désormais, et elle
+// exclut les refus. Toute nouvelle lecture doit passer par elle.
+window._estEntree = (l) => !!l && l.type === 'entry' && !_estIncident(l);
+
+// Pour les écrans qui n'affichent qu'une étiquette : un refus se nomme.
+window._libelleScan = (l) => _estIncident(l) ? 'Refusé' : (l && l.type === 'exit' ? 'Sortie' : 'Entrée');
+
 window._ESCORTE_LIB = {seul:'🚶 Venu seul', parent:'👑 Parent', autorisee:'👤 Personne autorisée', autre:'✍️ Autre', inconnu:'🚨 Personne inconnue'};
 
 window._estPhoto = (v) => typeof v==='string' && /^(data:image\/|https:\/\/)/.test(v);
@@ -16529,7 +16601,7 @@ R.scan_log = () => {
     if(tf==='incidents'&&!_estIncident(l)) return false;
     return true;
   });
-  const entries=rawLogs.filter(l=>l.type==='entry');
+  const entries=rawLogs.filter(_estEntree);
   const exits=rawLogs.filter(l=>l.type==='exit');
   const ontime=entries.filter(l=>l.status==='ontime').length;
   const late=entries.filter(l=>l.status==='late').length;
@@ -16570,7 +16642,7 @@ R.scan_log = () => {
         <div class="ww-item-icon" style="background:${l.status==='ontime'?'rgba(5,150,105,.22)':l.status==='late'?'rgba(217,119,6,.22)':l.status==='refused'||l.status==='unauthorized'?'rgba(220,38,38,.22)':'rgba(37,99,235,.22)'}">${typeIcon[l.type]||'📋'}</div>
         <div class="ww-item-content">
           <div class="ww-item-title">${esc(l.name)}</div>
-          <div class="ww-item-sub">${l.type==='entry'?'Entrée':'Sortie'}${l.label?' — '+esc(l.label):''}</div>
+          <div class="ww-item-sub">${_libelleScan(l)}${l.label?' — '+esc(l.label):''}</div>
           ${l.escort_kind?`<div style="font-size:11px;color:#fbbf24;margin-top:2px">${esc(_ESCORTE_LIB[l.escort_kind]||l.escort_kind)}${l.escort_name?' · '+esc(l.escort_name):''}</div>`:''}
           ${byLabel?`<div style="font-size:11px;color:${l.by_role==='enseignant'?'#34d399':l.by_role==='direction'||l.by_role==='direction2'?'#93c5fd':'#d0c2f2'};margin-top:2px;display:flex;align-items:center;gap:4px">
             <span style="width:18px;height:18px;border-radius:50%;background:${l.by_role==='enseignant'?'rgba(5,150,105,.22)':l.by_role==='direction'||l.by_role==='direction2'?'rgba(37,99,235,.22)':'rgba(139,92,246,.22)'};display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0">${ini(byLabel)}</span>
@@ -16592,7 +16664,7 @@ window.exportScanLogCSV = (date) => {
   const header=['Date','Heure','Nom','Type','Statut','Libellé','Accompagnant','Nom accompagnant','Scanné par','Rôle'].map(q).join(',');
   const lines=rows.map(l=>[
     l.date,l.time||'',l.name||'',
-    l.type==='entry'?'Entrée':'Sortie',
+    _libelleScan(l),
     l.status||'',l.label||'',
     (window._ESCORTE_LIB||{})[l.escort_kind]||l.escort_kind||'',
     l.escort_name||'',
@@ -16609,7 +16681,7 @@ window.exportScanLogCSV = (date) => {
 
 window.sendAttendanceList = async () => {
   if(!S.user||S.user.role!=='gardien'){toast('Accès non autorisé','error');return;}
-  const logs=(DB.scan_log||[]).filter(l=>l.date===today()&&l.type==='entry');
+  const logs=(DB.scan_log||[]).filter(l=>l.date===today()&&_estEntree(l));
   const ontime=logs.filter(l=>l.status==='ontime').length;
   const late=logs.filter(l=>l.status==='late').length;
   const refused=logs.filter(l=>l.status==='refused').length;
@@ -24382,7 +24454,7 @@ R.scan_history = () => {
       <div class="ww-section-header"><span class="ww-section-title" style="color:${cc}">${esc(kid.name)}</span><span style="font-size:11px;color:var(--text-muted)">${cl?esc(cl.name):''} · 30 derniers jours</span></div>
       ${dates.length?dates.map(date=>{
         const {logs:dl,att:a}=byDate[date];
-        const entry=dl.find(l=>l.type==='entry');
+        const entry=dl.find(_estEntree);
         const exit=dl.find(l=>l.type==='exit'||l.status==='emergency_exit');
         const d=new Date(date);
         const isToday=date===today();
@@ -24441,7 +24513,7 @@ R.profil_parent = () => {
         const kAtt=(DB.attendance||[]).find(a=>a.sid===k.id&&a.date===today());
         const kLast=kScans[0];
         let dotColor='#a89c8b',dotLabel='—',dotPulse=false;
-        if(kLast?.type==='entry'||kAtt?.status==='ontime'){dotColor='#1f9d6b';dotLabel='Présent';dotPulse=true;}
+        if(_estEntree(kLast)||kAtt?.status==='ontime'){dotColor='#1f9d6b';dotLabel='Présent';dotPulse=true;}
         else if(kAtt?.status==='late'){dotColor='#d98a2b';dotLabel='Retard';}
         else if(kAtt?.status==='absent'){dotColor='#dc2626';dotLabel='Absent';}
         else if(kLast?.type==='exit'){dotColor='#2f7bd6';dotLabel='Sorti';}
@@ -24481,7 +24553,7 @@ R.profil_parent = () => {
     const lastScan=scans[0];
     const att=(DB.attendance||[]).find(a=>a.sid===kid.id&&a.date===today());
     let presText,presClr,presBg,presRing=false;
-    if(lastScan?.type==='entry'||att?.status==='ontime'){
+    if(_estEntree(lastScan)||att?.status==='ontime'){
       presText=`Arrivé(e) à l'école${lastScan?.time?' à '+lastScan.time:''}`;presClr='#1f9d6b';presBg='#f0fdf4';presRing=true;
     } else if(att?.status==='late'){
       presText=`Arrivé(e) en retard${lastScan?.time?' à '+lastScan.time:''}`;presClr='#d98a2b';presBg='#fffbeb';
@@ -24583,7 +24655,7 @@ R.profil_parent = () => {
       </div>
       ${scans.length?`<div style="margin-top:14px;border-top:1px dashed ${presClr}40;padding-top:12px;display:flex;flex-direction:column;gap:8px">
         <div style="font-size:10px;font-weight:800;color:${presClr};letter-spacing:1px;text-transform:uppercase">Parcours du jour</div>
-        ${scans.slice().reverse().map(sc=>{const e=sc.type==='entry';return `<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:9px;background:${e?'#d8f3e6':'#eaf3fc'};display:flex;align-items:center;justify-content:center;font-size:13px">${e?'🟢':'🔵'}</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#2a2622">${e?'Entrée':'Sortie'}</div><div style="font-size:11px;color:#a89c8b">${sc.time||''}</div></div><span style="font-size:9px;font-weight:800;color:${e?'#1f9d6b':'#2f7bd6'};background:${e?'#d8f3e6':'#eaf3fc'};padding:3px 9px;border-radius:999px">${e?'ENTRÉE':'SORTIE'}</span></div>`;}).join('')}
+        ${scans.slice().reverse().map(sc=>{const e=_estEntree(sc);return `<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:9px;background:${e?'#d8f3e6':'#eaf3fc'};display:flex;align-items:center;justify-content:center;font-size:13px">${e?'🟢':'🔵'}</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#2a2622">${e?'Entrée':'Sortie'}</div><div style="font-size:11px;color:#a89c8b">${sc.time||''}</div></div><span style="font-size:9px;font-weight:800;color:${e?'#1f9d6b':'#2f7bd6'};background:${e?'#d8f3e6':'#eaf3fc'};padding:3px 9px;border-radius:999px">${e?'ENTRÉE':'SORTIE'}</span></div>`;}).join('')}
       </div>`:''}
     </div>
 
@@ -25083,7 +25155,7 @@ R.profil_gardien = () => {
   const u=S.user;
   const allScans=DB.scan_log||[];
   const todayScans=allScans.filter(l=>l.date===today());
-  const entries=todayScans.filter(l=>l.type==='entry').length;
+  const entries=todayScans.filter(_estEntree).length;
   const exits=todayScans.filter(l=>l.type==='exit').length;
   const refused=todayScans.filter(l=>l.status==='refused').length;
   const totalAll=allScans.length;
@@ -25144,8 +25216,8 @@ R.profil_gardien = () => {
         <div class="pt-glass-title" style="margin-bottom:12px">Derniers scans</div>
         ${recentScans.map((sc,i)=>{
           const st=(DB.students||[]).find(s=>s.id===sc.sid);
-          const typeClr=sc.type==='entry'?'#34d399':sc.type==='exit'?'#fb923c':'#f87171';
-          const typeLabel=sc.type==='entry'?'Entrée':sc.type==='exit'?'Sortie':'Refusé';
+          const typeClr=_estIncident(sc)?'#f87171':sc.type==='exit'?'#fb923c':'#34d399';
+          const typeLabel=_libelleScan(sc);
           return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;${i<recentScans.length-1?'border-bottom:1px solid rgba(255,255,255,.08)':''}">
             <div style="width:8px;height:8px;border-radius:50%;background:${typeClr};flex-shrink:0"></div>
             <div style="flex:1;font-size:13px;font-weight:600;color:#fff">${st?esc(st.name):'—'}</div>
@@ -26357,7 +26429,7 @@ window.notifyAbsenceTeacherParents = async (uid) => {
 // ── NOTIFICATION ABSENCES → PARENTS ──
 window.notifyAbsentParents = async (cid) => {
   const students = cid ? DB.students.filter(s=>s.cid===cid) : DB.students;
-  const scannedSids = (DB.scan_log||[]).filter(l=>l.date===today()&&l.type==='entry').map(l=>l.sid);
+  const scannedSids = (DB.scan_log||[]).filter(l=>l.date===today()&&_estEntree(l)).map(l=>l.sid);
   const absents = students.filter(s=>!scannedSids.includes(s.id)&&s.pid);
   if(!absents.length){toast('Tous les élèves présents ou sans parent lié','info');return;}
   const key='abs_notif_'+today();
