@@ -33,6 +33,7 @@ Date : 2026-08-03
 - `20260803081937_add_secure_archive_workflow`
 - `20260803082004_add_archive_summary_rpc`
 - `20260803082028_lock_archive_rpc_execution`
+- `20260803083125_index_archive_audit_foreign_keys`
 
 Les sources portent les mêmes versions dans `supabase/migrations/` sur la branche de travail.
 
