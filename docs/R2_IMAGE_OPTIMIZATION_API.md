@@ -10,6 +10,8 @@ Tous les nouveaux envois du frontend doivent appeler la Supabase Edge Function :
 r2-upload
 ```
 
+Version de production validée : **4**.
+
 La fonction exige :
 
 - une session JWT valide ;
@@ -23,9 +25,14 @@ Ne jamais appeler :
 
 - `r2-upload-test` ;
 - `r2-compression-self-test` ;
-- `r2-self-test`.
+- `r2-self-test` ;
+- `r2-role-self-test` ;
+- `r2-role-self-test-a` ;
+- `r2-role-self-test-b` ;
+- `image-magick-diagnostic` ;
+- `r2-upload-v4-self-test`.
 
-Ces endpoints sont réservés ou retirés du circuit de l’application.
+Ces endpoints ont été retirés du circuit et répondent `410` avec JWT obligatoire.
 
 ## Formats
 
@@ -43,7 +50,7 @@ Limites :
 - image : 12 000 pixels maximum par côté ;
 - image : 40 mégapixels maximum.
 
-Le serveur vérifie la signature binaire réelle du fichier. Une extension ou un type MIME falsifié reçoit `415`.
+Le serveur vérifie la signature binaire réelle du fichier, puis décode réellement les images. Une extension ou un type MIME falsifié, une image tronquée ou un contenu indécodable reçoit `415` et aucun objet R2 n’est créé.
 
 ## Profils de traitement
 
@@ -58,14 +65,15 @@ Le serveur vérifie la signature binaire réelle du fichier. Une extension ou un
 Le serveur :
 
 1. valide la session avant le décodage de l’image ;
-2. vérifie le contenu et les dimensions ;
+2. vérifie la signature binaire, les dimensions et le décodage réel ;
 3. corrige l’orientation lorsque les métadonnées le permettent ;
-4. retire les profils EXIF, XMP et IPTC lorsque disponibles ;
+4. retire les profils EXIF, XMP et IPTC lorsqu’ils existent ;
 5. redimensionne selon la catégorie ;
 6. produit une version WebP ;
 7. réduit progressivement la qualité et les dimensions si le résultat dépasse 5 Mo ;
 8. conserve l’image originale lorsque la version WebP n’économise pas au moins 2 %, sauf si la source dépasse déjà 5 Mo ;
-9. transmet ensuite le fichier final à `r2-files`, qui applique toutes les permissions SchoolSafe et écrit dans Cloudflare R2.
+9. transmet ensuite le fichier final à `r2-files`, qui applique toutes les permissions SchoolSafe et écrit dans Cloudflare R2 ;
+10. enregistre les métriques d’optimisation dans `school_files`.
 
 Les PDF ne sont ni convertis ni recompressés.
 
@@ -133,10 +141,20 @@ le fichier est déjà dans R2, mais l’écriture des métriques doit être repr
 - `403` : rôle ou propriétaire interdit ;
 - `409` : année, propriétaire, archive ou clé déjà utilisée de façon incompatible ;
 - `413` : source trop grande, dimensions excessives ou fichier final supérieur à 5 Mo ;
-- `415` : format corrompu, non pris en charge ou type déclaré incorrect ;
+- `415` : format non pris en charge, type déclaré incorrect, contenu tronqué ou image indécodable ;
 - `500` : erreur temporaire ; réutiliser la même clé lorsque `retry_same_idempotency_key=true`.
 
-## Preuve technique réalisée
+Exemple de rejet d’une image indécodable :
+
+```json
+{
+  "error": "Image is corrupt or cannot be decoded"
+}
+```
+
+## Preuves techniques réalisées
+
+### Circuit initial
 
 Une image PNG synthétique de 256 × 256 pixels et 568 octets a été convertie en WebP 128 × 128 de 116 octets :
 
@@ -147,4 +165,25 @@ Une image PNG synthétique de 256 × 256 pixels et 568 octets a été convertie 
 - contenu relu identique : réussi ;
 - suppression après test : réussie.
 
-Cette mesure prouve le fonctionnement du circuit, mais ne constitue pas un taux garanti. Les économies réelles varieront selon les photos et documents.
+### Tests authentifiés des rôles
+
+- lot A : 22/22 contrôles réussis ;
+- lot B : 20/20 contrôles réussis ;
+- total : 42/42 contrôles réussis.
+
+Le lot A a mesuré :
+
+- photo : 568 → 194 octets, réduction 65,85 % ;
+- reçu : 568 → 198 octets, réduction 65,14 %.
+
+### Validation ciblée version 4
+
+- PNG valide 64 × 64 : 133 → 100 octets ;
+- réduction : 24,81 % ;
+- métriques enregistrées ;
+- PNG volontairement corrompu : HTTP `415` ;
+- aucun objet créé pour le fichier corrompu ;
+- suppression du fichier valide : réussie ;
+- résultat : 4/4 contrôles réussis.
+
+Ces mesures prouvent le fonctionnement du circuit, mais ne constituent pas un taux garanti. Les économies réelles varieront selon les photos et documents.
