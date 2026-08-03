@@ -1788,7 +1788,7 @@ window.DB = {
   devoirs: [], cahier_texte: [], matieres: [], rattrapages: [],
   convocations: [], timetables: [], approbations: [],
   teacher_notes: [], audit_log: [], teacher_absences: [],
-  sanctions: [], medical: [], tenafep: [], evaluations: [],
+  sanctions: [], medical: [], tenafep: [], exetat: [], evaluations: [],
   salaries: [], advances: [], direct_primes: [],
   fee_types: [], versements: [], journal_entries: [],
   cantine: [], cantine_menus: [], cantine_presence: [],
@@ -2492,7 +2492,7 @@ window.loadFromSupabase = async () => {
            absences,notifs,events,messages,aps,daily_records,daily_expenses,daily_reports,
            devoirs,cahier_texte,matieres,rattrapages,convocations,timetables,settings_rows,
            approbations,teacher_notes,audit_log,teacher_absences,
-           medical,tenafep,evaluations,salaries,advances,direct_primes,
+           medical,tenafep,exetat,evaluations,salaries,advances,direct_primes,
            sanctions,cantine,cantine_menus,cantine_presence,
            activites,activites_inscriptions,appreciations,medical_visits,
            inscriptions,cahier_prep,prevision_matiere,fee_types,versements,journal_entries] = await Promise.all([
@@ -2525,6 +2525,7 @@ window.loadFromSupabase = async () => {
       _get('teacher_absences','select=*&order=date.desc&limit=200'+_sf()),
       _get('medical','select=*'+_sf()),
       _get('tenafep','select=*'+_sf()),
+      _get('exetat','select=*'+_sf()),
       _get('evaluations','select=*&order=date.desc&limit=500'+_sf()),
       _get('salaries','select=*&order=month.desc&limit=500'+_sf()),
       _get('advances','select=*&order=date.desc&limit=500'+_sf()),
@@ -2600,6 +2601,7 @@ window.loadFromSupabase = async () => {
     DB.teacher_absences=fd(teacher_absences, DB.teacher_absences);
     DB.medical=safe(medical, DB.medical);
     DB.tenafep=safe(tenafep, DB.tenafep);
+    DB.exetat=safe(exetat, DB.exetat);
     DB.evaluations=safe(evaluations, DB.evaluations);
     DB.salaries=safe(salaries, DB.salaries);
     DB.advances=safe(advances, DB.advances);
@@ -5277,7 +5279,8 @@ window.showStudentInfo = (sid) => {
   const cl = DB.classes.find(x => x.id === s.cid);
   const parent = s.pid ? DB.users.find(x => x.id === s.pid) : null;
   const ta = (DB.attendance||[]).find(a => a.sid === sid && a.date === today());
-  const ex = (DB.exit_scans||[]).find(e => e.sid === sid && e.date === today());
+  // `exit_scans` n'existe pas en base : les sorties sont dans scan_log (contrat v1 §1).
+  const ex = (DB.scan_log||[]).find(e => e.sid === sid && e.date === today() && e.type === 'exit');
   const pays = (DB.payments||[]).filter(p => p.sid === sid);
   const allPaid = pays.length > 0 && pays.every(p => p.paid);
   const partPaid = pays.some(p => p.paid) && !allPaid;
