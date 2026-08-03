@@ -1,8 +1,24 @@
 # Protocole de collaboration — mémo opérationnel
 
-Résumé exécutable du protocole v1.0 (2 août 2026) et du dossier d'exécution du
-point 19. En cas de divergence, **ce sont les documents de Loms qui font foi** ;
-ceci n'est qu'un aide-mémoire.
+Résumé exécutable du protocole v1.0 (2 août 2026), du dossier d'exécution du
+point 19 et de la décision de Loms du 3 août 2026. En cas de divergence, **ce
+sont les documents et décisions de Loms qui font foi**.
+
+La règle complète et prioritaire se trouve dans
+[`coordination/PUBLICATION_MAIN.md`](../../coordination/PUBLICATION_MAIN.md).
+
+---
+
+## Décision obligatoire sur la publication
+
+- **Claude est l'unique responsable de l'intégration finale, de la fusion des
+  travaux validés et de la publication finale sur `main`.**
+- Claude traite les bugs applicatifs, intègre les livraisons, exécute les tests
+  finaux, demande l'autorisation de Loms, puis fusionne et publie.
+- ChatGPT ne fusionne pas et ne publie pas la version finale sur `main`.
+  ChatGPT remet ses travaux à Claude par branche et Pull Request.
+- Tout travail déjà réalisé par Claude ou ChatGPT est considéré comme demandé
+  par Loms. On continue à partir de là ; on ne recommence pas sans sa décision.
 
 ---
 
@@ -11,28 +27,30 @@ ceci n'est qu'un aide-mémoire.
 ```
 1. Loms exprime le besoin
 2. Analyse fonctionnelle
-3. ChatGPT écrit le CONTRAT TECHNIQUE          ← on n'attaque pas avant
+3. ChatGPT écrit le CONTRAT TECHNIQUE lorsque le backend est concerné
 4. Issue GitHub
-5. Branche Claude
+5. Branche dédiée
 6. Développement LIMITÉ au besoin reçu
 7. Tests
 8. Pull Request en BROUILLON
-9. Revue ChatGPT + Loms
-10. Corrections
-11. Validation → fusion → déploiement → contrôle
+9. Revue technique + contrôle de Loms
+10. Corrections et intégration finale par Claude
+11. Autorisation explicite de Loms
+12. Fusion sur main + publication + contrôle par Claude
 ```
 
-**On ne code pas avant l'étape 3.** Construire une interface sur des champs
-supposés produit du travail à refaire, et deux moitiés qui divergent.
+On ne construit pas une interface sur des champs supposés. Un champ backend
+absent du contrat est demandé à ChatGPT avant intégration.
 
 ## Nommage des branches
 
 ```
-feature/parent-fees-dashboard     interface
-feature/payment-scanner-ui        scanner
-fix/payment-status-display        correction
-audit/claude-initial              audit
-backend/…  security/…             (ChatGPT)
+claude/...                         bugs, frontend, site, intégration
+feature/parent-fees-dashboard      interface
+feature/payment-scanner-ui         scanner
+fix/payment-status-display         correction
+backend/…  security/…              ChatGPT
+release/…                          préparation finale par Claude
 ```
 
 ---
@@ -44,18 +62,20 @@ TÂCHE :
 BRANCHE :
 PULL REQUEST :
 COMMITS :
+RESPONSABLE :
 
 1. Résultat livré
 2. Fichiers modifiés
-3. Impact Supabase / RLS / Auth / R2 / PWA
+3. Impact Supabase / RLS / Auth / R2 / PWA / domaine
 4. Tests exécutés et résultats
 5. Risques ou limites
 6. Retour arrière
-7. Décision attendue de ChatGPT et Loms
+7. Travail attendu de Claude pour l'intégration finale
+8. Décision attendue de Loms
 ```
 
 **Le point 3 se remplit même quand la réponse est « aucun ».** C'est la ligne
-que ChatGPT lit en premier ; l'omettre l'oblige à relire tout le diff.
+que l'autre agent lit en premier ; l'omettre oblige à relire tout le diff.
 
 **Le point 4 gagne à porter la sortie des audits.** C'est une preuve vérifiable,
 pas une affirmation.
@@ -66,12 +86,17 @@ pas une affirmation.
 
 | | |
 |---|---|
-| Table, colonne, vue, fonction, trigger, index, migration | **on signale** |
-| Politique RLS | **on signale** |
+| Table, colonne, vue, fonction, trigger, index, migration | coordination obligatoire |
+| Politique RLS | coordination obligatoire |
 | Désactiver RLS pour contourner une erreur | jamais, sous aucun prétexte |
 | Ajouter un secret au dépôt | jamais |
-| Pousser sur `main` | jamais |
+| Publier la version finale sur `main` | **Claude uniquement, après autorisation de Loms** |
 | Calculer un solde uniquement dans le navigateur | jamais |
+
+Une poussée directe sur `main` reste interdite pour le travail ordinaire. Claude
+publie la version finale par fusion de Pull Requests validées. Une intervention
+directe d'urgence exige une autorisation explicite de Loms et une documentation
+immédiate.
 
 Et : **signaler AVANT de coder** tout impact sur Supabase, Auth, R2, le cache
 PWA, le service worker ou les permissions. Après, c'est trop tard — le travail
@@ -117,7 +142,7 @@ C'est exactement ce que le nouveau contrat serveur doit empêcher.
 - un champ absent du contrat — **on ne le déduit pas côté navigateur** ;
 - le comportement attendu quand le serveur ne répond pas ;
 - la durée de validité d'un statut mis en cache ;
-- le message exact à afficher pour chacun des six états ;
+- le message exact à afficher pour chacun des états ;
 - qui a le droit de déclencher quoi, quand un doute existe.
 
 **Poser la question coûte un aller-retour. La deviner coûte une fonctionnalité.**
