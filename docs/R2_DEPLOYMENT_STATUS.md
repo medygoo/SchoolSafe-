@@ -6,7 +6,7 @@ Date : 2026-08-03
 
 ### `r2-upload`
 
-- Version : 3
+- Version : 4
 - Statut : ACTIVE
 - JWT : obligatoire
 - Usage : tous les nouveaux envois de JPEG, PNG, WebP et PDF
@@ -14,6 +14,7 @@ Date : 2026-08-03
 - Fichier final R2 : 5 Mo maximum
 - Image maximale : 12 000 px par côté et 40 mégapixels
 - Images : validation binaire, décodage, orientation lorsque disponible, retrait des profils sensibles lorsque présents, redimensionnement et WebP lorsque le résultat économise le stockage
+- Images réellement indécodables : rejet HTTP `415` sans création d’objet R2
 - PDF : transmis sans conversion
 - Métadonnées : taille et dimensions source/finales, profil, qualité, version et économie
 
@@ -45,6 +46,7 @@ Les fonctions suivantes exigent maintenant un JWT et répondent uniquement `410 
 - `r2-role-self-test-a`
 - `r2-role-self-test-b`
 - `image-magick-diagnostic`
+- `r2-upload-v4-self-test`
 
 ## Migrations R2 appliquées
 
@@ -97,6 +99,7 @@ Une image déjà efficace est conservée dans son format initial lorsque la conv
 - validation du propriétaire et de la catégorie ;
 - année scolaire résolue côté serveur ;
 - contrôle binaire JPEG, PNG, WebP et PDF ;
+- décodage réel des images avant stockage ;
 - compression automatique avant R2 ;
 - archivage et restauration audités ;
 - dossiers administratifs et cahiers avec plusieurs pièces ;
@@ -149,6 +152,18 @@ Mesures du lot A :
 
 - photo : 568 → 194 octets, économie 374 octets, réduction 65,85 % ;
 - reçu : 568 → 198 octets, économie 370 octets, réduction 65,14 %.
+
+### Validation ciblée `r2-upload` version 4
+
+Le dernier test ciblé a obtenu 4/4 contrôles réussis :
+
+- PNG valide de 64 × 64 : 133 → 100 octets ;
+- économie : 33 octets ;
+- réduction : 24,81 % ;
+- fichier valide créé et métriques enregistrées ;
+- image volontairement corrompue rejetée en HTTP `415` ;
+- aucun fichier créé pour l’image corrompue ;
+- suppression du fichier valide réussie.
 
 ### Données et nettoyage
 
