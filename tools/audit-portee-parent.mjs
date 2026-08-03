@@ -105,8 +105,38 @@ while (file.length) {
 }
 
 // ── Ce que le serveur envoie aujourd'hui ──────────────────────────────────
-const tirees = [...src.matchAll(/_get\('([a-z_0-9]+)'/g)].map(m => m[1]);
-const tireesU = [...new Set(tirees)];
+// Depuis le chargement par rôle, les sources ne sont plus des appels _get()
+// éparpillés : elles sont DÉCLARÉES dans ROLE_LOAD. On lit donc la déclaration
+// du rôle, sinon l'outil crie au loup sur tout ce qui arrive par module.
+//
+// Ce qu'il ne sait PAS vérifier, et qu'il faut savoir : il ne distingue pas
+// une source du démarrage d'une source de module. Il répond « le parent
+// peut-il obtenir cette table ? », pas « l'obtient-il tout de suite ? ».
+function sourcesDuRole(role) {
+  // NAV déclare lui aussi `parent: {`, et il vient AVANT dans le fichier :
+  // on part donc de ROLE_LOAD, pas du début.
+  const base = src.indexOf('window.ROLE_LOAD = {');
+  if (base < 0) return null;
+  const i = src.indexOf(`\n  ${role}: {`, base);
+  if (i < 0) return null;
+  let p = 0, j = src.indexOf('{', i), fin = j;
+  for (let k = j; k < src.length; k++) {
+    if (src[k] === '{') p++;
+    else if (src[k] === '}') { p--; if (!p) { fin = k; break; } }
+  }
+  const bloc = src.slice(i, fin);
+  return [...new Set([
+    ...[...bloc.matchAll(/_T\('([a-z_0-9]+)'/g)].map(m => m[1]),
+    ...[...bloc.matchAll(/'([a-z_0-9]+)'(?=\s*[,\]])/g)].map(m => m[1]),
+  ])];
+}
+const declarees = sourcesDuRole('parent');
+const tireesU = declarees
+  || [...new Set([...src.matchAll(/_get\('([a-z_0-9]+)'/g)].map(m => m[1]))];
+if (declarees) {
+  console.log(`    lecture de ROLE_LOAD.parent — ${declarees.length} sources déclarées`);
+  console.log('    (démarrage + modules confondus : cet outil ne les distingue pas)\n');
+}
 
 console.log('═══ DE QUELLES TABLES UN PARENT A-T-IL BESOIN ? ═══');
 console.log(`    ${vus.size} fonctions atteintes depuis ses ${NAV_PARENT.length} écrans\n`);

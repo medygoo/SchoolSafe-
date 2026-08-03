@@ -2472,12 +2472,38 @@ window._writeErrorLabel = (e) => {
   return "refus du serveur sur « " + e.table + " »";
 };
 
-async function _get(t,p=''){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${p}`,{headers:{..._H,'Prefer':''}});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){_noteWriteError(t,'delete',e.message);return null;}}
+// « 200 avec zéro ligne » et « 403 » ne veulent PAS dire la même chose, et le
+// contenu ne permet pas de les distinguer : les deux rendent un tableau vide.
+// Seul le statut HTTP le dit. Sans lui, un parent privé d'accès verrait des
+// écrans vides sans le moindre message. (ROLE_LOAD_MATRIX §1)
+window._readState = {};
+window._noteReadState = (t, http, vide) => {
+  window._readState[t] =
+    http === 200 ? (vide ? 'empty' : 'loaded')
+  : http === 401 ? 'session_expired'
+  : http === 403 ? 'forbidden'
+  : http === 404 ? 'contract_missing'
+  : http >= 500  ? 'server_error'
+  : 'unavailable';
+};
+async function _get(t,p=''){
+  try{
+    const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${p}`,{headers:{..._H,'Prefer':''}});
+    if(!r.ok){ _noteReadState(t, r.status); throw new Error(await r.text()); }
+    const j = await r.json();
+    _noteReadState(t, 200, Array.isArray(j) && j.length === 0);
+    return j;
+  }catch(e){
+    if(!window._readState[t]) _noteReadState(t, 0);
+    console.warn('[SB]',t,e.message);
+    return null;
+  }
+}
 // Returns &school_id=eq.X when school context is active — appended to select queries for RLS belt-and-suspenders
 const _sf=()=>window._currentSchoolId?'&school_id=eq.'+encodeURIComponent(window._currentSchoolId):'';
 async function _post(t,b){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){_noteWriteError(t,'post',e.message);return false;}}
 async function _patch(t,q,b){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${q}`,{method:'PATCH',headers:_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){_noteWriteError(t,'patch',e.message);return false;}}
-async function _del(t,q){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${q}`,{method:'DELETE',headers:_H});if(!r.ok)throw new Error(await r.text());return true;}catch(e){console.warn('[SB]',t,e.message);return false;}}
+async function _del(t,q){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${q}`,{method:'DELETE',headers:_H});if(!r.ok)throw new Error(await r.text());return true;}catch(e){_noteWriteError(t,'delete',e.message);return false;}}
 
 // ── ENREGISTREMENT CONFIRMÉ PAR LE SERVEUR ────────────────────────────────────
 // Contrat de persistance du 3 août 2026 (docs/BACKEND_PERSISTENCE_CONTRACT.md).
@@ -2587,143 +2613,254 @@ window._syncServerClock = async () => {
 // Re-sync automatique toutes les heures
 if(!window._iv_clock) window._iv_clock = setInterval(() => { if (window.DB_ONLINE) window._syncServerClock(); }, 3600000);
 
+// ════════════════════════════════════════════════════════════════════════════
+//  CHARGEMENT PAR RÔLE
+//  coordination/ROLE_LOAD_MATRIX.md — ChatGPT, 3 août 2026
+//
+//  Avant : un Promise.all de 47 tables, le MÊME pour les six rôles. Mesuré sur
+//  le jeu de 350 élèves : 1,83 Mo et 10 254 cotes tirés par CHAQUE téléphone —
+//  y compris celui d'un parent, qui recevait les notes de toute l'école, les
+//  salaires du personnel et le journal comptable. La seule barrière était RLS.
+//
+//  Après : chaque rôle ne demande que ce que ses écrans utilisent, et rien
+//  n'est demandé au démarrage qui puisse attendre l'ouverture de son écran.
+//
+//  RÈGLE : toute source absente de ROLE_LOAD[rôle] est INTERDITE par défaut.
+//  Ajouter une table ici exige de mettre à jour la matrice et de vérifier RLS.
+// ════════════════════════════════════════════════════════════════════════════
+
+const _COLS_NOTIFS = 'id,uid,from,msg,type,date,time,read,devoir_id,status,to_role,by,wa_links,receipt';
+const _COLS_SCAN   = 'id,sid,type,status,date,time,name,label,description,manual,escort_kind,escort_id,escort_name,created_at';
+
+// Un raccourci : { t: table, q: paramètres PostgREST }
+const _T = (t, q) => ({ t, q });
+
+window.ROLE_LOAD = {
+  direction: {
+    bootstrap: [
+      _T('classes',  'select=*'),
+      _T('students', 'select=id,name,mat,cid,pid,photo,access_blocked,blocked,access_parent,archived,may_leave_alone,leave_alone_until&archived=eq.false'),
+      _T('users',    'select=id,name,role,initials,phone,photo_url,email,status,created_at'),
+      _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
+    ],
+    modules: {
+      pedagogie:      ['matieres','attendance','devoirs','grades','appreciations','conduct','cahier_prep','cahier_texte','evaluations','prevision_matiere','timetables','rattrapages','tenafep','exetat'],
+      eleves:         ['aps','scan_log','approbations','medical','medical_visits','sanctions','convocations','absences'],
+      activites:      ['activites','activites_inscriptions','cantine','cantine_menus','cantine_presence'],
+      communication:  ['messages','events'],
+      personnel:      ['teacher_absences','teacher_notes','salaries','advances','direct_primes'],
+      finance:        ['fee_types','payments','versements','journal_entries','daily_expenses','daily_records','daily_reports','inscriptions'],
+      administration: ['administrative_document_types','administrative_documents','audit_log'],
+    },
+  },
+
+  direction2: {
+    bootstrap: [
+      _T('classes',  'select=id,name,cycle,teacher_id,teacher_id_en,titulaire_id,option,card_color,card_color_soft,card_color_dark'),
+      _T('students', 'select=id,name,mat,cid,pid,dob,photo,adresse,nom_papa,nom_maman,access_blocked,blocked,access_parent,archived,created_at,lieu_naissance,num_inscription,may_leave_alone,leave_alone_until&archived=eq.false'),
+      _T('users',    'select=id,name,role,initials,phone,photo_url,status'),
+      _T('matieres', 'select=id,cid,name,lang,active'),
+      _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
+    ],
+    modules: {
+      pedagogie:      ['attendance','devoirs','grades','appreciations','conduct','cahier_prep'],
+      eleves:         ['approbations','aps','scan_log'],
+      communication:  ['messages','events'],
+      // Direction 2 ne voit JAMAIS le montant ni la devise d'un document, même
+      // si une ligne mal classée passait la RLS.
+      administration: [_T('administrative_document_types','select=*'),
+                       _T('administrative_documents','select=id,document_type_id,title,document_number,document_date,period_start,period_end,provider,notes,school_year,confidentiality,is_financial,status,created_by,created_at,updated_at,archived_at')],
+    },
+  },
+
+  direction3: {
+    bootstrap: [
+      _T('classes',  'select=id,name,cycle'),
+      _T('students', 'select=id,name,mat,cid,photo,access_blocked,blocked,archived&archived=eq.false'),
+      _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
+    ],
+    modules: {
+      // Le détail d'un élève arrive par get_cashier_student_fee_detail, à la
+      // sélection — jamais toute l'école sur le téléphone.
+      finance:        ['fee_types','payments','versements','journal_entries','daily_expenses','daily_records','daily_reports'],
+      administration: [_T('administrative_document_types','select=*&is_financial=eq.true'),
+                       _T('administrative_documents','select=*')],
+      personnel:      ['salaries','advances','direct_primes'],
+      activites:      ['cantine','cantine_menus','cantine_presence'],
+    },
+  },
+
+  enseignant: {
+    bootstrap: [
+      _T('classes',  'select=id,name,cycle,teacher_id,teacher_id_en,titulaire_id,option,card_color,card_color_soft,card_color_dark'),
+      _T('students', 'select=id,name,mat,cid,photo,dob,access_blocked,blocked,archived&archived=eq.false'),
+      _T('matieres', 'select=id,cid,name,lang,active'),
+      _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
+    ],
+    modules: {
+      pedagogie:     ['attendance','devoirs','grades','appreciations','conduct','cahier_prep','cahier_texte','prevision_matiere','timetables','rattrapages'],
+      eleves:        [_T('scan_log','select='+_COLS_SCAN+'&order=time.desc&limit=500'),
+                      _T('aps','select=id,sid,name,relation,photo,active,phone,approval_status,valid_until')],
+      communication: ['messages','events'],
+      personnel:     ['teacher_absences','direct_primes'],
+    },
+  },
+
+  parent: {
+    bootstrap: [
+      _T('students', 'select=id,name,mat,cid,dob,photo,access_parent,archived,lieu_naissance,num_inscription,may_leave_alone,leave_alone_until&archived=eq.false&access_parent=neq.false'),
+      _T('classes',  'select=id,name,cycle,option,card_color,card_color_soft,card_color_dark'),
+      _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
+    ],
+    modules: {
+      suivi:         ['attendance','devoirs','grades','appreciations','conduct',
+                      _T('scan_log','select='+_COLS_SCAN+'&order=date.desc&limit=300'),
+                      _T('aps','select=*'),
+                      // Ajoutées à la matrice : le menu du parent porte
+                      // « Cahier de texte », « Emploi du temps » et
+                      // « Palmarès », et ces trois écrans lisent ces tables.
+                      // Sans elles, ils s'ouvrent vides. Signalé à ChatGPT.
+                      _T('matieres','select=id,cid,name,lang,active'),
+                      _T('timetables','select=*'),
+                      _T('cahier_texte','select=*&order=date.desc&limit=200')],
+      communication: ['messages','events','convocations','absences'],
+      activites:     ['activites','activites_inscriptions','cantine','cantine_menus','cantine_presence'],
+      // Les frais du parent viennent de get_parent_fee_summary, enfant par
+      // enfant. Aucune table financière n'est tirée ici.
+    },
+  },
+
+  gardien: {
+    bootstrap: [
+      _T('attendance', 'select=id,sid,cid,date,status,arr_time,manual,created_at&date=eq.'+today()),
+      _T('scan_log',   'select='+_COLS_SCAN+'&date=eq.'+today()),
+      _T('notifs',     'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=50'),
+    ],
+    // Le Gardien passe par les RPC scanner : get_scanner_students et
+    // get_scanner_aps. Il ne tire jamais la table students entière.
+    rpc: ['get_scanner_students', 'get_scanner_aps'],
+    modules: {},
+  },
+};
+
+// Quel module ouvrir quand on entre sur un écran. Une page absente de cette
+// table n'a besoin que du démarrage.
+window.PAGE_MODULE = {
+  palmares:'pedagogie', palmares_parent:'pedagogie', attendance:'pedagogie', timetable:'pedagogie',
+  devoirs:'pedagogie', devoirs_parent:'suivi', matieres:'pedagogie', cahier_texte:'pedagogie',
+  cahier_prep:'pedagogie', prevision_matiere:'pedagogie', tenafep:'pedagogie', exetat:'pedagogie',
+  evaluations_ens:'pedagogie', bulletins:'pedagogie', children:'suivi', scan_history:'suivi',
+  students:'eleves', scanner:'eleves', scanner_exit:'eleves', scan_log:'eleves', authorized:'eleves',
+  sante:'eleves', sanctions:'eleves', convocations:'communication', absences:'communication',
+  approbations:'eleves', inscriptions:'finance',
+  messages:'communication', calendar:'communication', notifications:'communication',
+  payments:'finance', caisse_paiement:'finance', caisse_depense:'finance', caisse_rapport:'finance',
+  etat_financier:'finance', tresorerie:'finance', comptabilite:'finance', fee_types:'finance',
+  recus_parent:'finance',
+  paie:'personnel', mes_primes:'personnel', mes_absences:'personnel', teacher_activity:'personnel',
+  cantine:'activites', cantine_parent:'activites', activites:'activites', activites_parent:'activites',
+  documents_admin:'administration', audit_log:'administration', statistiques:'administration',
+};
+
+// L'état de chaque source, pour que l'écran puisse dire « accès refusé »
+// plutôt que d'afficher un vide muet.
+window._modulesCharges = new Set();
+
+// Charge une liste de sources dans DB. Une lecture ratée ne remplace jamais
+// des données par du vide : c'est la garantie qui existait déjà, elle reste.
+// _get() rend null quand une lecture ÉCHOUE, et [] quand la table est
+// réellement vide. Confondre les deux effaçait la table localement à la
+// moindre coupure, et saveToCrypt() enregistrait ensuite ce vide. Une lecture
+// ratée conserve donc ce qui était déjà chargé ; seule une réponse valide —
+// un vrai tableau — remplace les données.
+let _lectFail = 0;
+const safe = (r, cur) => {
+  if (Array.isArray(r)) return r;
+  _lectFail++;
+  return Array.isArray(cur) ? cur : [];
+};
+
+window._chargerSources = async (sources) => {
+  const liste = (sources||[]).map(x => typeof x === 'string' ? _T(x, 'select=*') : x);
+  _lectFail = 0;
+  const res = await Promise.all(liste.map(x => _get(x.t, x.q)));
+  liste.forEach((x, i) => { DB[x.t] = safe(res[i], DB[x.t]); });
+  return { sources: liste.map(x=>x.t), echecs: _lectFail };
+};
+
+// Ouvre un module si le rôle y a droit et qu'il n'est pas déjà chargé.
+window.chargerModule = async (mod) => {
+  if (!mod || _modulesCharges.has(mod) || !window.DB_ONLINE) return false;
+  const conf = ROLE_LOAD[_roleUI(S.user?.role)];
+  const sources = conf?.modules?.[mod];
+  if (!sources) return false;            // rôle non concerné : aucune requête
+  _modulesCharges.add(mod);
+  await _chargerSources(sources);
+  _rebuildIdx();
+  return true;
+};
+
+// Appelé par go() avant le rendu : l'écran ne s'affiche pas vide en attendant.
+window.assurerModulePage = async (page) => {
+  const mod = window.PAGE_MODULE[page];
+  if (!mod) return false;
+  return await chargerModule(mod);
+};
+
 window.loadFromSupabase = async () => {
   if(!window._supaConfigured()) return false;
   try {
     await window._syncServerClock();
-    const ping = await _get('users','select=id&limit=1');
+    const role = _roleUI(S.user?.role);
+    const conf = ROLE_LOAD[role];
+    if (!conf) { console.warn('[SB] rôle sans matrice de chargement :', role); return false; }
+
+    const ping = await _get('classes','select=id&limit=1');
     if (!ping) throw new Error('no response');
     window.DB_ONLINE = true;
-    const [users,classes,students,payments,attendance,scan_log,conduct,grades,
-           absences,notifs,events,messages,aps,daily_records,daily_expenses,daily_reports,
-           devoirs,cahier_texte,matieres,rattrapages,convocations,timetables,settings_rows,
-           approbations,teacher_notes,audit_log,teacher_absences,
-           medical,tenafep,exetat,evaluations,salaries,advances,direct_primes,
-           sanctions,cantine,cantine_menus,cantine_presence,
-           activites,activites_inscriptions,appreciations,medical_visits,
-           inscriptions,cahier_prep,prevision_matiere,fee_types,versements,journal_entries] = await Promise.all([
-      _get('users','select=*'+_sf()),
-      _get('classes','select=*'+_sf()),
-      _get('students','select=*'+_sf()),
-      _get('payments','select=*'+_sf()),
-      _get('attendance','select=*&order=date.desc&limit=1000'+_sf()),
-      _get('scan_log','select=*&order=time.desc&limit=500'+_sf()),
-      _get('conduct','select=*'+_sf()),
-      _get('grades','select=*'+_sf()),
-      _get('absences','select=*&order=date.desc'+_sf()),
-      _get('notifs','select=*&order=time.desc&limit=100'+_sf()),
-      _get('events','select=*&order=date.asc'+_sf()),
-      _get('messages','select=*&order=date.desc&limit=200'+_sf()),
-      _get('aps','select=*'+_sf()),
-      _get('daily_records','select=*&order=date.desc&limit=500'+_sf()),
-      _get('daily_expenses','select=*&order=date.desc&limit=500'+_sf()),
-      _get('daily_reports','select=*&order=date.desc&limit=100'+_sf()),
-      _get('devoirs','select=*&order=date.desc&limit=200'+_sf()),
-      _get('cahier_texte','select=*&order=date.desc&limit=200'+_sf()),
-      _get('matieres','select=*'+_sf()),
-      _get('rattrapages','select=*&order=date.desc&limit=200'+_sf()),
-      _get('convocations','select=*&order=date.desc&limit=200'+_sf()),
-      _get('timetables','select=*'+_sf()),
-      _get('settings','select=*&id=eq.'+_settingsId()+'&limit=1'),
-      _get('approbations','select=*&order=date.desc&limit=300'+_sf()),
-      _get('teacher_notes','select=*&order=date.desc&limit=200'+_sf()),
-      _get('audit_log','select=*&order=date.desc&limit=200'+_sf()),
-      _get('teacher_absences','select=*&order=date.desc&limit=200'+_sf()),
-      _get('medical','select=*'+_sf()),
-      _get('tenafep','select=*'+_sf()),
-      _get('exetat','select=*'+_sf()),
-      _get('evaluations','select=*&order=date.desc&limit=500'+_sf()),
-      _get('salaries','select=*&order=month.desc&limit=500'+_sf()),
-      _get('advances','select=*&order=date.desc&limit=500'+_sf()),
-      _get('direct_primes','select=*&order=date.desc&limit=500'+_sf()),
-      _get('sanctions','select=*&order=date.desc&limit=200'+_sf()),
-      _get('cantine','select=*'+_sf()),
-      _get('cantine_menus','select=*&order=date.desc&limit=100'+_sf()),
-      _get('cantine_presence','select=*&order=date.desc&limit=500'+_sf()),
-      _get('activites','select=*'+_sf()),
-      _get('activites_inscriptions','select=*'+_sf()),
-      _get('appreciations','select=*'+_sf()),
-      _get('medical_visits','select=*&order=date.desc&limit=200'+_sf()),
-      _get('inscriptions','select=*&order=created_at.desc'+_sf()),
-      _get('cahier_prep','select=*&order=date_prevue.desc&limit=500'+_sf()),
-      _get('prevision_matiere','select=*'+_sf()),
-      _get('fee_types','select=*'+_sf()),
-      _get('versements','select=*&order=date.desc&limit=1000'+_sf()),
-      _get('journal_entries','select=*&order=date.desc&limit=500'+_sf()),
-    ]);
-    // _get() renvoie null quand une lecture ÉCHOUE, et [] quand la table est
-    // réellement vide. Confondre les deux effaçait la table localement à la
-    // moindre coupure, et saveToCrypt() enregistrait ensuite ce vide.
-    //
-    // Une lecture ratée conserve donc ce qui était déjà chargé. Seule une
-    // réponse valide — un vrai tableau — remplace les données.
-    let _lectFail = 0;
-    const safe = (r, cur) => {
-      if (Array.isArray(r)) return r;
-      _lectFail++;
-      return Array.isArray(cur) ? cur : [];
-    };
-    const fd = (arr, cur) => {
-      const v = safe(arr, cur);
-      return v === cur ? v : v.map(x=>({...x,date:x.date?.slice(0,10)||x.date}));
-    };
-    // Exclure pin/pin_hashed du chargement en masse — fetchés à la demande dans tryLogin
-    DB.users=(()=>{const v=safe(users, DB.users); return v===DB.users ? v : v.map(({pin:_p,pin_hashed:_ph,...u})=>({...u,role:_normRole(u.role)}));})(); DB.classes=safe(classes, DB.classes); DB.students=safe(students, DB.students);
-    DB.payments=safe(payments, DB.payments); DB.attendance=fd(attendance, DB.attendance);
-    DB.scan_log=fd(scan_log, DB.scan_log); DB.conduct=fd(conduct, DB.conduct);
-    DB.grades=safe(grades, DB.grades); DB.absences=fd(absences, DB.absences);
-    DB.notifs=safe(notifs, DB.notifs); DB.events=fd(events, DB.events);
-    DB.messages=fd(messages, DB.messages); DB.aps=safe(aps, DB.aps);
-    DB.daily_records=fd(daily_records, DB.daily_records); DB.daily_expenses=fd(daily_expenses, DB.daily_expenses);
-    DB.daily_reports=fd(daily_reports, DB.daily_reports);
-    DB.devoirs=fd(devoirs, DB.devoirs);
-    DB.cahier_texte=fd(cahier_texte, DB.cahier_texte);
-    DB.matieres=safe(matieres, DB.matieres);
-    DB.rattrapages=fd(rattrapages, DB.rattrapages);
-    DB.convocations=fd(convocations, DB.convocations);
-    DB.sanctions=fd(sanctions, DB.sanctions);
-    DB.cantine=safe(cantine, DB.cantine);
-    DB.cantine_menus=fd(cantine_menus, DB.cantine_menus);
-    DB.cantine_presence=fd(cantine_presence, DB.cantine_presence);
-    DB.activites=safe(activites, DB.activites);
-    DB.activites_inscriptions=safe(activites_inscriptions, DB.activites_inscriptions);
-    DB.appreciations=safe(appreciations, DB.appreciations);
-    DB.medical_visits=fd(medical_visits, DB.medical_visits);
-    DB.timetables=safe(timetables, DB.timetables);
-    DB.inscriptions=safe(inscriptions, DB.inscriptions);
-    DB.cahier_prep=fd(cahier_prep, DB.cahier_prep);
-    DB.prevision_matiere=safe(prevision_matiere, DB.prevision_matiere);
-    DB.fee_types=safe(fee_types, DB.fee_types);
-    DB.versements=fd(versements, DB.versements);
-    DB.journal_entries=fd(journal_entries, DB.journal_entries);
+
+    // ── Les réglages passent par get_safe_settings() : la table `settings`
+    //    porte qr_secret et msg_enc_key, que seule Direction 1 doit voir.
+    const _st = await _rpc('get_safe_settings', {});
+    if (_st.ok && _st.data) {
+      const {id:_i, ...rest} = _st.data;
+      DB.settings = {...DB.settings, ...rest, id:_settingsId()};
+    } else if (role === 'direction') {
+      const sRow = await _get('settings','select=*&id=eq.'+_settingsId()+'&limit=1');
+      const row = Array.isArray(sRow) ? sRow[0] : null;
+      if (row) { const {id:_i, ...rest} = row; DB.settings = {...DB.settings, ...rest, id:_settingsId()}; }
+    }
+
+    // ── Le socle du rôle ────────────────────────────────────────────────────
+    const { echecs } = await _chargerSources(conf.bootstrap);
+
+    // ── Les RPC du rôle (le Gardien ne tire jamais la table students) ───────
+    for (const nom of (conf.rpc || [])) {
+      const r = await _rpc(nom, {});
+      if (!r.ok) { console.warn('[SB] RPC', nom, r.code); continue; }
+      if (nom === 'get_scanner_students' && Array.isArray(r.data.students || r.data)) DB.students = r.data.students || r.data;
+      if (nom === 'get_scanner_aps'      && Array.isArray(r.data.aps      || r.data)) DB.aps      = r.data.aps      || r.data;
+    }
+
+    // ── Les modules déjà ouverts se rafraîchissent ; les autres attendent ───
+    for (const mod of Array.from(_modulesCharges)) {
+      const sources = conf.modules?.[mod];
+      if (sources) await _chargerSources(sources);
+    }
+
+    if (DB.settings?.msg_enc_key && Array.isArray(DB.messages) && DB.messages.length) {
+      DB.messages = await _decryptMsgs(DB.messages);
+    }
     _seedFeeTypes();
-    const sRow=safe(settings_rows)[0];
-    if(sRow){const{id,...rest}=sRow;DB.settings={...DB.settings,...rest,id:_settingsId()};}
-    // Déchiffre subject/body si chiffrés (enc:...) — clé disponible maintenant dans DB.settings
-    if (DB.settings?.msg_enc_key) DB.messages = await _decryptMsgs(DB.messages);
-    DB.approbations=fd(approbations, DB.approbations);
-    DB.teacher_notes=fd(teacher_notes, DB.teacher_notes);
-    DB.audit_log=fd(audit_log, DB.audit_log);
-    DB.teacher_absences=fd(teacher_absences, DB.teacher_absences);
-    DB.medical=safe(medical, DB.medical);
-    DB.tenafep=safe(tenafep, DB.tenafep);
-    DB.exetat=safe(exetat, DB.exetat);
-    DB.evaluations=safe(evaluations, DB.evaluations);
-    DB.salaries=safe(salaries, DB.salaries);
-    DB.advances=safe(advances, DB.advances);
-    DB.direct_primes=fd(direct_primes, DB.direct_primes);
-    const uids=DB.users.map(u=>parseInt(u.id?.replace(/\D/g,''))||0);
+
+    const uids=(DB.users||[]).map(u=>parseInt(u.id?.replace(/\D/g,''))||0);
     DB._uid=(uids.length?Math.max(...uids):1)+1;
-    const sids=DB.students.map(s=>parseInt(s.id?.replace(/\D/g,''))||0);
+    const sids=(DB.students||[]).map(s=>parseInt(s.id?.replace(/\D/g,''))||0);
     DB._sid=(sids.length?Math.max(...sids):0)+1;
-    console.log('[SB] ✅',DB.students.length,'élèves',DB.users.length,'users');
+
     _rebuildIdx();
-    // Une lecture ratée n'efface plus rien, mais elle mérite d'être visible :
-    // c'est le signe d'un réseau instable ou d'une table inaccessible.
-    if (_lectFail) console.warn('[SB]', _lectFail, 'lecture(s) en échec — données locales conservées pour ces tables');
-    // Les réglages de l'école viennent d'être lus : on sait désormais si un
-    // secret existe déjà. Tant que ce drapeau est faux, aucun secret n'est
-    // fabriqué (voir _keep).
+    console.log('[SB] ✅', role, '·', (DB.students||[]).length, 'élèves ·',
+                conf.bootstrap.length, 'sources au démarrage', echecs?('· '+echecs+' en échec'):'');
     window._settingsLues = true;
     saveToCrypt();
     return true;
@@ -3641,6 +3778,12 @@ window.go = (p, noHistory) => {
   _updateTopBtn();
   history.pushState({page:p}, '', '');
   render();
+  // Le module de cet écran s'ouvre après le premier rendu, puis on redessine.
+  // Rendre d'abord évite l'écran blanc d'attente ; redessiner ensuite évite
+  // l'écran vide qui ment. Rien n'est demandé si le rôle n'a pas ce module.
+  if (window.assurerModulePage) {
+    assurerModulePage(p).then(charge => { if (charge && S.page === p) render(); });
+  }
 };
 
 window.goBack = () => {
@@ -4316,6 +4459,7 @@ async function _tryLoginInner() {
 };
 window.loginAs = async user => {
   S.user=user; S.page='dashboard'; S._history=[];
+  window._modulesCharges && window._modulesCharges.clear();
   // Les rôles non partagés gardent leur photo sur l'appareil : on la remet en
   // mémoire pour que les écrans habituels l'affichent sans rien changer d'eux.
   if (!S.user.photo_url && !window._photoIsShared(S.user.role)) {
