@@ -17,7 +17,7 @@ const ligneDe = p => { let o = map[0]; for (const x of map) if (x.start <= p) o 
 
 const ast = parse(src, { ecmaVersion: 2022 });
 const ECRIT = /pushSync\s*\(/;
-const GARDE = /S\.user|_requireRole|Accès non autorisé|role\s*===|includes\(S\.user\.role\)|role!==/;
+const GARDE = /S\.user|_requireRole|_denyRole|Accès non autorisé|role\s*===|includes\(S\.user\.role\)|role!==/;
 const LECTURE_SEULE = /^(R\.|render|show|open|print|export|dl|_fit|_b64|_lire|_est|_msg|_school|_cible|_uid|_hash)/;
 
 const suspects = [];

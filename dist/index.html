@@ -2446,11 +2446,37 @@ if (window._authClient) {
   localStorage.removeItem('_license_cached');
 })();
 
-async function _get(t,p=''){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${p}`,{headers:{..._H,'Prefer':''}});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.warn('[SB]',t,e.message);return null;}}
+// Le serveur dit toujours POURQUOI il refuse : colonne inconnue, type
+// incompatible, droit manquant. Ce motif était écrit dans la console et jeté —
+// l'utilisateur, lui, voyait sa saisie disparaître sans explication, et le
+// rapport qui remontait disait « ça ne marche pas ». On le retient donc, pour
+// le porter jusqu'à l'écran et jusqu'à l'issue GitHub.
+window._lastWriteError = null;
+window._noteWriteError = (table, op, message) => {
+  const m = String(message || '').slice(0, 400);
+  window._lastWriteError = { table, op, message: m, at: new Date().toISOString() };
+  console.warn('[SB]', table, op, m);
+};
+// Traduit le motif brut de PostgREST en une phrase lisible, SANS le perdre :
+// le motif exact reste disponible pour l'issue.
+window._writeErrorLabel = (e) => {
+  if (!e) return '';
+  const m = e.message || '';
+  if (/row-level security/i.test(m))            return "droit manquant sur « " + e.table + " »";
+  if (/column .* does not exist/i.test(m))      return "colonne absente dans « " + e.table + " » : " + (m.match(/column "([^"]+)"/)||[,'?'])[1];
+  if (/invalid input syntax for type ([a-z]+)/i.test(m))
+                                                return "valeur incompatible avec le type " + m.match(/invalid input syntax for type ([a-z]+)/i)[1] + " dans « " + e.table + " »";
+  if (/duplicate key|already exists/i.test(m))  return "doublon refusé sur « " + e.table + " »";
+  if (/violates foreign key/i.test(m))          return "référence inexistante depuis « " + e.table + " »";
+  if (/violates not-null/i.test(m))             return "champ obligatoire vide dans « " + e.table + " »";
+  return "refus du serveur sur « " + e.table + " »";
+};
+
+async function _get(t,p=''){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${p}`,{headers:{..._H,'Prefer':''}});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){_noteWriteError(t,'delete',e.message);return null;}}
 // Returns &school_id=eq.X when school context is active — appended to select queries for RLS belt-and-suspenders
 const _sf=()=>window._currentSchoolId?'&school_id=eq.'+encodeURIComponent(window._currentSchoolId):'';
-async function _post(t,b){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){console.warn('[SB]',t,e.message);return false;}}
-async function _patch(t,q,b){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${q}`,{method:'PATCH',headers:_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){console.warn('[SB]',t,e.message);return false;}}
+async function _post(t,b){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){_noteWriteError(t,'post',e.message);return false;}}
+async function _patch(t,q,b){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${q}`,{method:'PATCH',headers:_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){_noteWriteError(t,'patch',e.message);return false;}}
 async function _del(t,q){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${q}`,{method:'DELETE',headers:_H});if(!r.ok)throw new Error(await r.text());return true;}catch(e){console.warn('[SB]',t,e.message);return false;}}
 
 // ── ENREGISTREMENT CONFIRMÉ PAR LE SERVEUR ────────────────────────────────────
@@ -2532,7 +2558,7 @@ window._btnBusy = (sel, label='⏳ Enregistrement…') => {
 };
 
 
-async function _upsert(t,b){try{const h={..._H,'Prefer':'resolution=merge-duplicates'};const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:h,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){console.warn('[SB]',t,e.message);return false;}}
+async function _upsert(t,b){try{const h={..._H,'Prefer':'resolution=merge-duplicates'};const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:h,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){_noteWriteError(t,'upsert',e.message);return false;}}
 
 // Synchronise l'horloge locale avec le serveur Supabase.
 // Lit le header Date de la réponse HTTP — pas d'endpoint supplémentaire.
@@ -2745,8 +2771,13 @@ window.pushSync = async (table, op, data, query) => {
     // donc quelque chose qui ne se réglera pas tout seul.
     if (!window._writeFailAlerted && window.DB_ONLINE) {
       window._writeFailAlerted = true;
-      toast('⚠️ Le serveur refuse les enregistrements — vos saisies sont retenues sur l\'appareil', 'warning');
-      console.warn('[SYNC] premier refus serveur :', table, op);
+      const _e = window._lastWriteError;
+      const _pourquoi = _e ? ' — ' + _writeErrorLabel(_e) : '';
+      toast('⚠️ Enregistrement refusé' + _pourquoi + '. Vos saisies sont retenues sur l\'appareil.', 'warning');
+      // Le motif exact, mot pour mot : c'est la ligne qui fait gagner le plus de
+      // temps dans une issue. Sans elle on devine ; avec elle la cause est
+      // presque toujours immédiate.
+      console.warn('[SYNC] premier refus serveur :', table, op, _e && _e.message);
     }
   } else if (window._writeFailAlerted) {
     // Le serveur accepte de nouveau : l'alerte pourra reparaître si cela
@@ -4569,6 +4600,15 @@ window.saveProfile = async () => {
 
 // ── ROLE GUARD ──
 // Returns an error HTML string if current user lacks the required role(s), or null if allowed.
+// Garde des MUTATIONS. `_requireRole` rend du HTML et sert aux pages ; une
+// fonction qui écrit a besoin d'un refus net. Et surtout : cacher un bouton
+// n'est pas une sécurité — une fonction exposée globalement reste appelable.
+window._denyRole = (...allowed) => {
+  if (S.user && allowed.includes(S.user.role)) return false;
+  toast('Accès non autorisé', 'error');
+  return true;
+};
+
 window._requireRole = (...allowed) => {
   if(!S.user || !allowed.includes(S.user.role)){
     setTimeout(()=>go('dashboard'),100);
@@ -8122,6 +8162,7 @@ window._hexDarken = function(hex, amt) {
 };
 
 window.saveClassCardStyle=function(cid,cc,soft,dark,pat){
+  if(_denyRole('direction','direction2')) return;
   const cl=(DB.classes||[]).find(c=>c.id===cid); if(!cl) return;
   const patch={};
   if(cc){cl.card_color=cc;cl.card_color_soft=soft;cl.card_color_dark=dark;patch.card_color=cc;patch.card_color_soft=soft;patch.card_color_dark=dark;}
@@ -10268,6 +10309,7 @@ window.validateAbs = (id, status) => {
 };
 
 window.approveDevoir = (did, status) => {
+  if(_denyRole('direction','direction2')) return;
   const d = (DB.devoirs||[]).find(x=>x.id===did); if(!d) return;
   d.status = status==='approved' ? 'published' : 'refused';
   pushSync('devoirs','patch',{status:d.status},'id=eq.'+did);
@@ -10496,6 +10538,9 @@ window.getStudentBalance = (sid) => {
 
 // ── Types de frais configurables ──────────────────────────────────────────────
 window._seedFeeTypes = () => {
+  // Appelée à CHAQUE chargement, pour tous les rôles. Sans ce garde, un parent
+  // ou un gardien tentait neuf écritures que le serveur refuse, à chaque cycle.
+  if (!S.user || !['direction','direction3'].includes(S.user.role)) return;
   if ((DB.fee_types||[]).length) return; // déjà peuplé (Supabase ou crypt)
   // Verrou d'amorçage. Le garde-fou ci-dessus dépend d'une lecture réussie :
   // si la table est absente côté serveur, la lecture renvoie toujours vide et
@@ -10525,6 +10570,7 @@ window._seedFeeTypes = () => {
 
 // Numéro de reçu séquentiel — format R-AAAA-NNNN, stocké dans settings
 window.genRecuNo = () => {
+  if(_denyRole('direction','direction3')) return null;
   const yr = (DB.settings.year||'').slice(0,4) || new Date().getFullYear();
   const last = DB.settings._last_recu_no || 0;
   const next = last + 1;
@@ -10757,6 +10803,11 @@ window.toggleStudentAccess = sid => {
 // par le serveur, qui la rejette — le blocage d'une école entière échouait
 // donc en silence. On procède par tranches.
 window._patchLot = (table, patch, ids, taille) => window._bulkLot(table, 'patch', patch, ids, taille);
+// Transport pur : il découpe une liste d'identifiants en lots. Il ne porte
+// VOLONTAIREMENT pas de garde de rôle — il ne sait pas ce qu'il transporte, et
+// une garde ici serait forcément fausse. La décision appartient à ses quatre
+// appelants, tous gardés : sendUrgentAlert (gardien), blockAllUnpaid et
+// unblockAll (direction), et le marquage des notifications lues.
 window._bulkLot = (table, op, payload, ids, taille) => {
   const T = taille || 60;
   for (let i = 0; i < ids.length; i += T) {
@@ -10919,6 +10970,7 @@ ${unassigned.length?`<div style="margin-bottom:12px"><div style="font-size:12px;
 };
 
 window.assignTrimestre = (sid) => {
+  if(_denyRole('direction','direction3')) return;
   const t=$('assign_t').value;
   const p=(DB.payments||[]).find(x=>x.sid===sid&&x.t===t); if(!p) return;
   p.paid=true;
@@ -17591,6 +17643,7 @@ R.fee_types = () => {
   </div>`;
 };
 window.toggleFeeType = (id) => {
+  if(_denyRole('direction','direction3')) return;
   const f=(DB.fee_types||[]).find(x=>x.id===id); if(!f) return;
   f.active = f.active===false;
   pushSync('fee_types','upsert',f);
@@ -17613,6 +17666,7 @@ window.resetFeeTypeForm = () => {
   const t=document.getElementById('ft_form_title');if(t)t.textContent='➕ Nouveau type de frais';
 };
 window.saveFeeType = () => {
+  if(_denyRole('direction','direction3')) return;
   const editId=(document.getElementById('ft_edit_id')?.value||'').trim();
   const label=(document.getElementById('ft_label')?.value||'').trim();
   if(!label){toast('Le libellé est obligatoire','error');return;}
@@ -18654,6 +18708,7 @@ window.openBudgetDepensesForm = () => {
      <button class="btn btn-primary" onclick="saveBudgetDepenses()">Enregistrer</button>`);
 };
 window.saveBudgetDepenses = () => {
+  if(_denyRole('direction','direction3')) return;
   const amt = lireMontant($('budg_dep_amt')?.value);
   if(amt===null){toast('Montant invalide','error');return;}
   if(!DB.settings) DB.settings={};
@@ -20621,6 +20676,7 @@ window.openPassageClasse = () => {
 };
 
 window.executePassage = () => {
+  if(_denyRole('direction')) return;   // déplace TOUS les élèves : Direction 1 seule
   let moved=0, diplomed=0;
   document.querySelectorAll('[data-sid]').forEach(cb=>{
     if(!cb.checked) return;
@@ -22454,6 +22510,7 @@ R.settings = () => {
 // chacune avec son bouton. Réafficher la page entière après en avoir enregistré
 // une seule effaçait ce qui était saisi dans les autres.
 window._saveSettings = async (msg, opts) => {
+  if(_denyRole('direction','direction2')) return false;
   const o = opts || {};
   if (window._settingsBusy) return false;
   window._settingsBusy = true;
@@ -23206,6 +23263,7 @@ R.mes_absences = () => {
 };
 
 window.cancelTeacherAbsence = (id) => {
+  if(_denyRole('direction','enseignant')) return;
   showC('Annuler cette absence','Annuler l\'absence déclarée aujourd\'hui ?',()=>{
     DB.teacher_absences=(DB.teacher_absences||[]).filter(x=>x.id!==id);
     pushSync('teacher_absences','delete','','id=eq.'+id);
@@ -23670,6 +23728,7 @@ window.savePrep = (prepId) => {
 };
 
 window.deletePrep = (prepId) => {
+  if(_denyRole('direction','direction2','enseignant')) return;
   showC(t('Supprimer cette fiche ?','Delete this sheet?'),t('Cette action est irréversible.','This action cannot be undone.'),()=>{
     if(!DB.cahier_prep) return;
     DB.cahier_prep=DB.cahier_prep.filter(x=>x.id!==prepId);
@@ -24341,6 +24400,7 @@ window.editTimetableSlotTeacher = (cid, day, period) => {
 };
 
 window.saveTimetableSlot = async (cid, day, period, existingId) => {
+  if(_denyRole('direction','direction2')) return;
   const mat=(document.getElementById('edtMat')?.value||'').trim();
   const tid=document.getElementById('edtTeacher')?.value||'';
   if(!mat){if(existingId) await deleteTimetableSlot(existingId); else closeModal(); return;}
@@ -24386,6 +24446,7 @@ window.saveTimetableSlotTeacher = async (cid, day, period, existingId) => {
 };
 
 window.deleteTimetableSlot = async (id) => {
+  if(_denyRole('direction','direction2')) return;
   showC('Supprimer ce créneau ?','Cette action est irréversible.',()=>{
     DB.timetables=DB.timetables.filter(t=>t.id!==id);
     pushSync('timetables','delete',null,'id=eq.'+id);
