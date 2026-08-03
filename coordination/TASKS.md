@@ -8,8 +8,27 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 
 - ChatGPT : Supabase, base de données, migrations, RLS, sécurité, RPC, Cloudflare R2 côté serveur, compression, archives, contrats techniques, audit et validation.
 - Claude : application, interface, UX, écrans, navigation, appels frontend, PWA, affichage des erreurs, intégration visible et tests fonctionnels de l’interface.
-- Claude ne modifie pas les tables, migrations, RLS, RPC, Edge Functions ou secrets sans validation de ChatGPT.
+- Claude ne modifie pas les tables, migrations, RLS, RPC, Edge Functions, Cloudflare, DNS ou secrets sans validation de ChatGPT.
 - Aucun secret R2, Supabase secret/service role ou clé privée ne doit être ajouté dans le frontend ou dans GitHub public.
+
+## Répartition — design, site et nouveau nom de domaine
+
+### Claude
+
+- conçoit le design visuel du site vitrine et de l’application ;
+- réalise les pages, couleurs, composants, navigation, affichage mobile et responsive ;
+- ajoute le bouton visible du site vers SchoolSafe ;
+- intègre dans le frontend les URLs publiques et sous-domaines validés ;
+- teste le rendu, les liens et les parcours utilisateur.
+
+### ChatGPT
+
+- choisit et valide l’architecture du domaine et des sous-domaines ;
+- configure Cloudflare DNS, HTTPS/SSL, redirections et domaine personnalisé ;
+- connecte le domaine à GitHub Pages ou à l’hébergement retenu ;
+- configure les origines CORS autorisées dans Supabase et les Edge Functions ;
+- vérifie la propagation DNS, le certificat, les redirections et la sécurité finale ;
+- valide toute modification Cloudflare, Supabase, R2 ou DNS avant mise en production.
 
 ## Travail Claude — Paiements et scanner
 
@@ -37,7 +56,7 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [ ] Envoyer les fichiers avec la session JWT, jamais avec une clé R2.
 - [ ] Envoyer une `x-idempotency-key` stable de 8 à 128 caractères pour chaque tentative logique.
 - [ ] Réutiliser la même clé après une coupure réseau ou lorsque `retry_same_idempotency_key=true`.
-- [ ] Ne jamais appeler `r2-upload-test`, `r2-compression-self-test` ou `r2-self-test`.
+- [ ] Ne jamais appeler `r2-upload-test`, `r2-compression-self-test`, `r2-self-test`, `r2-role-self-test`, `r2-role-self-test-a`, `r2-role-self-test-b` ou `image-magick-diagnostic`.
 - [ ] Ne jamais coder une année scolaire en dur.
 - [ ] Omettre `academic_year` ou utiliser la valeur fournie par le serveur.
 - [ ] En cas de réponse `409` sur l’année, afficher `current_academic_year` et recharger les paramètres.
@@ -133,22 +152,27 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [x] Archivage transactionnel d’un dossier administratif et de toutes ses pièces.
 - [x] Service `r2-archives` Direction 1.
 - [x] Déploiement de `r2-files` version 5.
-- [x] Déploiement de `r2-upload` version 1 avec JWT obligatoire.
+- [x] Déploiement de `r2-upload` version 3 avec JWT obligatoire.
 - [x] Compression automatique JPEG/PNG/WebP avant R2.
 - [x] PDF transmis sans conversion.
 - [x] Profils de compression photo, identité, carte et document.
 - [x] Limites 8 Mo source, 5 Mo final, 12 000 px et 40 mégapixels.
 - [x] Enregistrement des tailles, dimensions, profil, qualité et économie.
 - [x] Test réel PNG → WebP → R2 → relecture → suppression réussi.
-- [x] Réduction de test mesurée à 79,58 % sur une image synthétique.
-- [x] Endpoints expérimentaux de compression remplacés par des réponses `410` protégées par JWT.
-- [x] Code de production et migration de compression enregistrés dans GitHub.
-- [x] Aucun faux fichier, aucune fausse donnée et aucun objet de test conservé.
+- [x] Réduction de test mesurée à 79,58 % sur une image synthétique lors du test technique initial.
+- [x] Test de production authentifié Direction 1 : compression, envoi, liste, téléchargement et accès signé.
+- [x] Tests réels Direction 2, Caisse, Enseignant, Parent et Gardien.
+- [x] Matrice finale étape 5 : lot A 22/22 et lot B 20/20, soit 42/42 contrôles réussis.
+- [x] Photo de validation : 568 → 194 octets, économie 65,85 %.
+- [x] Reçu de validation : 568 → 198 octets, économie 65,14 %.
+- [x] Cycle Direction 1 validé : actif → archive → téléchargement archive → restauration → suppression.
+- [x] Gardien validé sans accès aux fichiers, aux téléchargements ou aux archives.
+- [x] Normalisation automatique de la devise administrative vide vers `USD`.
+- [x] Endpoints expérimentaux et fonctions de diagnostic remplacés par des réponses `410` protégées par JWT.
+- [x] Aucun compte, profil, invitation, fichier ou objet R2 temporaire conservé.
 
 ## Travail ChatGPT — restant
 
-- [ ] Effectuer le cycle complet authentifié de production avec une vraie session Direction 1 : `r2-upload` → `list` → `download` → `delete`.
-- [ ] Effectuer les tests réels Direction 2, Caisse, Enseignant, Parent et Gardien.
 - [ ] Après intégration Claude, interdire techniquement les uploads directs d’images vers l’action `upload` de `r2-files`.
 - [ ] Définir la clôture et l’archivage annuel automatique.
 - [ ] Créer l’inventaire annuel exportable.
@@ -156,11 +180,12 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [ ] Préparer la sauvegarde secondaire Backblaze B2.
 - [ ] Corriger les alertes historiques `SECURITY DEFINER` du scanner sans casser l’application.
 - [ ] Activer la protection Supabase contre les mots de passe compromis.
+- [ ] Configurer le nouveau nom de domaine, les sous-domaines, DNS, SSL, redirections et CORS lorsque le domaine définitif est disponible.
 - [ ] Auditer et valider les Pull Requests frontend de Claude avant fusion.
 
 ## Fonctions et actions disponibles
 
-### `r2-upload` version 1
+### `r2-upload` version 3
 
 - envoi obligatoire des nouveaux fichiers ;
 - compression d’images ;
