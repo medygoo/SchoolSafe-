@@ -6,7 +6,7 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 
 ## Règle générale
 
-- ChatGPT : Supabase, base de données, migrations, RLS, sécurité, RPC, Cloudflare R2 côté serveur, contrats techniques, audit et validation.
+- ChatGPT : Supabase, base de données, migrations, RLS, sécurité, RPC, Cloudflare R2 côté serveur, compression, archives, contrats techniques, audit et validation.
 - Claude : application, interface, UX, écrans, navigation, appels frontend, PWA, affichage des erreurs, intégration visible et tests fonctionnels de l’interface.
 - Claude ne modifie pas les tables, migrations, RLS, RPC, Edge Functions ou secrets sans validation de ChatGPT.
 - Aucun secret R2, Supabase secret/service role ou clé privée ne doit être ajouté dans le frontend ou dans GitHub public.
@@ -28,137 +28,164 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [ ] Ne pas ajouter un deuxième QR financier : réutiliser le QR existant de l’élève.
 - [ ] Gérer les états réseau : chargement, hors ligne, erreur, reprise et opération déjà envoyée.
 
-## Travail Claude — Cloudflare R2 général
+## Travail Claude — Cloudflare R2 et compression
 
-- [ ] Créer un client frontend centralisé pour appeler la fonction Supabase `r2-files`.
-- [ ] Envoyer les fichiers avec session utilisateur JWT, jamais avec une clé R2.
-- [ ] Utiliser une `x-idempotency-key` stable pour chaque tentative d’envoi.
-- [ ] Ne jamais coder une année scolaire en dur dans le client R2.
-- [ ] Omettre `academic_year` ou utiliser la valeur courante fournie par le serveur.
-- [ ] En cas de réponse `409` sur l’année, afficher la valeur `current_academic_year` et recharger les paramètres.
-- [ ] Connecter les photos des élèves à R2.
-- [ ] Connecter les photos du personnel à R2.
-- [ ] Connecter les photos des personnes autorisées à R2.
-- [ ] Connecter les fichiers de devoirs à R2.
-- [ ] Connecter les reçus de paiement à R2 avec `payment_transaction_id` obligatoire.
+- [ ] Créer un client frontend centralisé pour les fonctions R2.
+- [ ] Utiliser **`r2-upload` pour tous les nouveaux envois** de photos, images et PDF.
+- [ ] Utiliser `r2-files` uniquement pour `list`, `download` et `delete`.
+- [ ] Utiliser `r2-archives` uniquement dans l’écran Archives de Direction 1.
+- [ ] Envoyer les fichiers avec la session JWT, jamais avec une clé R2.
+- [ ] Envoyer une `x-idempotency-key` stable de 8 à 128 caractères pour chaque tentative logique.
+- [ ] Réutiliser la même clé après une coupure réseau ou lorsque `retry_same_idempotency_key=true`.
+- [ ] Ne jamais appeler `r2-upload-test`, `r2-compression-self-test` ou `r2-self-test`.
+- [ ] Ne jamais coder une année scolaire en dur.
+- [ ] Omettre `academic_year` ou utiliser la valeur fournie par le serveur.
+- [ ] En cas de réponse `409` sur l’année, afficher `current_academic_year` et recharger les paramètres.
+- [ ] Accepter côté sélection JPEG, PNG, WebP et PDF, avec source de 8 Mo maximum.
+- [ ] Afficher une erreur claire pour `413` : fichier trop lourd, dimensions trop grandes ou résultat final supérieur à 5 Mo.
+- [ ] Afficher une erreur claire pour `415` : contenu corrompu ou type déclaré incorrect.
+- [ ] Gérer `401`, `403`, `409`, `413`, `415` et `500` sans perdre la clé d’idempotence.
+- [ ] Lorsque `upload_committed=true`, ne pas envoyer une deuxième copie ; reprendre avec la même clé.
+- [ ] Afficher après réussite la taille source, la taille finale et le pourcentage économisé lorsque disponibles.
+- [ ] Connecter les photos des élèves à `r2-upload`.
+- [ ] Connecter les photos du personnel à `r2-upload`.
+- [ ] Connecter les photos des personnes autorisées à `r2-upload`.
+- [ ] Connecter les fichiers de devoirs à `r2-upload`.
+- [ ] Connecter les reçus de paiement à `r2-upload` avec `payment_transaction_id` obligatoire.
 - [ ] Pour un reçu, envoyer `owner_type=student`, `owner_id=<sid>`, `category=receipt` et `payment_transaction_id=<transaction_id>`.
-- [ ] Afficher les fichiers via l’action `download`, qui retourne une URL signée temporaire.
-- [ ] Ne jamais conserver durablement une URL signée de téléchargement.
-- [ ] Utiliser l’action `list` pour lister les fichiers autorisés.
-- [ ] Afficher la progression d’envoi et les erreurs compréhensibles.
-- [ ] Empêcher les doubles clics et gérer la réponse `reused=true`.
-- [ ] Gérer la réponse `415` lorsque le contenu réel ne correspond pas au type déclaré.
+- [ ] Ouvrir les fichiers via `r2-files` action `download`, avec URL signée temporaire.
+- [ ] Ne jamais conserver durablement une URL signée.
+- [ ] Lister les fichiers via `r2-files` action `list`.
+- [ ] Afficher la progression d’envoi et empêcher les doubles clics.
+- [ ] Gérer la réponse `reused=true` comme une réussite existante.
 - [ ] Ajouter une invalidation visuelle lors du remplacement d’une photo.
 - [ ] Ne pas utiliser le bucket Supabase Storage `school-files` sans validation écrite de ChatGPT.
-- [ ] Ne pas donner au Gardien un accès direct à `r2-files`; les images nécessaires doivent passer par le contrat scanner validé.
+- [ ] Ne pas donner au Gardien un accès direct aux fonctions R2.
 
 ## Travail Claude — Cahier de préparation des enseignants
 
-- [ ] Dans le profil Enseignant, ajouter une zone « Pièces jointes de la préparation » dans chaque fiche `cahier_prep`.
+- [ ] Dans le profil Enseignant, ajouter « Pièces jointes de la préparation » dans chaque fiche `cahier_prep`.
 - [ ] Permettre plusieurs photos ou PDF pour une même préparation.
-- [ ] Demander un nom lisible pour chaque fichier, par exemple « Page 1 », « Schéma du cours » ou « Fiche d’exercices ».
-- [ ] Envoyer avec `owner_type=cahier_prep`, `owner_id=<cahier_prep.id>` et `category=teacher_preparation`.
+- [ ] Demander un nom lisible : « Page 1 », « Schéma du cours », « Fiche d’exercices », etc.
+- [ ] Envoyer par `r2-upload` avec `owner_type=cahier_prep`, `owner_id=<cahier_prep.id>` et `category=teacher_preparation`.
 - [ ] Envoyer `display_name` et une clé d’idempotence.
-- [ ] Afficher la liste des pièces jointes sous la préparation.
-- [ ] Ouvrir les fichiers avec l’action `download` et une URL signée temporaire.
-- [ ] Permettre à l’enseignant de voir seulement les fichiers de ses propres préparations.
-- [ ] Permettre à Direction 1 et Direction 2 de consulter les préparations et leurs pièces jointes.
-- [ ] Ne pas donner cet accès à la Caisse, au Gardien ou au Parent.
-- [ ] Afficher clairement le type de fichier, le nom, la date et la taille.
-- [ ] Gérer l’ajout de plusieurs pages photographiées dans le bon ordre visuel.
-- [ ] Ne pas enregistrer les images en base64 dans `cahier_prep`.
+- [ ] Afficher la liste des pièces sous la préparation.
+- [ ] Ouvrir via `r2-files` action `download`.
+- [ ] Limiter l’enseignant à ses propres préparations.
+- [ ] Permettre à Direction 1 et Direction 2 de consulter les préparations et leurs pièces.
+- [ ] Interdire cet accès à la Caisse, au Gardien et au Parent.
+- [ ] Afficher type, nom, date, taille et économie de stockage lorsque disponibles.
+- [ ] Gérer plusieurs pages dans le bon ordre visuel.
+- [ ] Ne pas enregistrer d’image en base64 dans `cahier_prep`.
 
 ## Travail Claude — Registre des documents administratifs
 
-- [ ] Ajouter une rubrique « Documents administratifs » dans Direction 1.
-- [ ] Ajouter une rubrique financière correspondante dans la Caisse pour les documents financiers autorisés.
-- [ ] Ajouter une vue non financière dans Direction 2, sans facture, montant, reçu, assurance payée, taxe ou autre information monétaire.
-- [ ] Créer un formulaire d’enregistrement avant l’envoi du fichier.
-- [ ] Champs du formulaire : type, nom du document, numéro ou référence, date, période, fournisseur ou organisme, montant, devise, année scolaire et notes.
+- [ ] Ajouter « Documents administratifs » dans Direction 1.
+- [ ] Ajouter la rubrique financière correspondante dans la Caisse.
+- [ ] Ajouter dans Direction 2 une vue non financière, sans facture, montant, reçu, assurance payée, taxe ou donnée monétaire.
+- [ ] Créer le formulaire avant l’envoi du fichier.
+- [ ] Champs : type, nom, référence, date, période, fournisseur, montant, devise, année scolaire et notes.
 - [ ] Utiliser les types fournis par `administrative_document_types`.
-- [ ] Permettre le type « Autre document administratif » et « Autre document financier ».
+- [ ] Permettre « Autre document administratif » et « Autre document financier ».
 - [ ] Créer la fiche avec `create_administrative_document(...)`.
-- [ ] Après création, envoyer une ou plusieurs photos/PDF avec `owner_type=administrative_document`, `owner_id=<administrative_documents.id>` et `category=administrative_document`.
-- [ ] Envoyer le nom lisible du fichier dans `display_name`.
-- [ ] Permettre plusieurs fichiers pour un même dossier, par exemple recto, verso et plusieurs pages.
-- [ ] Classer et filtrer par type, année scolaire, date, fournisseur, statut et caractère financier.
-- [ ] Prévoir les types : eau, électricité, assurance, loyer, taxes, CNSS, fournisseur, achat, banque, entretien, contrat, agrément, personnel, inventaire, correspondance et procès-verbal.
-- [ ] Afficher l’état vide lorsqu’aucun document réel n’est encore enregistré.
-- [ ] Utiliser `archive_administrative_document(p_document_id)` pour archiver un dossier.
+- [ ] Envoyer les pièces par `r2-upload` avec `owner_type=administrative_document`, `owner_id=<id>` et `category=administrative_document`.
+- [ ] Envoyer `display_name` et une clé d’idempotence.
+- [ ] Permettre plusieurs fichiers par dossier : recto, verso et plusieurs pages.
+- [ ] Classer et filtrer par type, année, date, fournisseur, statut et caractère financier.
+- [ ] Prévoir eau, électricité, assurance, loyer, taxes, CNSS, fournisseur, achat, banque, entretien, contrat, agrément, personnel, inventaire, correspondance et procès-verbal.
+- [ ] Afficher un état vide lorsqu’aucun document réel n’existe.
+- [ ] Utiliser `archive_administrative_document(p_document_id)` pour archiver tout le dossier et ses pièces.
+- [ ] Utiliser `restore_administrative_document(p_document_id)` pour restaurer tout le dossier.
 - [ ] Ne jamais supprimer directement une ligne ou un objet R2 depuis le navigateur.
-- [ ] Direction 2 ne doit jamais recevoir les lignes marquées `is_financial=true`.
-- [ ] La Caisse ne doit recevoir que les documents financiers.
-- [ ] L’Enseignant, le Parent et le Gardien ne doivent avoir aucun accès au registre administratif.
+- [ ] Direction 2 ne reçoit jamais `is_financial=true`.
+- [ ] La Caisse ne reçoit que les documents financiers.
+- [ ] Enseignant, Parent et Gardien n’accèdent pas au registre.
 - [ ] Ajouter recherche, filtres, tri et affichage mobile Android.
+
+## Travail Claude — Archives Direction 1
+
+- [ ] Créer une rubrique « Archives » visible uniquement par Direction 1.
+- [ ] Appeler `r2-archives` avec la session JWT.
+- [ ] Afficher le résumé par année : nombre de fichiers et taille totale.
+- [ ] Ajouter filtres par année, propriétaire et catégorie.
+- [ ] Ajouter pagination et état vide.
+- [ ] Ouvrir les archives avec une URL temporaire de 300 secondes.
+- [ ] Afficher date et auteur de l’archivage.
+- [ ] Demander confirmation avant une restauration.
+- [ ] Pour un dossier administratif, restaurer le dossier complet par RPC et non une page isolée.
+- [ ] Ne jamais afficher cette rubrique à Direction 2, Caisse, Enseignant, Parent ou Gardien.
 
 ## Travail ChatGPT — terminé
 
-- [x] Audit de la structure R2 existante.
-- [x] Confirmation de la fonction Supabase `r2-files` active.
-- [x] Ajout du lien `payment_transaction_id` entre reçu R2 et transaction.
-- [x] Ajout de l’idempotence des téléversements.
-- [x] Ajout de la suppression auditée `deleted_at` / `deleted_by`.
-- [x] Ajout des index contre les doublons de reçus.
-- [x] Autorisation Caisse limitée aux reçus liés à une transaction confirmée.
-- [x] Interdiction des finances pour Direction 2.
-- [x] Interdiction d’accès direct R2 pour le Gardien.
-- [x] Création de `administrative_document_types` et `administrative_documents`.
-- [x] Création de 18 types administratifs standards.
-- [x] Ajout du nom lisible `display_name` pour les fichiers.
-- [x] Liaison des fichiers R2 à `cahier_prep`.
-- [x] Liaison des fichiers R2 au registre administratif.
-- [x] RLS du cahier : Direction 1, Direction 2 et enseignant propriétaire.
-- [x] RLS administratif : Direction 1 complète, Direction 2 non financière, Caisse financière.
-- [x] Création de `create_administrative_document(...)`.
-- [x] Création de `archive_administrative_document(...)`.
-- [x] Tests transactionnels du dossier administratif et du cahier, suivis d’un rollback complet.
-- [x] Interdiction explicite des reçus et cartes financières pour l’Enseignant.
-- [x] Création d’une liste blanche stricte pour les fichiers visibles par le Parent.
-- [x] Validation de l’existence de chaque propriétaire avant téléversement.
-- [x] Validation des combinaisons propriétaire/catégorie dans l’Edge Function et PostgreSQL.
-- [x] Utilisation de `settings.year` comme source de vérité de l’année scolaire courante.
-- [x] Utilisation de l’année de la transaction pour les reçus et de l’année du dossier pour les documents administratifs.
-- [x] Rejet des années scolaires contradictoires envoyées par le frontend.
-- [x] Vérification de la signature binaire réelle JPEG, PNG, WebP et PDF.
-- [x] RLS des devoirs pour Direction 1, Direction 2, enseignants affectés et Parents de la classe.
-- [x] Normalisation de `students.archived` et `students.access_parent` en valeurs non nulles.
-- [x] Déploiement de `r2-files` version 5 avec JWT obligatoire.
-- [x] Enregistrement du code R2 et des migrations de l’étape 2 dans GitHub.
-- [x] Tests transactionnels de l’année, des propriétaires et des catégories, suivis d’un rollback complet.
-- [x] Vérification qu’aucune fausse donnée n’est restée.
+- [x] Audit profond de Supabase, R2, rôles, données existantes et GitHub.
+- [x] Preuve réelle R2 : PUT, GET, contenu, liste et suppression.
+- [x] Liaison reçu–transaction et idempotence.
+- [x] Suppression auditée `deleted_at` / `deleted_by`.
+- [x] Séparation stricte Direction 1 / Direction 2 / Caisse / Enseignant / Parent / Gardien.
+- [x] Liste blanche Parent et interdiction des finances pour l’Enseignant.
+- [x] Validation de l’existence du propriétaire et du couple propriétaire/catégorie.
+- [x] Année scolaire résolue côté serveur.
+- [x] Contrôle binaire réel JPEG, PNG, WebP et PDF.
+- [x] RLS des devoirs et du cahier de préparation.
+- [x] Registre administratif et 18 types standards.
+- [x] Plusieurs pièces R2 par préparation et par dossier administratif.
+- [x] Archivage et restauration audités.
+- [x] Archivage transactionnel d’un dossier administratif et de toutes ses pièces.
+- [x] Service `r2-archives` Direction 1.
+- [x] Déploiement de `r2-files` version 5.
+- [x] Déploiement de `r2-upload` version 1 avec JWT obligatoire.
+- [x] Compression automatique JPEG/PNG/WebP avant R2.
+- [x] PDF transmis sans conversion.
+- [x] Profils de compression photo, identité, carte et document.
+- [x] Limites 8 Mo source, 5 Mo final, 12 000 px et 40 mégapixels.
+- [x] Enregistrement des tailles, dimensions, profil, qualité et économie.
+- [x] Test réel PNG → WebP → R2 → relecture → suppression réussi.
+- [x] Réduction de test mesurée à 79,58 % sur une image synthétique.
+- [x] Endpoints expérimentaux de compression remplacés par des réponses `410` protégées par JWT.
+- [x] Code de production et migration de compression enregistrés dans GitHub.
+- [x] Aucun faux fichier, aucune fausse donnée et aucun objet de test conservé.
 
 ## Travail ChatGPT — restant
 
-- [ ] Effectuer un cycle réel avec compte Direction 1 : health → upload → list → download → delete.
+- [ ] Effectuer le cycle complet authentifié de production avec une vraie session Direction 1 : `r2-upload` → `list` → `download` → `delete`.
 - [ ] Effectuer les tests réels Direction 2, Caisse, Enseignant, Parent et Gardien.
-- [ ] Ajouter la compression d’image serveur avant généralisation des photos.
-- [ ] Finaliser la consultation spéciale des archives par Direction 1.
-- [ ] Définir l’archivage annuel automatique.
-- [ ] Créer la réconciliation des objets R2 orphelins et des métadonnées orphelines.
+- [ ] Après intégration Claude, interdire techniquement les uploads directs d’images vers l’action `upload` de `r2-files`.
+- [ ] Définir la clôture et l’archivage annuel automatique.
+- [ ] Créer l’inventaire annuel exportable.
+- [ ] Créer la réconciliation des objets R2 orphelins et métadonnées orphelines.
 - [ ] Préparer la sauvegarde secondaire Backblaze B2.
-- [ ] Corriger les alertes historiques SECURITY DEFINER du scanner sans casser l’application.
+- [ ] Corriger les alertes historiques `SECURITY DEFINER` du scanner sans casser l’application.
 - [ ] Activer la protection Supabase contre les mots de passe compromis.
-- [ ] Valider le code frontend de Claude avant fusion.
+- [ ] Auditer et valider les Pull Requests frontend de Claude avant fusion.
 
-## Actions disponibles dans `r2-files` version 5
+## Fonctions et actions disponibles
 
-- `health` : Direction 1 uniquement.
-- `upload` : selon rôle, propriétaire et catégorie.
-- `download` : retourne une URL signée valable 300 secondes.
-- `list` : retourne au maximum 100 fichiers autorisés.
-- `archive` : Direction 1 uniquement.
-- `delete` : Direction 1 uniquement, suppression R2 puis audit en base.
+### `r2-upload` version 1
 
-## Formats actuellement acceptés
+- envoi obligatoire des nouveaux fichiers ;
+- compression d’images ;
+- transmission des PDF ;
+- métriques de stockage ;
+- reprise avec idempotence.
 
-- JPEG
-- PNG
-- WebP
-- PDF
-- Taille maximale : 5 Mo
+### `r2-files` version 5
 
-## Décision actuelle de stockage
+- `health` : Direction 1 ;
+- `list` : fichiers actifs autorisés ;
+- `download` : URL signée 300 secondes ;
+- `delete` : Direction 1, suppression R2 puis audit.
 
-- Supabase : données structurées, Auth, rôles, permissions, registres, relations et chemins des fichiers.
-- Cloudflare R2 : photos, reçus, cahiers de préparation, documents administratifs, fichiers de devoirs et archives.
+### `r2-archives` version 1
+
+- résumé ;
+- liste paginée ;
+- téléchargement temporaire ;
+- archivage ;
+- restauration ;
+- Direction 1 uniquement.
+
+## Décision de stockage
+
+- Supabase : données structurées, Auth, rôles, permissions, registres, relations, métriques et chemins.
+- Cloudflare R2 : photos, reçus, cahiers, devoirs, documents administratifs et archives.
 - Backblaze B2 : future seconde copie de sécurité.
