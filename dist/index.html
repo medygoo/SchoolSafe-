@@ -2720,9 +2720,14 @@ window.ROLE_LOAD = {
                       // « Cahier de texte », « Emploi du temps » et
                       // « Palmarès », et ces trois écrans lisent ces tables.
                       // Sans elles, ils s'ouvrent vides. Signalé à ChatGPT.
-                      _T('matieres','select=id,cid,name,lang,active'),
-                      _T('timetables','select=*'),
-                      _T('cahier_texte','select=*&order=date.desc&limit=200')],
+                      // `matieres` est autorisée au parent par la politique
+                      // matieres_read via private.can_view_class(cid).
+                      _T('matieres','select=id,cid,name,lang,active')],
+      // PAS de timetables ni de cahier_texte : leur seule politique est
+      // `*_direction_all`, réservée à Direction 1. Un appel parent reçoit un
+      // refus RLS. Elles n'entreront ici qu'après un contrat de lecture
+      // pédagogique défini et testé par ChatGPT (J2_J3_VALIDATION §1).
+      // En attendant, les deux écrans le DISENT — ils ne s'affichent pas vides.
       communication: ['messages','events','convocations','absences'],
       activites:     ['activites','activites_inscriptions','cantine','cantine_menus','cantine_presence'],
       // Les frais du parent viennent de get_parent_fee_summary, enfant par
@@ -7237,7 +7242,17 @@ function dashboardParent() {
       ${myNotifs.length>4?`<div class="dp-list-item" onclick="go('notifications')" style="justify-content:center;color:var(--primary);font-size:var(--text-sm);font-weight:600">Voir tout (${myNotifs.length}) →</div>`:''}
     </div>` : '';
 
-  // Professeurs des enfants — info pour les parents
+  // Professeurs des enfants — info pour les parents.
+  //
+  // ⚠ Le parent NE CHARGE PAS l'annuaire `users` : la politique users_read le
+  // limite à sa propre fiche, et le lui ouvrir donnerait tout le personnel et
+  // tous les autres parents de l'école. gu() rend donc undefined ici, le
+  // filtre plus bas vide la liste, et la section entière disparaît.
+  //
+  // C'est VOULU. Ne pas « réparer » en ajoutant users à ROLE_LOAD.parent :
+  // il n'existe pas encore de RPC qui rende le titulaire d'une classe au
+  // parent (J2_J3_VALIDATION §1). Tant qu'elle n'existe pas, on affiche la
+  // classe sans le nom — jamais un nom déduit localement.
   const kidTeachers = kids.map(k=>{
     const kCl=gc(k.cid);
     if(!kCl) return null;
@@ -14907,6 +14922,7 @@ window.checkCahierAlerts = () => {
 };
 
 R.cahier_texte = () => {
+  if (S.user?.role === 'parent') return _ecranNonRaccorde('Cahier de texte', "Le cahier de texte");
   const role=S.user.role;
   const mc=getMyClass();
 
@@ -16861,6 +16877,19 @@ R.depenses = () => {
 };
 
 // ── AIDE CONTEXTUELLE — bannière discrète masquable par page ──
+// Un écran dont la source n'est pas raccordée doit le DIRE. Un tableau vide
+// et un accès refusé se ressemblent à l'écran ; la famille en conclut que
+// l'école ne publie rien, alors que la donnée existe et lui est refusée.
+window._ecranNonRaccorde = (titre, quoi) => `
+  <div style="text-align:center;padding:56px 24px;color:var(--text-muted)">
+    <div style="font-size:44px;margin-bottom:14px">🔌</div>
+    <div style="font-weight:700;font-size:16px;color:var(--text);margin-bottom:8px">${esc(titre)}</div>
+    <div style="font-size:13px;line-height:1.7;max-width:340px;margin:0 auto">
+      ${esc(quoi)} n'est pas encore accessible depuis votre espace.<br>
+      L'école y travaille — vos autres rubriques fonctionnent normalement.
+    </div>
+  </div>`;
+
 window._helpBanner = (key, msg) => {
   if(localStorage.getItem('_hd_'+key)==='1') return '';
   return `<div id="hb_${key}" style="display:flex;align-items:flex-start;gap:10px;background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#1e40af;line-height:1.6">
@@ -24461,6 +24490,7 @@ function edtUpcoming(cid, day) {
 }
 
 R.timetable = () => {
+  if (S.user?.role === 'parent') return _ecranNonRaccorde('Emploi du temps', "L'emploi du temps");
   const role=S.user.role;
   const canEdit=role==='direction'||role==='direction2';
 
