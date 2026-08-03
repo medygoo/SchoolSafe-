@@ -11,7 +11,7 @@ Il vient d'une autre installation de SchoolSafe, pour **la même école**.
 ## Le cadre de travail — à lire avant tout
 
 **Dépôt :** `medygoo/SchoolSafe-` · branche de production `main`
-**Propriétaire et décideur :** Loms / PRODELI S.A.R.L.U.
+**Propriétaire et décideur :** Loms
 
 | | Responsable |
 |---|---|
@@ -56,6 +56,18 @@ Requests, `docs/`. Rien ne passe d'une plateforme à l'autre automatiquement.
 contient ne sont pas là pour qu'on y touche. Elles sont là pour **reconnaître
 un symptôme et le décrire correctement à ChatGPT** — c'est la moitié du travail
 de débogage, et c'est la moitié qu'on rate le plus souvent.
+
+---
+
+## Une application, une école — aucun tiers
+
+**SchoolSafe est livré à une école : le Complexe Scolaire Le Sage.** Rien dans
+l'application ni sur le site ne mentionne l'éditeur : ni son nom, ni son numéro,
+ni un écran d'activation, ni une clé de licence, ni un lien « contactez votre
+opérateur ». Ces éléments existaient et ont été retirés le 3 août 2026 — ils
+appartenaient à un modèle multi-écoles qui n'est pas celui-ci.
+
+Ce que l'utilisateur voit porte **deux noms seulement** : le logiciel et l'école.
 
 ---
 

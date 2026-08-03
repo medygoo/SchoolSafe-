@@ -245,9 +245,9 @@ touche les installations existantes et ne doit se faire qu'une fois.
    Refait-on le site à la charte, ou la charte ne concerne-t-elle que les
    documents imprimés ?
 
-2. **Le numéro de téléphone.** Le site affiche `+243 816 722 901`. L'application
-   porte `243978444167` comme numéro opérateur. Les deux sont-ils justes, l'un
-   pour l'école et l'autre pour PRODELI ?
+2. ~~**Le numéro de téléphone.**~~ **Tranché le 3 août 2026 :** le site est
+   celui de l'école, il ne porte que le numéro de l'école — `+243 816 722 901`.
+   Le second numéro a été retiré des cinq pages.
 
 ---
 
