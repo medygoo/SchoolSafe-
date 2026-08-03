@@ -5915,6 +5915,13 @@ function dashboardDirection2() {
   // Top 3 palmarès pédagogiques
   const top3D2 = DB.settings ? (typeof getSchoolTop10==='function' ? getSchoolTop10().slice(0,3) : []) : [];
 
+  // Le trimestre courant sert DEUX fois plus bas : aux moyennes de classe
+  // ci-dessous, puis à l'avancement de la saisie des notes. Il se déclare donc
+  // avant la première des deux — il était déclaré entre elles, et la lecture
+  // anticipée vidait l'accueil de Direction 2 dès qu'une classe avait élèves
+  // ET matières.
+  const trimD2 = DB.settings?.currentTrimestre||'T1';
+
   // Classes sous-performantes — moyenne de classe < 50%
   const weakClassesD2 = (DB.classes||[]).map(clx=>{
     const clSids2=students.filter(s=>s.cid===clx.id).map(s=>s.id);
@@ -5928,7 +5935,6 @@ function dashboardDirection2() {
   }).filter(Boolean).sort((a,b)=>a.clAvg-b.clAvg).slice(0,4);
 
   // Saisie des notes — avancement par classe pour le trimestre courant
-  const trimD2 = DB.settings?.currentTrimestre||'T1';
   const clNotesStatus = (DB.classes||[]).map(cl=>{
     const clSids = students.filter(s=>s.cid===cl.id).map(s=>s.id);
     if(!clSids.length) return null;
@@ -6976,6 +6982,11 @@ function dashboardParent() {
     return {kid:k,cl:kCl,tFR,tEN};
   }).filter(Boolean).filter(x=>x.tFR||x.tEN);
 
+  // Les classes des enfants servent aux interros à venir ET aux devoirs à venir
+  // plus bas. Elles se déclarent avant la première des deux : déclarées entre
+  // les deux, l'accueil du parent devenait blanc dès la première interro publiée.
+  const parentKidCids = kids.map(k=>k.cid).filter(Boolean);
+
   // Examens / interros à venir — classes des enfants (7 jours)
   const parentExamIn7 = new Date(); parentExamIn7.setDate(parentExamIn7.getDate()+7);
   const parentUpExams = (DB.devoirs||[]).filter(dv=>parentKidCids.includes(dv.cid)&&(dv.category==='interro'||dv.category==='examen')&&dv.deadline&&new Date(dv.deadline)>=new Date()&&new Date(dv.deadline)<=parentExamIn7).sort((a,b)=>a.deadline.localeCompare(b.deadline)).slice(0,4);
@@ -6987,7 +6998,6 @@ function dashboardParent() {
   const parentCalItems = [...parentTodayEvs.map(e=>({...e,isToday:true})), ...parentUpEvs.map(e=>({...e,isToday:false}))];
 
   // Devoirs à venir — classes des enfants, 7 prochains jours
-  const parentKidCids = kids.map(k=>k.cid).filter(Boolean);
   const parentIn7 = new Date(); parentIn7.setDate(parentIn7.getDate()+7);
   const parentUpDevoirs = (DB.devoirs||[]).filter(dv=>parentKidCids.includes(dv.cid)&&dv.status==='published'&&dv.deadline&&new Date(dv.deadline)>=new Date()&&new Date(dv.deadline)<=parentIn7).sort((a,b)=>a.deadline.localeCompare(b.deadline)).slice(0,5);
 
@@ -13759,7 +13769,10 @@ R.devoirs_parent = () => {
   const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
   const condColor={Excellent:'#d8f3e6',Bien:'#dbeafe',Moyen:'#fdeccd',Mauvais:'#fee2e2'};
   const condTextColor={Excellent:'#065f46',Bien:'#205fae',Moyen:'#92400e',Mauvais:'#991b1b'};
-  const renderDevoirItem = (d, kidName, kidMat, kidClass, kidId) => {
+  // canSeeCorr arrive en PARAMÈTRE : il est calculé par enfant dans la boucle
+  // ci-dessous, donc hors de portée ici. Il y était lu directement, et le rendu
+  // s'interrompait — page blanche — dès qu'une interro ou un examen existait.
+  const renderDevoirItem = (d, kidName, kidMat, kidClass, kidId, canSeeCorr) => {
     const deadline=d.deadline?new Date(d.deadline):null;
     const now=new Date();
     const overdue=deadline&&deadline<now;
@@ -13896,7 +13909,7 @@ R.devoirs_parent = () => {
         <div class="premium-section-title" style="margin-bottom:0">Devoirs</div>
         <span style="margin-left:auto;background:#dbeafe;color:#205fae;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">${devoirsList.length}</span>
       </div>
-      ${devoirsList.length?devoirsList.map((d,di)=>`<div style="animation:fadeInUp .3s ease both;animation-delay:calc(${di}*.07s)">${renderDevoirItem(d,k.name,k.mat,cl?cl.name:'',k.id)}</div>`).join(''):`<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:13px">Aucun devoir en cours</div>`}
+      ${devoirsList.length?devoirsList.map((d,di)=>`<div style="animation:fadeInUp .3s ease both;animation-delay:calc(${di}*.07s)">${renderDevoirItem(d,k.name,k.mat,cl?cl.name:'',k.id,canSeeCorr)}</div>`).join(''):`<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:13px">Aucun devoir en cours</div>`}
     </div>`;
     // Interrogations section
     html+=`<div class="premium-section" style="margin-bottom:12px;border-radius:18px;padding:16px;box-shadow:0 3px 14px rgba(0,0,0,.06);border-left:4px solid #f59e0b">
@@ -13905,7 +13918,7 @@ R.devoirs_parent = () => {
         <div class="premium-section-title" style="margin-bottom:0">Interrogations</div>
         <span style="margin-left:auto;background:#fdeccd;color:#92400e;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">${interroList.length}</span>
       </div>
-      ${interroList.length?interroList.map((d,di)=>`<div style="animation:fadeInUp .3s ease both;animation-delay:calc(${di}*.07s)">${renderDevoirItem(d,k.name,k.mat,cl?cl.name:'',k.id)}</div>`).join(''):`<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:13px">Aucune interrogation programmée</div>`}
+      ${interroList.length?interroList.map((d,di)=>`<div style="animation:fadeInUp .3s ease both;animation-delay:calc(${di}*.07s)">${renderDevoirItem(d,k.name,k.mat,cl?cl.name:'',k.id,canSeeCorr)}</div>`).join(''):`<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:13px">Aucune interrogation programmée</div>`}
     </div>`;
     // Examens section
     html+=`<div class="premium-section" style="margin-bottom:12px;border-radius:18px;padding:16px;box-shadow:0 3px 14px rgba(0,0,0,.06);border-left:4px solid #9b6fd4">
@@ -13914,7 +13927,7 @@ R.devoirs_parent = () => {
         <div class="premium-section-title" style="margin-bottom:0">Examens</div>
         <span style="margin-left:auto;background:#f0e9fa;color:#6f44ab;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">${examenList.length}</span>
       </div>
-      ${examenList.length?examenList.map((d,di)=>`<div style="animation:fadeInUp .3s ease both;animation-delay:calc(${di}*.07s)">${renderDevoirItem(d,k.name,k.mat,cl?cl.name:'',k.id)}</div>`).join(''):`<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:13px">Aucun examen programmé</div>`}
+      ${examenList.length?examenList.map((d,di)=>`<div style="animation:fadeInUp .3s ease both;animation-delay:calc(${di}*.07s)">${renderDevoirItem(d,k.name,k.mat,cl?cl.name:'',k.id,canSeeCorr)}</div>`).join(''):`<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:13px">Aucun examen programmé</div>`}
     </div>`;
     // Corrections récentes (accès parent + corrections globales requises)
     if(canSeeCorr){
@@ -17708,6 +17721,12 @@ window.exportEtatFinancierPDF = () => {
   const totalRecettes=vers.reduce((s,v)=>s+(Number(v.montant)||0),0);
   const totalDepenses=exps.reduce((s,e)=>s+(Number(e.amount)||0),0);
   const soldeNet=totalRecettes-totalDepenses;
+  // _tbm et totalDette étaient lus ici sans y être déclarés : ils appartiennent
+  // au renderer voisin. La ReferenceError interrompait la construction du
+  // document — AUCUN PDF ne sortait. Ils se calculent depuis getStudentBalance,
+  // la même source que l'écran, pour que les deux annoncent le même nombre.
+  const _tbm={}; DB.students.forEach(st=>{_tbm[st.id]=getStudentBalance(st.id);});
+  const totalDette=DB.students.reduce((s,st)=>s+(_tbm[st.id]?.debt||0),0);
   const byCat={};
   feeTypes.forEach(ft=>{
     const cat=ft.category||'autre';

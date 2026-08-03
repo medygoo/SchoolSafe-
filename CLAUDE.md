@@ -200,6 +200,11 @@ fois qu'il y avait quelque chose à montrer.
 
 → `tools/audit-portee.mjs`, éprouvé dans les deux sens.
 
+**Les quatre étaient intactes dans ce dépôt-ci**, aux mêmes écrans, trouvées et
+corrigées le 3 août 2026 (voir `docs/AUDIT_CLAUDE.md` §3). Elles ne se recopient
+pas d'une installation à l'autre : elles se réécrivent. Lancer l'outil avant
+chaque Pull Request est donc moins une précaution qu'une habitude.
+
 ### Une seule réponse par question
 
 Quand deux écrans répondent à la même question, ils doivent **appeler le même
