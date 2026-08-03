@@ -4,15 +4,26 @@ Date : 2026-08-03
 
 ## Fonctions actives
 
+### `r2-upload`
+
+- Version : 1
+- Statut : ACTIVE
+- JWT : obligatoire
+- Usage : tous les nouveaux envois de JPEG, PNG, WebP et PDF
+- Source maximale : 8 Mo
+- Fichier final R2 : 5 Mo maximum
+- Image maximale : 12 000 px par côté et 40 mégapixels
+- Images : orientation, retrait de métadonnées sensibles, redimensionnement et WebP lorsque le résultat économise le stockage
+- PDF : transmis sans conversion
+
 ### `r2-files`
 
 - Version : 5
 - Statut : ACTIVE
 - JWT : obligatoire
-- Usage : fichiers actifs, envoi, liste, lecture et suppression auditée
-- Formats : JPEG, PNG, WebP et PDF
-- Taille maximale : 5 Mo
-- Année scolaire courante fournie par `settings.year`
+- Usage frontend : liste, lecture temporaire, suppression auditée
+- Usage interne : permissions SchoolSafe, validation du propriétaire et écriture R2
+- Année scolaire fournie par le serveur
 
 ### `r2-archives`
 
@@ -20,8 +31,12 @@ Date : 2026-08-03
 - Statut : ACTIVE
 - JWT : obligatoire
 - Accès : Direction 1 uniquement
-- Usage : résumé par année, liste paginée, ouverture temporaire, archivage et restauration
-- Les objets ne sont ni copiés ni déplacés dans R2 pendant l’archivage
+- Usage : résumé par année, liste, ouverture, archivage et restauration
+
+### Endpoints retirés du circuit
+
+- `r2-upload-test` version 2 : répond `410`, JWT obligatoire
+- `r2-compression-self-test` version 2 : répond `410`, JWT obligatoire
 
 ## Migrations R2 appliquées
 
@@ -35,71 +50,109 @@ Date : 2026-08-03
 - `20260803082028_lock_archive_rpc_execution`
 - `20260803083125_index_archive_audit_foreign_keys`
 - `20260803083433_enforce_school_file_archive_audit`
+- `20260803090930_add_r2_image_optimization_metrics`
 
 Les sources portent les mêmes versions dans `supabase/migrations/` sur la branche de travail.
 
-## Capacités actives
+## Métriques de compression enregistrées
+
+`school_files` conserve maintenant :
+
+- nom, type et taille du fichier source ;
+- largeur et hauteur source ;
+- largeur et hauteur finales ;
+- profil et qualité de compression ;
+- indicateur `optimized` ;
+- version du traitement ;
+- économie calculée en octets ;
+- économie calculée en pourcentage.
+
+## Profils actifs
+
+| Profil | Dimension maximale | Qualité initiale |
+|---|---:|---:|
+| photo | 1280 px | 76 |
+| identité | 1600 px | 80 |
+| carte | 1800 px | 84 |
+| document photographié | 2400 px | 84 |
+
+Une image déjà efficace est conservée dans son format initial lorsque la conversion WebP n’économise pas au moins 2 %. Une image source supérieure à 5 Mo doit être réduite sous 5 Mo pour être acceptée.
+
+## Capacités générales actives
 
 - reçus liés aux transactions confirmées ;
-- idempotence ;
-- suppression auditée ;
-- cahier de préparation avec plusieurs pièces ;
-- registre des documents administratifs avec plusieurs pièces ;
+- idempotence et reprise ;
 - séparation Direction 1 / Direction 2 / Caisse ;
-- aucun accès direct R2 pour le Gardien ;
 - liste blanche Parent ;
 - interdiction des finances pour l’Enseignant ;
-- validation de l’existence de chaque propriétaire ;
-- validation des couples propriétaire/catégorie ;
+- aucun accès direct R2 pour le Gardien ;
+- validation du propriétaire et de la catégorie ;
 - année scolaire résolue côté serveur ;
-- vérification binaire JPEG, PNG, WebP et PDF ;
+- contrôle binaire JPEG, PNG, WebP et PDF ;
+- compression automatique avant R2 ;
 - archivage et restauration audités ;
-- synchronisation transactionnelle d’un dossier administratif avec toutes ses pièces ;
-- consultation des archives uniquement par Direction 1 ;
-- résumé du nombre de fichiers et de la taille par année ;
-- URLs signées d’archive valables 300 secondes ;
-- rejet de toute archive sans `archived_by` ;
-- rejet de toute restauration sans `restored_at` et `restored_by`.
-
-## Code versionné
-
-- `supabase/functions/r2-files/index.ts`
-- `supabase/functions/r2-files/deno.json`
-- `supabase/functions/r2-archives/index.ts`
-- `supabase/functions/r2-archives/deno.json`
-- migrations SQL correspondantes
-- `docs/R2_STORAGE_API.md`
-- `docs/R2_ARCHIVES_API.md`
-- `coordination/ARCHIVE_TASKS.md`
+- dossiers administratifs et cahiers avec plusieurs pièces ;
+- URLs signées valables 300 secondes.
 
 ## Tests effectués
 
-- cycle réel Cloudflare R2 : PUT, GET, contenu, taille, liste et suppression réussis ;
-- test transactionnel dossier administratif + pièce : archivage et restauration réussis ;
-- archive sans auteur refusée ;
-- restauration sans date et auteur refusée ;
-- transition auditée archive → restauration réussie ;
-- tous les tests de base suivis d’un `ROLLBACK` ;
-- endpoint `r2-archives` vérifié : absence de JWT refusée avec HTTP 401 ;
-- aucune fausse donnée conservée ;
-- aucun objet de test R2 conservé.
+### Connexion R2
+
+- PUT : réussi ;
+- GET : réussi ;
+- contenu et taille : identiques ;
+- liste : réussie ;
+- suppression : réussie.
+
+### Compression réelle
+
+Une image PNG synthétique de 256 × 256 et 568 octets a été traitée :
+
+- sortie : WebP 128 × 128 ;
+- taille finale : 116 octets ;
+- économie : 452 octets ;
+- réduction : 79,58 % ;
+- envoi R2 : réussi ;
+- relecture et comparaison : réussies ;
+- objet supprimé après test : oui.
+
+Ce taux est une preuve de fonctionnement, pas une garantie pour toutes les images.
+
+### Base de données
+
+- colonnes générées testées : 1000 octets source → 400 octets final → 600 octets et 60,00 % d’économie ;
+- test exécuté dans une transaction avec `ROLLBACK` ;
+- aucune fausse donnée conservée.
+
+### Sécurité
+
+- `r2-upload` sans JWT : HTTP 401 ;
+- aucune nouvelle alerte de sécurité liée à la compression ;
+- les anciennes alertes scanner `SECURITY DEFINER` et la protection des mots de passe compromis restent à traiter.
+
+## Code versionné
+
+- `supabase/functions/r2-upload/index.ts`
+- `supabase/functions/r2-upload/deno.json`
+- `supabase/migrations/20260803090930_add_r2_image_optimization_metrics.sql`
+- `docs/R2_IMAGE_OPTIMIZATION_API.md`
+- `docs/R2_STORAGE_API.md`
 
 ## État des données
 
-- 18 types administratifs actifs ;
-- 0 document administratif réel ;
-- 0 préparation réelle dans `cahier_prep` ;
-- 0 métadonnée R2 active dans `school_files` ;
-- 0 archive réelle ;
-- 0 élève réel au moment du contrôle.
+- zéro fichier réel dans `school_files` au contrôle final de l’étape ;
+- zéro document administratif réel ;
+- zéro préparation réelle ;
+- zéro archive réelle ;
+- aucun objet de test R2 conservé.
 
 ## Restant
 
-- compression automatique des images côté serveur ;
-- comptes et tests authentifiés Direction 2, Caisse, Enseignant, Parent et Gardien ;
+- tests authentifiés avec Direction 1, Direction 2, Caisse, Enseignant, Parent et Gardien ;
+- interdire techniquement l’upload direct d’images vers `r2-files` après intégration frontend de `r2-upload` ;
 - clôture et archivage annuel automatique ;
 - inventaire annuel exportable ;
-- réconciliation des objets orphelins ;
+- réconciliation R2 ↔ `school_files` ;
 - sauvegarde Backblaze B2 ;
-- correction progressive des anciennes fonctions scanner `SECURITY DEFINER` ;
+- correction des anciennes fonctions scanner `SECURITY DEFINER` ;
 - activation de la protection contre les mots de passe compromis.
