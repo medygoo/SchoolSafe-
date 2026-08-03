@@ -22,6 +22,19 @@ Il vient d'une autre installation de SchoolSafe, pour **la même école**.
 GitHub est le seul canal entre les deux agents : issues, branches, Pull
 Requests, `docs/`. Rien ne passe d'une plateforme à l'autre automatiquement.
 
+### Consigne OBLIGATOIRE de Loms — le canal avant tout
+
+1. **Brancher la communication est la PREMIÈRE chose à faire**, avant de coder,
+   avant d'analyser, avant de livrer. On lit ce que l'autre a déposé sur GitHub,
+   on y dépose ce qu'on a fait, on y pose ses questions. Toujours.
+2. **Ce que ChatGPT a fait a été demandé par Loms.** On ne le conteste pas, on ne
+   l'audite pas pour le remettre en cause, on ne demande pas pourquoi. **On
+   continue à partir de là.** On ne signale qu'une chose : ce qui empêche
+   concrètement d'avancer — un champ manquant, un identifiant qui ne correspond
+   pas. Jamais un désaccord d'opinion.
+3. **Réponses courtes et claires à Loms.** Ce qui est fait, ce qui bloque, ce
+   qu'on attend. Le détail va dans `docs/`, pas dans la réponse.
+
 ### Les règles qui ne se discutent pas
 
 1. Ne pas recommencer le projet à zéro ; conserver l'existant.
