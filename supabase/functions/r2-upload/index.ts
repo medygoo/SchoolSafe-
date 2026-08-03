@@ -9,14 +9,20 @@ import {
 
 const MAX_INPUT_SIZE = 8 * 1024 * 1024;
 const MAX_FINAL_SIZE = 5 * 1024 * 1024;
-const MAX_DIMENSION = 12000;
+const MAX_DIMENSION = 12_000;
 const MAX_PIXELS = 40_000_000;
 const OPTIMIZATION_VERSION = 1;
+
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_MIME_TYPES = new Set([...IMAGE_MIME_TYPES, "application/pdf"]);
 const DOCUMENT_CATEGORIES = new Set([
-  "document", "receipt", "homework", "report", "archive",
-  "teacher_preparation", "administrative_document",
+  "document",
+  "receipt",
+  "homework",
+  "report",
+  "archive",
+  "teacher_preparation",
+  "administrative_document",
 ]);
 const DEFAULT_ORIGINS = [
   "https://medygoo.github.io",
@@ -27,7 +33,8 @@ const DEFAULT_ORIGINS = [
 
 type Json = Record<string, unknown>;
 type Dimensions = { width: number; height: number };
-type Profile = { name: "photo" | "identity" | "card" | "document"; maxDimension: number; quality: number };
+type ProfileName = "photo" | "identity" | "card" | "document";
+type Profile = { name: ProfileName; maxDimension: number; quality: number };
 type OptimizedImage = {
   bytes: Uint8Array;
   originalWidth: number;
@@ -36,6 +43,13 @@ type OptimizedImage = {
   finalHeight: number;
   quality: number;
 };
+
+class InvalidImageError extends Error {
+  constructor(message = "Image is corrupt or cannot be decoded") {
+    super(message);
+    this.name = "InvalidImageError";
+  }
+}
 
 const wasmBytes = await Deno.readFile(
   new URL("magick.wasm", import.meta.resolve("npm:@imagemagick/magick-wasm@0.0.40")),
@@ -60,24 +74,33 @@ function defaultSupabaseKey(name: string): string {
 
 function allowedOrigins(): Set<string> {
   const configured = Deno.env.get("APP_ALLOWED_ORIGINS");
-  return new Set(configured
-    ? configured.split(",").map((value) => value.trim()).filter(Boolean)
-    : DEFAULT_ORIGINS);
+  return new Set(
+    configured
+      ? configured.split(",").map((value) => value.trim()).filter(Boolean)
+      : DEFAULT_ORIGINS,
+  );
 }
 
 function corsHeaders(origin: string | null): Record<string, string> {
   const headers: Record<string, string> = {
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-idempotency-key",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-idempotency-key",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
-    "Vary": "Origin",
+    Vary: "Origin",
   };
-  if (origin && allowedOrigins().has(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  if (origin && allowedOrigins().has(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
   return headers;
 }
 
 function respond(data: Json, status: number, origin: string | null): Response {
-  return new Response(JSON.stringify(data), {
+  const body = JSON.stringify(
+    data,
+    (_key, value) => typeof value === "bigint" ? value.toString() : value,
+  );
+  return new Response(body, {
     status,
     headers: {
       ...corsHeaders(origin),
@@ -97,10 +120,26 @@ function safeWebpFilename(name: string): string {
 }
 
 function detectMime(bytes: Uint8Array): string | null {
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return "image/png";
-  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP") return "image/webp";
-  if (bytes.length >= 5 && String.fromCharCode(...bytes.slice(0, 5)) === "%PDF-") return "application/pdf";
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (
+    bytes.length >= 12 &&
+    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  if (bytes.length >= 5 && String.fromCharCode(...bytes.slice(0, 5)) === "%PDF-") {
+    return "application/pdf";
+  }
   return null;
 }
 
@@ -116,9 +155,15 @@ function parsePngDimensions(bytes: Uint8Array): Dimensions | null {
 
 function parseJpegDimensions(bytes: Uint8Array): Dimensions | null {
   let offset = 2;
-  const sofMarkers = new Set([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf]);
+  const sofMarkers = new Set([
+    0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7,
+    0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+  ]);
   while (offset + 9 < bytes.length) {
-    if (bytes[offset] !== 0xff) { offset += 1; continue; }
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
     while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
     const marker = bytes[offset++];
     if (marker === 0xd8 || marker === 0xd9) continue;
@@ -127,9 +172,10 @@ function parseJpegDimensions(bytes: Uint8Array): Dimensions | null {
     const length = (bytes[offset] << 8) | bytes[offset + 1];
     if (length < 2 || offset + length > bytes.length) break;
     if (sofMarkers.has(marker) && length >= 7) {
-      const height = (bytes[offset + 3] << 8) | bytes[offset + 4];
-      const width = (bytes[offset + 5] << 8) | bytes[offset + 6];
-      return { width, height };
+      return {
+        height: (bytes[offset + 3] << 8) | bytes[offset + 4],
+        width: (bytes[offset + 5] << 8) | bytes[offset + 6],
+      };
     }
     offset += length;
   }
@@ -139,10 +185,10 @@ function parseJpegDimensions(bytes: Uint8Array): Dimensions | null {
 function parseWebpDimensions(bytes: Uint8Array): Dimensions | null {
   if (bytes.length < 30) return null;
   const chunk = String.fromCharCode(...bytes.slice(12, 16));
-  if (chunk === "VP8X" && bytes.length >= 30) {
+  if (chunk === "VP8X") {
     return { width: 1 + readU24LE(bytes, 24), height: 1 + readU24LE(bytes, 27) };
   }
-  if (chunk === "VP8 " && bytes.length >= 30 && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
+  if (chunk === "VP8 " && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
     return {
       width: ((bytes[27] << 8) | bytes[26]) & 0x3fff,
       height: ((bytes[29] << 8) | bytes[28]) & 0x3fff,
@@ -163,20 +209,27 @@ function parseDimensions(bytes: Uint8Array, mime: string): Dimensions | null {
 }
 
 function validateDimensions(dimensions: Dimensions | null): boolean {
-  if (!dimensions) return false;
-  return dimensions.width >= 1 && dimensions.height >= 1 &&
+  return Boolean(
+    dimensions &&
+    dimensions.width >= 1 && dimensions.height >= 1 &&
     dimensions.width <= MAX_DIMENSION && dimensions.height <= MAX_DIMENSION &&
-    dimensions.width * dimensions.height <= MAX_PIXELS;
+    dimensions.width * dimensions.height <= MAX_PIXELS,
+  );
 }
 
 function profileFor(category: string): Profile {
-  if (DOCUMENT_CATEGORIES.has(category)) return { name: "document", maxDimension: 2400, quality: 84 };
+  if (DOCUMENT_CATEGORIES.has(category)) {
+    return { name: "document", maxDimension: 2400, quality: 84 };
+  }
   if (category === "identity") return { name: "identity", maxDimension: 1600, quality: 80 };
   if (category === "card") return { name: "card", maxDimension: 1800, quality: 84 };
   return { name: "photo", maxDimension: 1280, quality: 76 };
 }
 
-function resizeWithin(image: { width: number; height: number; resize: (geometry: MagickGeometry) => void }, maxDimension: number): void {
+function resizeWithin(
+  image: { width: number; height: number; resize: (geometry: MagickGeometry) => void },
+  maxDimension: number,
+): void {
   const largest = Math.max(image.width, image.height);
   if (largest <= maxDimension) return;
   const ratio = maxDimension / largest;
@@ -190,49 +243,70 @@ function resizeWithin(image: { width: number; height: number; resize: (geometry:
 
 function optimizeImage(input: Uint8Array, profile: Profile): OptimizedImage {
   let result: OptimizedImage | null = null;
-  ImageMagick.read(input, (image) => {
-    const originalWidth = image.width;
-    const originalHeight = image.height;
-    const optional = image as unknown as {
-      autoOrient?: () => void;
-      removeProfile?: (name: string) => unknown;
-    };
-    optional.autoOrient?.();
-    optional.removeProfile?.("exif");
-    optional.removeProfile?.("xmp");
-    optional.removeProfile?.("iptc");
+  try {
+    ImageMagick.read(input, (image) => {
+      const originalWidth = image.width;
+      const originalHeight = image.height;
+      const optional = image as unknown as {
+        autoOrient?: () => void;
+        removeProfile?: (name: string) => unknown;
+      };
 
-    resizeWithin(image, profile.maxDimension);
-    let quality = profile.quality;
-    let output = new Uint8Array();
+      try {
+        optional.autoOrient?.();
+      } catch (_) {
+        // Orientation metadata may be absent or unsupported.
+      }
+      for (const profileName of ["exif", "xmp", "iptc"]) {
+        try {
+          optional.removeProfile?.(profileName);
+        } catch (_) {
+          // Missing metadata profiles are harmless.
+        }
+      }
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      image.quality = quality;
-      image.write(MagickFormat.WebP, (data: Uint8Array) => { output = Uint8Array.from(data); });
-      if (output.length > 0 && output.length <= MAX_FINAL_SIZE) break;
-      quality = Math.max(64, quality - 8);
-      resizeWithin(image, Math.max(1200, Math.round(Math.max(image.width, image.height) * 0.8)));
-    }
+      resizeWithin(image, profile.maxDimension);
+      let quality = profile.quality;
+      let output = new Uint8Array();
 
-    if (output.length === 0 || output.length > MAX_FINAL_SIZE) {
-      throw new Error("Optimized image remains larger than 5 MB");
-    }
-    result = {
-      bytes: output,
-      originalWidth,
-      originalHeight,
-      finalWidth: image.width,
-      finalHeight: image.height,
-      quality,
-    };
-  });
-  if (!result) throw new Error("Image optimization produced no output");
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        image.quality = quality;
+        image.write(MagickFormat.WebP, (data: Uint8Array) => {
+          output = Uint8Array.from(data);
+        });
+        if (output.length > 0 && output.length <= MAX_FINAL_SIZE) break;
+        quality = Math.max(64, quality - 8);
+        resizeWithin(
+          image,
+          Math.max(1200, Math.round(Math.max(image.width, image.height) * 0.8)),
+        );
+      }
+
+      if (output.length === 0 || output.length > MAX_FINAL_SIZE) {
+        throw new Error("Optimized image remains larger than 5 MB");
+      }
+      result = {
+        bytes: output,
+        originalWidth,
+        originalHeight,
+        finalWidth: image.width,
+        finalHeight: image.height,
+        quality,
+      };
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("larger than 5 MB")) throw error;
+    throw new InvalidImageError();
+  }
+  if (!result) throw new InvalidImageError();
   return result;
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function hmacHex(secret: string, payload: string): Promise<string> {
@@ -243,15 +317,27 @@ async function hmacHex(secret: string, payload: string): Promise<string> {
     false,
     ["sign"],
   );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
-  return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(payload),
+  );
+  return Array.from(new Uint8Array(signature))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function copyFormFields(source: FormData, target: FormData): void {
-  for (const [key, value] of source.entries()) if (key !== "file") target.append(key, value);
+  for (const [key, value] of source.entries()) {
+    if (key !== "file") target.append(key, value);
+  }
 }
 
-async function forwardToR2Files(request: Request, form: FormData, signature: string): Promise<Response> {
+async function forwardToR2Files(
+  request: Request,
+  form: FormData,
+  signature: string,
+): Promise<Response> {
   const supabaseUrl = requiredEnv("SUPABASE_URL").replace(/\/$/, "");
   const headers = new Headers();
   for (const name of ["Authorization", "apikey", "x-client-info", "x-idempotency-key"]) {
@@ -259,22 +345,37 @@ async function forwardToR2Files(request: Request, form: FormData, signature: str
     if (value) headers.set(name, value);
   }
   headers.set("x-schoolsafe-processing-signature", signature);
-  return await fetch(`${supabaseUrl}/functions/v1/r2-files`, { method: "POST", headers, body: form });
+  return await fetch(`${supabaseUrl}/functions/v1/r2-files`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
 }
 
 Deno.serve(async (request: Request) => {
   const origin = request.headers.get("Origin");
+  let stage = "request";
+
   if (request.method === "OPTIONS") {
-    if (origin && !allowedOrigins().has(origin)) return respond({ error: "Origin not allowed" }, 403, origin);
+    if (origin && !allowedOrigins().has(origin)) {
+      return respond({ error: "Origin not allowed" }, 403, origin);
+    }
     return new Response(null, { status: 204, headers: corsHeaders(origin) });
   }
-  if (request.method !== "POST") return respond({ error: "Method not allowed" }, 405, origin);
-  if (origin && !allowedOrigins().has(origin)) return respond({ error: "Origin not allowed" }, 403, origin);
+  if (request.method !== "POST") {
+    return respond({ error: "Method not allowed" }, 405, origin);
+  }
+  if (origin && !allowedOrigins().has(origin)) {
+    return respond({ error: "Origin not allowed" }, 403, origin);
+  }
 
   try {
     const authorization = request.headers.get("Authorization");
-    if (!authorization?.startsWith("Bearer ")) return respond({ error: "Authentication required" }, 401, origin);
+    if (!authorization?.startsWith("Bearer ")) {
+      return respond({ error: "Authentication required" }, 401, origin);
+    }
 
+    stage = "authentication";
     const supabaseUrl = requiredEnv("SUPABASE_URL");
     const publishableKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")
       ? defaultSupabaseKey("SUPABASE_PUBLISHABLE_KEYS")
@@ -284,13 +385,19 @@ Deno.serve(async (request: Request) => {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const admin = createClient(supabaseUrl, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const admin = createClient(supabaseUrl, secretKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
     const { data: authData, error: authError } = await userClient.auth.getUser();
-    if (authError || !authData.user) return respond({ error: "Invalid session" }, 401, origin);
+    if (authError || !authData.user) {
+      return respond({ error: "Invalid session" }, 401, origin);
+    }
 
+    stage = "source_validation";
     const contentType = request.headers.get("Content-Type") || "";
-    if (!contentType.includes("multipart/form-data")) return respond({ error: "Multipart form required" }, 400, origin);
-
+    if (!contentType.includes("multipart/form-data")) {
+      return respond({ error: "Multipart form required" }, 400, origin);
+    }
     const idempotencyKey = String(request.headers.get("x-idempotency-key") || "").trim();
     if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
       return respond({ error: "A valid x-idempotency-key header is required" }, 400, origin);
@@ -298,13 +405,21 @@ Deno.serve(async (request: Request) => {
 
     const sourceForm = await request.formData();
     const file = sourceForm.get("file");
-    if (!(file instanceof File)) return respond({ error: "File is required" }, 400, origin);
-    if (file.size <= 0 || file.size > MAX_INPUT_SIZE) return respond({ error: "Source file must be between 1 byte and 8 MB" }, 413, origin);
+    if (!(file instanceof File)) {
+      return respond({ error: "File is required" }, 400, origin);
+    }
+    if (file.size <= 0 || file.size > MAX_INPUT_SIZE) {
+      return respond({ error: "Source file must be between 1 byte and 8 MB" }, 413, origin);
+    }
 
     const sourceBytes = new Uint8Array(await file.arrayBuffer());
     const sourceMime = detectMime(sourceBytes);
-    if (!sourceMime || !ALLOWED_MIME_TYPES.has(sourceMime)) return respond({ error: "Unsupported or corrupt file" }, 415, origin);
-    if (file.type && file.type !== sourceMime) return respond({ error: "File content does not match its declared type" }, 415, origin);
+    if (!sourceMime || !ALLOWED_MIME_TYPES.has(sourceMime)) {
+      return respond({ error: "Unsupported or corrupt file" }, 415, origin);
+    }
+    if (file.type && file.type !== sourceMime) {
+      return respond({ error: "File content does not match its declared type" }, 415, origin);
+    }
 
     const category = String(sourceForm.get("category") || "document").trim().toLowerCase();
     const targetForm = new FormData();
@@ -317,12 +432,17 @@ Deno.serve(async (request: Request) => {
     let finalDimensions: Dimensions | null = null;
     let optimized = false;
     let quality: number | null = null;
-    let profileName: "photo" | "identity" | "card" | "document" | "passthrough" = "passthrough";
+    let profileName: ProfileName | "passthrough" = "passthrough";
 
+    stage = "image_processing";
     if (IMAGE_MIME_TYPES.has(sourceMime)) {
       sourceDimensions = parseDimensions(sourceBytes, sourceMime);
       if (!validateDimensions(sourceDimensions)) {
-        return respond({ error: "Image dimensions are invalid or exceed 40 megapixels" }, 413, origin);
+        return respond(
+          { error: "Image dimensions are invalid or exceed 40 megapixels" },
+          413,
+          origin,
+        );
       }
       const profile = profileFor(category);
       profileName = profile.name;
@@ -341,32 +461,49 @@ Deno.serve(async (request: Request) => {
       }
     }
 
-    if (finalBytes.length > MAX_FINAL_SIZE) return respond({ error: "Final file exceeds 5 MB" }, 413, origin);
-    const finalFile = new File([finalBytes], finalName, { type: finalMime });
-    targetForm.append("file", finalFile);
+    if (finalBytes.length > MAX_FINAL_SIZE) {
+      return respond({ error: "Final file exceeds 5 MB" }, 413, origin);
+    }
+    targetForm.append("file", new File([finalBytes], finalName, { type: finalMime }));
 
+    stage = "storage_forward";
     const checksum = await sha256Hex(finalBytes);
     const signingPayload = `${checksum}\n${idempotencyKey}\n${finalBytes.length}\n${finalMime}`;
     const signature = await hmacHex(secretKey, signingPayload);
     const upstream = await forwardToR2Files(request, targetForm, signature);
     const rawBody = await upstream.text();
     let parsed: Json;
-    try { parsed = JSON.parse(rawBody) as Json; } catch (_) { parsed = { error: "Invalid storage service response" }; }
+    try {
+      parsed = JSON.parse(rawBody) as Json;
+    } catch (_) {
+      parsed = { error: "Invalid storage service response" };
+    }
     if (!upstream.ok) return respond(parsed, upstream.status, origin);
 
     const fileRecord = parsed.file as Json | undefined;
     const fileId = String(fileRecord?.id || "");
-    if (!fileId) return respond({ error: "Storage response did not include a file id" }, 502, origin);
+    if (!fileId) {
+      return respond({ error: "Storage response did not include a file id" }, 502, origin);
+    }
 
+    stage = "metadata_lookup";
     const { data: existing, error: lookupError } = await admin
       .from("school_files")
       .select("id,metadata,size_bytes,mime_type")
       .eq("id", fileId)
       .maybeSingle();
     if (lookupError || !existing) {
-      return respond({ error: "Upload completed but optimization metadata lookup failed", upload_committed: true, file_id: fileId, retry_same_idempotency_key: true }, 500, origin);
+      return respond({
+        error: "Upload completed but optimization metadata lookup failed",
+        upload_committed: true,
+        file_id: fileId,
+        retry_same_idempotency_key: true,
+      }, 500, origin);
     }
-    const existingMetadata = existing.metadata && typeof existing.metadata === "object" ? existing.metadata as Json : {};
+
+    const existingMetadata = existing.metadata && typeof existing.metadata === "object"
+      ? existing.metadata as Json
+      : {};
     const metrics = {
       version: OPTIMIZATION_VERSION,
       optimized,
@@ -381,6 +518,8 @@ Deno.serve(async (request: Request) => {
       final_height: finalDimensions?.height ?? null,
       quality,
     };
+
+    stage = "metadata_update";
     const { data: updated, error: updateError } = await admin
       .from("school_files")
       .update({
@@ -398,15 +537,30 @@ Deno.serve(async (request: Request) => {
         metadata: { ...existingMetadata, optimization: metrics },
       })
       .eq("id", fileId)
-      .select("id,source_size_bytes,size_bytes,compression_saved_bytes,compression_ratio_pct,optimized,compression_profile,source_width,source_height,processed_width,processed_height")
+      .select(
+        "id,source_size_bytes,size_bytes,compression_saved_bytes,compression_ratio_pct,optimized,compression_profile,source_width,source_height,processed_width,processed_height",
+      )
       .single();
     if (updateError) {
-      return respond({ error: "Upload completed but optimization metadata update failed", upload_committed: true, file_id: fileId, retry_same_idempotency_key: true }, 500, origin);
+      return respond({
+        error: "Upload completed but optimization metadata update failed",
+        upload_committed: true,
+        file_id: fileId,
+        retry_same_idempotency_key: true,
+      }, 500, origin);
     }
 
+    stage = "response";
     return respond({ ...parsed, optimization: updated }, upstream.status, origin);
   } catch (error) {
-    console.error("r2-upload error", error instanceof Error ? error.message : "unknown error");
+    if (error instanceof InvalidImageError) {
+      return respond({ error: "Image is corrupt or cannot be decoded" }, 415, origin);
+    }
+    console.error(
+      "r2-upload error",
+      stage,
+      error instanceof Error ? error.message : "unknown error",
+    );
     return respond({ error: "Image upload service unavailable" }, 500, origin);
   }
 });
