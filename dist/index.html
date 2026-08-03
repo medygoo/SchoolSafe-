@@ -2452,6 +2452,86 @@ const _sf=()=>window._currentSchoolId?'&school_id=eq.'+encodeURIComponent(window
 async function _post(t,b){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){console.warn('[SB]',t,e.message);return false;}}
 async function _patch(t,q,b){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${q}`,{method:'PATCH',headers:_H,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){console.warn('[SB]',t,e.message);return false;}}
 async function _del(t,q){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${q}`,{method:'DELETE',headers:_H});if(!r.ok)throw new Error(await r.text());return true;}catch(e){console.warn('[SB]',t,e.message);return false;}}
+
+// ── ENREGISTREMENT CONFIRMÉ PAR LE SERVEUR ────────────────────────────────────
+// Contrat de persistance du 3 août 2026 (docs/BACKEND_PERSISTENCE_CONTRACT.md).
+// La règle qu'il pose tient en une phrase : une confirmation ne s'affiche
+// jamais avant la réponse positive du serveur. Une opération simplement mise
+// en file d'attente n'est PAS un enregistrement — et l'écran doit le dire.
+
+// Traduction des codes du serveur. Un code inconnu n'est jamais avalé : il
+// s'affiche tel quel, ce qui vaut toujours mieux qu'un « erreur » générique.
+window._CODE_MSG = {
+  FORBIDDEN:                        "Votre profil n'est pas autorisé à faire cet enregistrement.",
+  ACTOR_NOT_FOUND:                  "Votre compte SchoolSafe n'est pas relié correctement.",
+  CLASS_NOT_FOUND:                  "La classe sélectionnée n'existe pas dans la base.",
+  PARENT_NOT_FOUND:                 "Le compte parent sélectionné est introuvable ou inactif.",
+  MATRICULE_IN_USE:                 "Ce matricule appartient déjà à un autre élève.",
+  PHOTO_MUST_BE_FILE_REFERENCE:     "Téléversez la photo avant d'enregistrer.",
+  LEAVE_AUTHORIZATION_DATE_REQUIRED:"Indiquez la date de fin de l'autorisation de sortie seule.",
+  VALIDATION_ERROR:                 "Une information obligatoire est incorrecte.",
+  REFERENCE_NOT_FOUND:              "Une classe ou un parent lié n'existe plus.",
+  DUPLICATE_STUDENT:                "Cet élève existe déjà.",
+  DUPLICATE_USER:                   "Ce profil existe déjà.",
+  EMAIL_IN_USE:                     "Cette adresse e-mail est déjà utilisée.",
+  AUTH_EMAIL_CHANGE_REQUIRED:       "L'adresse d'un compte connecté doit être modifiée par la procédure Auth.",
+  AUTH_ROLE_CHANGE_REQUIRED:        "Le rôle d'un compte connecté doit être modifié par la procédure sécurisée.",
+  CANNOT_DISABLE_CURRENT_DIRECTION: "Vous ne pouvez pas désactiver votre propre compte Direction.",
+  AUTH_REQUIRED:                    "Votre session a expiré. Reconnectez-vous.",
+  AUTH_INVALID:                     "Votre session a expiré. Reconnectez-vous.",
+  TARGET_NOT_FOUND:                 "Le profil SchoolSafe est introuvable.",
+  TARGET_DISABLED:                  "Ce profil est désactivé.",
+  ALREADY_LINKED:                   "Ce profil possède déjà un compte de connexion.",
+  INVITE_FAILED:                    "L'invitation n'a pas pu être envoyée. Rien n'a été validé.",
+  LINK_NOT_CONFIRMED:               "Le compte Auth a été créé, mais sa liaison doit être contrôlée.",
+};
+window._codeMsg = code => window._CODE_MSG[code] || ('Erreur serveur : ' + (code || 'inconnue'));
+
+// Appelle une RPC et rend une forme unique : { ok, data, code }. Elle ne lève
+// jamais — l'appelant décide quoi montrer, et rien n'est avalé en silence.
+window._rpc = async (name, params) => {
+  if (!window._authClient) return { ok:false, code:'AUTH_REQUIRED' };
+  try {
+    const { data, error } = await window._authClient.rpc(name, params);
+    if (error) return { ok:false, code:(error.code || error.message || 'RPC_ERROR'), raw:error };
+    if (!data || data.ok !== true) return { ok:false, code:(data && data.code) || 'RPC_REFUSED', raw:data };
+    return { ok:true, data };
+  } catch (e) {
+    return { ok:false, code:(e && e.message) || 'RPC_ERROR', raw:e };
+  }
+};
+
+// Appelle une Edge Function avec le JWT de la session. Même forme de retour.
+window._edgeFn = async (name, body) => {
+  if (!window._authClient) return { ok:false, code:'AUTH_REQUIRED' };
+  try {
+    const { data: sess } = await window._authClient.auth.getSession();
+    const token = sess?.session?.access_token;
+    if (!token) return { ok:false, code:'AUTH_REQUIRED' };
+    const r = await fetch(`${OPS_SUPA_URL}/functions/v1/${name}`, {
+      method:'POST',
+      headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => null);
+    if (!r.ok || d?.ok !== true) return { ok:false, code:(d && d.code) || ('HTTP_'+r.status), raw:d };
+    return { ok:true, data:d };
+  } catch (e) {
+    return { ok:false, code:(e && e.message) || 'NETWORK_ERROR', raw:e };
+  }
+};
+
+// Le bouton doit dire qu'il travaille, et redevenir cliquable quoi qu'il arrive
+// — y compris quand le serveur refuse, puisque le formulaire reste ouvert.
+window._btnBusy = (sel, label='⏳ Enregistrement…') => {
+  const b = typeof sel === 'string' ? document.querySelector(sel) : sel;
+  if (!b) return () => {};
+  const html = b.innerHTML, dis = b.disabled;
+  b.disabled = true; b.innerHTML = label;
+  return () => { b.disabled = dis; b.innerHTML = html; };
+};
+
+
 async function _upsert(t,b){try{const h={..._H,'Prefer':'resolution=merge-duplicates'};const r=await fetch(`${SUPA_URL}/rest/v1/${t}`,{method:'POST',headers:h,body:JSON.stringify(b)});if(!r.ok)throw new Error(await r.text());return true;}catch(e){console.warn('[SB]',t,e.message);return false;}}
 
 // Synchronise l'horloge locale avec le serveur Supabase.
@@ -9050,7 +9130,11 @@ window.saveStudent = async () => {
   return _saveStudentInner();
 };
 
-function _saveStudentInner() {
+// Contrat de persistance §3 : l'élève passe par save_student_profile, qui
+// vérifie classe, parent, matricule et photo AVANT d'écrire, puis renvoie la
+// ligne réellement enregistrée par PostgreSQL. C'est elle qui remplace la copie
+// locale — pas l'objet construit dans le navigateur.
+async function _saveStudentInner() {
   if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
   const name=($('stu_name').value||'').trim();
   if(!name){markFieldError('stu_name','Nom complet requis');return;}
@@ -9062,36 +9146,98 @@ function _saveStudentInner() {
   // Le portail identifie l'élève par son matricule et retient le PREMIER
   // trouvé. Un doublon ferait donc scanner le mauvais élève : mauvaise
   // présence, mauvais parent averti, mauvaise autorisation de sortie. Le
-  // contrôle ne valait qu'à la création — modifier un matricule vers un
-  // existant passait sans obstacle.
+  // serveur le refuse aussi (MATRICULE_IN_USE) ; ce contrôle-ci évite
+  // seulement un aller-retour et désigne le champ fautif.
   const _jumeauMat = (DB.students||[]).find(x => x.id !== sid && x.mat === mat);
   if (_jumeauMat) { markFieldError('stu_mat', `Matricule déjà porté par ${_jumeauMat.name}`); return; }
 
   const _normS = x => (x||'').trim().toLowerCase().replace(/\s+/g,' ')
-                        .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+                        .normalize('NFD').replace(/[̀-ͯ]/g,'');
   const _homonyme = (DB.students||[]).find(x =>
     x.id !== sid && x.cid === cid && !x.archived && _normS(x.name) === _normS(name));
   if (_homonyme) { markFieldError('stu_name', `Un élève « ${_homonyme.name} » figure déjà dans cette classe`); return; }
 
-  const data={name,mat,cid,pid:$('stu_pid').value||null,dob:$('stu_dob').value||null,adresse:($('stu_adresse').value||'').trim()||null,nom_papa:($('stu_papa').value||'').trim()||null,nom_maman:($('stu_maman').value||'').trim()||null,photo,lieu_naissance:($('stu_lieu_naissance').value||'').trim()||null,num_inscription:($('stu_num_inscription').value||'').trim()||null};
-  if(sid){
-    const s=DB.students.find(x=>x.id===sid); if(s) Object.assign(s,data);
-    pushSync('students','upsert',{id:sid,...data});
-    logAudit('student_edit',`${name} — ${mat}`,sid);
-    toast(`${name} mis à jour`,'success');
-  } else {
-    const ns={id:_uid('s_'),...data,created_at:today(),created_by:S.user.id,created_by_name:S.user.name,school_id:window._currentSchoolId||null};
-    DB.students.push(ns);
-    const newPays=['T1','T2','T3','inscription'].map(t=>({id:_uid('p_'),sid:ns.id,t,paid:false,school_id:window._currentSchoolId||null}));
-    newPays.forEach(p=>DB.payments.push(p));
-    pushSync('students','upsert',ns);
-    pushSync('payments','upsert',newPays);
-    logAudit('student_add',`${name} — ${mat} — ${DB.classes.find(c=>c.id===cid)?.name||'?'}`,ns.id);
-    if(S.user.role==='direction2'){const _clN=DB.classes.find(cl=>cl.id===cid)?.name||'?';(DB.users||[]).filter(u=>u.role==='direction').forEach(u=>pushNotif(u.id,`📋 ${S.user.name} (Dir.2) a inscrit l'élève ${name} en ${_clN}`));}
-    toast(`🎉 ${name} inscrit — ${mat}`,'success');
-    launchConfetti(30);
+  const data = {
+    name, mat, cid,
+    pid: $('stu_pid').value || null,
+    dob: $('stu_dob').value || null,
+    photo,
+    adresse:        ($('stu_adresse').value||'').trim() || null,
+    nom_papa:       ($('stu_papa').value||'').trim() || null,
+    nom_maman:      ($('stu_maman').value||'').trim() || null,
+    lieu_naissance: ($('stu_lieu_naissance').value||'').trim() || null,
+    num_inscription:($('stu_num_inscription').value||'').trim() || null,
+  };
+
+  // Le contrat accepte access_parent, may_leave_alone et leave_alone_until —
+  // mais CE formulaire ne les modifie pas : ils se règlent depuis « Accès
+  // parents » et l'autorisation de sortie. On renvoie donc la valeur ACTUELLE
+  // de l'élève, jamais une valeur par défaut : envoyer `true` parce que le
+  // formulaire est muet effacerait une décision prise ailleurs.
+  const _prev = sid ? (DB.students||[]).find(x => x.id === sid) : null;
+  data.access_parent     = _prev ? _prev.access_parent !== false : true;
+  data.may_leave_alone   = _prev ? _prev.may_leave_alone === true : false;
+  data.leave_alone_until = _prev ? (_prev.leave_alone_until || null) : null;
+
+  const restore = _btnBusy('#MF .btn-primary');   // le bouton du pied de la fenêtre, pas un bouton du corps
+  try {
+    // ── Hors ligne : on met en file, et on le DIT. Une opération en attente
+    //    n'est pas un enregistrement (contrat §4.8).
+    if (!window._authClient || !window.DB_ONLINE) {
+      const isNew = !sid;
+      const ns = isNew
+        ? {id:_uid('s_'),...data,created_at:today(),created_by:S.user.id,created_by_name:S.user.name,school_id:window._currentSchoolId||null}
+        : Object.assign(DB.students.find(x=>x.id===sid)||{}, data);
+      if (isNew) DB.students.push(ns);
+      pushSync('students','upsert', isNew ? ns : {id:sid,...data});
+      if (isNew) {
+        const newPays=['T1','T2','T3','inscription'].map(t=>({id:_uid('p_'),sid:ns.id,t,paid:false,school_id:window._currentSchoolId||null}));
+        newPays.forEach(p=>DB.payments.push(p));
+        pushSync('payments','upsert',newPays);
+      }
+      closeModal(); saveToCrypt(); render();
+      toast(`⏳ ${name} — hors ligne, en attente d'envoi. Pas encore enregistré.`,'warning');
+      return;
+    }
+
+    // ── En ligne : le serveur décide, et sa réponse fait foi.
+    const payload = { ...data };
+    if (sid) payload.id = sid;
+    const res = await _rpc('save_student_profile', { p_student: payload });
+
+    if (!res.ok) {
+      // Le formulaire RESTE ouvert, et le message est celui du serveur.
+      const msg = _codeMsg(res.code);
+      if (res.code === 'MATRICULE_IN_USE')  markFieldError('stu_mat', msg);
+      else if (res.code === 'CLASS_NOT_FOUND')  markFieldError('stu_cid', msg);
+      else if (res.code === 'PARENT_NOT_FOUND') markFieldError('stu_pid', msg);
+      else toast(msg,'error');
+      return;
+    }
+
+    // La ligne rendue par PostgreSQL remplace la copie locale.
+    const saved = res.data.student || {};
+    const created = res.data.code === 'STUDENT_CREATED';
+    const idx = DB.students.findIndex(x => x.id === saved.id);
+    if (idx >= 0) DB.students[idx] = { ...DB.students[idx], ...saved };
+    else DB.students.push(saved);
+
+    if (created) {
+      const newPays=['T1','T2','T3','inscription'].map(t=>({id:_uid('p_'),sid:saved.id,t,paid:false,school_id:window._currentSchoolId||null}));
+      newPays.forEach(p=>DB.payments.push(p));
+      pushSync('payments','upsert',newPays);
+      logAudit('student_add',`${saved.name} — ${saved.mat} — ${DB.classes.find(c=>c.id===saved.cid)?.name||'?'}`,saved.id);
+      if(S.user.role==='direction2'){const _clN=DB.classes.find(cl=>cl.id===saved.cid)?.name||'?';(DB.users||[]).filter(u=>u.role==='direction').forEach(u=>pushNotif(u.id,`📋 ${S.user.name} a inscrit ${saved.name} en ${_clN}`));}
+    } else {
+      logAudit('student_edit',`${saved.name} — ${saved.mat}`,saved.id);
+    }
+
+    closeModal(); saveToCrypt(); render();
+    if (created) { toast(`🎉 ${saved.name} inscrit — ${saved.mat}`,'success'); launchConfetti(30); }
+    else toast(`${saved.name} mis à jour`,'success');
+  } finally {
+    restore();
   }
-  closeModal(); saveToCrypt(); render();
 };
 window.editStudent = (sid) => openStudentForm(sid);
 window.deleteStudent = (sid) => {
