@@ -2668,7 +2668,7 @@ window.loadFromSupabase = async () => {
       return v === cur ? v : v.map(x=>({...x,date:x.date?.slice(0,10)||x.date}));
     };
     // Exclure pin/pin_hashed du chargement en masse — fetchés à la demande dans tryLogin
-    DB.users=(()=>{const v=safe(users, DB.users); return v===DB.users ? v : v.map(({pin:_p,pin_hashed:_ph,...u})=>u);})(); DB.classes=safe(classes, DB.classes); DB.students=safe(students, DB.students);
+    DB.users=(()=>{const v=safe(users, DB.users); return v===DB.users ? v : v.map(({pin:_p,pin_hashed:_ph,...u})=>({...u,role:_normRole(u.role)}));})(); DB.classes=safe(classes, DB.classes); DB.students=safe(students, DB.students);
     DB.payments=safe(payments, DB.payments); DB.attendance=fd(attendance, DB.attendance);
     DB.scan_log=fd(scan_log, DB.scan_log); DB.conduct=fd(conduct, DB.conduct);
     DB.grades=safe(grades, DB.grades); DB.absences=fd(absences, DB.absences);
@@ -3595,8 +3595,8 @@ window.go = (p, noHistory) => {
   // Aliases — pages consolidées
   if (p === 'salaires' || p === 'primes') p = 'paie';
   // Role guard — block pages not defined in the current role's NAV
-  if (S.user && S.user.role && window.NAV[S.user.role]) {
-    const allowed = new Set(window.NAV[S.user.role].nav.filter(n => n.id).map(n => n.id));
+  if (S.user && S.user.role && window.NAV[_roleUI(S.user.role)]) {
+    const allowed = new Set(window.NAV[_roleUI(S.user.role)].nav.filter(n => n.id).map(n => n.id));
     if (!allowed.has(p)) {
       console.warn('[go] accès refusé:', p, 'rôle:', S.user.role);
       toast('Page non disponible pour votre rôle', 'warning');
@@ -3992,7 +3992,8 @@ async function _openSupabaseSession(session, password, messageId) {
       encodeURIComponent(authUser.id) + '&limit=1'
   );
   const user = Array.isArray(rows) ? rows[0] : null;
-  if (!user || user.status !== 'active' || !NAV[user.role]) {
+  if (user) user.role = _normRole(user.role);
+  if (!user || user.status !== 'active' || !NAV[_roleUI(user.role)]) {
     await window._authClient.auth.signOut();
     _setAuthMessage(target, 'Compte non autorisé ou désactivé');
     return false;
@@ -4483,7 +4484,7 @@ window.goToMyProfile = () => {
   };
 })();
 window.buildUI = () => {
-  const r = S.user.role, c = NAV[r];
+  const r = _roleUI(S.user.role), c = NAV[r];
   document.body.dataset.role = r;
   const _lang = getLang();
   const gl = x => typeof x === 'object' ? (x[_lang] || x.fr || x) : (x || '');
@@ -9215,10 +9216,17 @@ async function _saveStudentInner() {
   // parents » et l'autorisation de sortie. On renvoie donc la valeur ACTUELLE
   // de l'élève, jamais une valeur par défaut : envoyer `true` parce que le
   // formulaire est muet effacerait une décision prise ailleurs.
-  const _prev = sid ? (DB.students||[]).find(x => x.id === sid) : null;
-  data.access_parent     = _prev ? _prev.access_parent !== false : true;
-  data.may_leave_alone   = _prev ? _prev.may_leave_alone === true : false;
-  data.leave_alone_until = _prev ? (_prev.leave_alone_until || null) : null;
+  // L'identifiant est OBLIGATOIRE, même à la création : save_student_profile
+  // refuse un `id` vide, puis décide création ou modification selon qu'il
+  // existe déjà en base. C'est donc le navigateur qui le fabrique.
+  const _sid = sid || _uid('s_');
+
+  // access_parent, may_leave_alone et leave_alone_until sont acceptés par le
+  // contrat, mais CE formulaire ne les modifie pas — ils se règlent depuis
+  // « Accès parents » et l'autorisation de sortie. Le serveur teste la présence
+  // de la CLÉ (`p_student ? 'champ'`) : une clé absente conserve la valeur
+  // enregistrée. On les omet donc, plutôt que de renvoyer une copie locale qui
+  // pourrait être périmée et écraserait alors une décision plus récente.
 
   const restore = _btnBusy('#MF .btn-primary');   // le bouton du pied de la fenêtre, pas un bouton du corps
   try {
@@ -9227,7 +9235,7 @@ async function _saveStudentInner() {
     if (!window._authClient || !window.DB_ONLINE) {
       const isNew = !sid;
       const ns = isNew
-        ? {id:_uid('s_'),...data,created_at:today(),created_by:S.user.id,created_by_name:S.user.name,school_id:window._currentSchoolId||null}
+        ? {id:_sid,...data,created_at:today(),created_by:S.user.id,created_by_name:S.user.name,school_id:window._currentSchoolId||null}
         : Object.assign(DB.students.find(x=>x.id===sid)||{}, data);
       if (isNew) DB.students.push(ns);
       pushSync('students','upsert', isNew ? ns : {id:sid,...data});
@@ -9242,9 +9250,7 @@ async function _saveStudentInner() {
     }
 
     // ── En ligne : le serveur décide, et sa réponse fait foi.
-    const payload = { ...data };
-    if (sid) payload.id = sid;
-    const res = await _rpc('save_student_profile', { p_student: payload });
+    const res = await _rpc('save_student_profile', { p_student: { id: _sid, ...data } });
 
     if (!res.ok) {
       // Le formulaire RESTE ouvert, et le message est celui du serveur.
@@ -9352,6 +9358,26 @@ window.restoreStudent = (sid) => {
 };
 
 // ── TEACHERS / GUARDIANS / PARENTS — CRUD ──
+// La base porte des noms de rôle que l'interface ne connaît pas. L'Edge
+// Function R2 fait exactement la même conversion de son côté (normalizeRole) :
+// `direction_pedagogique` et `caisse` sont d'anciens noms de `direction2` et
+// `direction3`. Sans cette réconciliation À LA LECTURE, un compte portant
+// l'ancien nom n'a AUCUN menu — et la connexion le rejette purement et
+// simplement (voir le contrôle `!NAV[user.role]`).
+//
+// On réconcilie à la lecture plutôt que de reprendre les écritures d'une
+// application en service : c'est le motif du normaliseur.
+window._ROLE_ALIAS = {
+  direction_pedagogique: 'direction2',
+  caisse:                'direction3',
+};
+window._normRole = r => window._ROLE_ALIAS[r] || r || '';
+
+// `enseignant_maternelle` n'est PAS un ancien nom : le serveur l'accepte comme
+// valeur à part entière. On ne le réécrit donc jamais — on lui donne seulement
+// les écrans de l'enseignant. Le rôle enregistré reste intact.
+window._roleUI = r => { const n = window._normRole(r); return n === 'enseignant_maternelle' ? 'enseignant' : n; };
+
 const ROLE_META = {
   direction:{label:'Direction 1',icon:'🏛️',color:'#243a6b',bg:'#dbeafe'},
   direction2:{label:'Direction 2',icon:'🏫',color:'#2f7bd6',bg:'#e0e7ff'},
@@ -27896,7 +27922,7 @@ window.printRapportSecope = () => {
     pc.addEventListener('touchend',e=>{
       const dx=e.changedTouches[0].clientX-startX,dy=e.changedTouches[0].clientY-startY;
       if(Math.abs(dx)<80||Math.abs(dy)>Math.abs(dx))return;
-      const nav=NAV[S.user?.role]; if(!nav)return;
+      const nav=NAV[_roleUI(S.user?.role)]; if(!nav)return;
       const pages=nav.bn.map(b=>b.id),idx=pages.indexOf(S.page);
       if(idx===-1)return;
       if(dx<0&&idx<pages.length-1)go(pages[idx+1]);
