@@ -33,6 +33,9 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [ ] Créer un client frontend centralisé pour appeler la fonction Supabase `r2-files`.
 - [ ] Envoyer les fichiers avec session utilisateur JWT, jamais avec une clé R2.
 - [ ] Utiliser une `x-idempotency-key` stable pour chaque tentative d’envoi.
+- [ ] Ne jamais coder une année scolaire en dur dans le client R2.
+- [ ] Omettre `academic_year` ou utiliser la valeur courante fournie par le serveur.
+- [ ] En cas de réponse `409` sur l’année, afficher la valeur `current_academic_year` et recharger les paramètres.
 - [ ] Connecter les photos des élèves à R2.
 - [ ] Connecter les photos du personnel à R2.
 - [ ] Connecter les photos des personnes autorisées à R2.
@@ -44,6 +47,7 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [ ] Utiliser l’action `list` pour lister les fichiers autorisés.
 - [ ] Afficher la progression d’envoi et les erreurs compréhensibles.
 - [ ] Empêcher les doubles clics et gérer la réponse `reused=true`.
+- [ ] Gérer la réponse `415` lorsque le contenu réel ne correspond pas au type déclaré.
 - [ ] Ajouter une invalidation visuelle lors du remplacement d’une photo.
 - [ ] Ne pas utiliser le bucket Supabase Storage `school-files` sans validation écrite de ChatGPT.
 - [ ] Ne pas donner au Gardien un accès direct à `r2-files`; les images nécessaires doivent passer par le contrat scanner validé.
@@ -107,8 +111,20 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [x] RLS administratif : Direction 1 complète, Direction 2 non financière, Caisse financière.
 - [x] Création de `create_administrative_document(...)`.
 - [x] Création de `archive_administrative_document(...)`.
-- [x] Déploiement de `r2-files` version 4 avec JWT obligatoire.
 - [x] Tests transactionnels du dossier administratif et du cahier, suivis d’un rollback complet.
+- [x] Interdiction explicite des reçus et cartes financières pour l’Enseignant.
+- [x] Création d’une liste blanche stricte pour les fichiers visibles par le Parent.
+- [x] Validation de l’existence de chaque propriétaire avant téléversement.
+- [x] Validation des combinaisons propriétaire/catégorie dans l’Edge Function et PostgreSQL.
+- [x] Utilisation de `settings.year` comme source de vérité de l’année scolaire courante.
+- [x] Utilisation de l’année de la transaction pour les reçus et de l’année du dossier pour les documents administratifs.
+- [x] Rejet des années scolaires contradictoires envoyées par le frontend.
+- [x] Vérification de la signature binaire réelle JPEG, PNG, WebP et PDF.
+- [x] RLS des devoirs pour Direction 1, Direction 2, enseignants affectés et Parents de la classe.
+- [x] Normalisation de `students.archived` et `students.access_parent` en valeurs non nulles.
+- [x] Déploiement de `r2-files` version 5 avec JWT obligatoire.
+- [x] Enregistrement du code R2 et des migrations de l’étape 2 dans GitHub.
+- [x] Tests transactionnels de l’année, des propriétaires et des catégories, suivis d’un rollback complet.
 - [x] Vérification qu’aucune fausse donnée n’est restée.
 
 ## Travail ChatGPT — restant
@@ -124,7 +140,7 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [ ] Activer la protection Supabase contre les mots de passe compromis.
 - [ ] Valider le code frontend de Claude avant fusion.
 
-## Actions disponibles dans `r2-files` version 4
+## Actions disponibles dans `r2-files` version 5
 
 - `health` : Direction 1 uniquement.
 - `upload` : selon rôle, propriétaire et catégorie.
