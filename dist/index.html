@@ -2164,6 +2164,7 @@ window.NAV = {
       {id:'acces_parents',i:'🔐',l:'Accès parents'},
       {id:'cards',i:'🪪',l:"Cartes d'élèves"},
       {s:'Finances & RH'},
+      {id:'controle_frais',i:'🔍',l:'Contrôle des frais'},
       {id:'payments',i:'💳',l:'Paiements élèves'},
       {id:'caisse_paiement',i:'💵',l:'Caisse'},
       {id:'etat_financier',i:'📈',l:'État Financier'},
@@ -2377,6 +2378,7 @@ window.NAV = {
     nav:[
       {s:'Caisse du jour'},
       {id:'dashboard',i:'🏠',l:'Tableau de bord'},
+      {id:'controle_frais',i:'🔍',l:'Contrôle des frais'},
       {id:'caisse_paiement',i:'💵',l:'Enregistrer paiement'},
       {id:'caisse_depense',i:'📤',l:'Enregistrer dépense'},
       {id:'caisse_rapport',i:'📊',l:'Rapport du jour'},
@@ -3536,7 +3538,7 @@ window.PT = {
   evaluations_ens:'Évaluations des enseignants',
   salaires:'Salaires & Fiches de paie',
   primes:'Primes Enseignants', fee_types:'Types de frais', mon_site:'Mon site web',
-  frais_parent:'Frais scolaires',
+  frais_parent:'Frais scolaires', controle_frais:'Contrôle des frais',
   paie:'Paie du Personnel',
   rapport_secope:'Rapport SECOPE/MEPSP',
   inscriptions:'Demandes d\'inscription',
@@ -13016,52 +13018,11 @@ window.chargerFraisEnfant = async (sid) => {
   render();
 };
 
-R.frais_parent = () => {
-  const _g = _requireRole('parent'); if (_g) return _g;
-  const kids = (DB.students||[]).filter(s => s.pid === S.user.id);
-  if (!kids.length) return `<div style="text-align:center;padding:60px;color:var(--text-muted)">
-    <div style="font-size:56px;margin-bottom:14px">👶</div>Aucun enfant rattaché à votre compte.</div>`;
-
-  // Le lien parent-enfant est revérifié à CHAQUE rendu : le menu ne propose
-  // que ses enfants, mais il est reconstruit à chaque fois — on revérifie
-  // plutôt que de faire confiance au DOM.
-  let sid = window._fraisEnCours;
-  if (!sid || !kids.some(k => k.id === sid)) sid = kids[0].id;
-  const kid = kids.find(k => k.id === sid);
-  const d = _fraisCache[sid];
-  if (d === undefined) { setTimeout(() => chargerFraisEnfant(sid), 0); }
-
-  const selecteur = kids.length > 1 ? `
-    <div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;-webkit-overflow-scrolling:touch">
-      ${kids.map(k => `<button onclick="chargerFraisEnfant('${esc(k.id)}')"
-        style="flex:0 0 auto;padding:9px 15px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid ${k.id===sid?'#9b6fd4':'var(--border)'};background:${k.id===sid?'#f0e9fa':'transparent'};color:${k.id===sid?'#6f44ab':'var(--text-secondary)'}">
-        ${esc(k.name)}</button>`).join('')}
-    </div>` : '';
-
-  const entete = `
-    <div class="ww-toolbar" style="animation:fadeInUp .3s ease both">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#9b6fd4,#6f44ab);display:flex;align-items:center;justify-content:center;font-size:19px">💳</div>
-        <div><div style="font-size:16px;font-weight:800">Frais scolaires</div>
-             <div style="font-size:11px;color:var(--text-muted)">${esc(kid?.name||'')}</div></div>
-      </div>
-    </div>${selecteur}`;
-
-  const cadre = corps => `<div style="padding:0 0 80px">${entete}${corps}
-    <div style="margin-top:18px;padding:14px 16px;background:var(--surface-2, #f4f6f8);border-radius:14px;font-size:12.5px;color:var(--text-secondary);line-height:1.7">
-      Pour toute correction, contactez la <strong>Caisse</strong> ou la <strong>Direction</strong> de l'école.
-    </div></div>`;
-
-  if (!d || d._chargement) return cadre(`<div style="text-align:center;padding:50px;color:var(--text-muted)">Chargement…</div>`);
-  if (d._hors_ligne)       return cadre(`<div style="text-align:center;padding:44px;color:var(--text-muted)">
-      <div style="font-size:40px;margin-bottom:12px">📡</div>
-      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Hors ligne</div>
-      <div style="font-size:13px">Le montant dû se lit sur le serveur. Reconnectez-vous pour le consulter.</div></div>`);
-  if (d._erreur)           return cadre(`<div style="text-align:center;padding:44px;color:var(--text-muted)">
-      <div style="font-size:40px;margin-bottom:12px">⚠️</div>
-      <div style="font-weight:700;color:var(--text);margin-bottom:6px">${esc(d._erreur)}</div></div>`);
-  if (d.student_found === false) return cadre(`<div style="text-align:center;padding:44px;color:var(--text-muted)">Aucun dossier de frais pour cet enfant.</div>`);
-
+// Les trois blocs d'affichage d'un dossier de frais. get_parent_fee_summary et
+// get_cashier_student_fee_detail rendent la MÊME forme : deux rendus séparés
+// divergeraient, et la Caisse et la famille liraient des chiffres différents
+// devant le même dossier. Une seule réponse par question.
+window._blocsFrais = (d) => {
   const et = _FRAIS_ETAT[d.status] || _FRAIS_ETAT.unavailable;
   const totaux = Array.isArray(d.totals_by_currency) ? d.totals_by_currency : [];
   const oblig  = Array.isArray(d.obligations) ? d.obligations : [];
@@ -13129,8 +13090,220 @@ R.frais_parent = () => {
       : `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;background:var(--card,#fff);border:1px solid var(--border);border-radius:13px">Aucun versement enregistré pour le moment.</div>`}
   </div>`;
 
-  return cadre(resume + echeancier + listeRecus);
+  return resume + echeancier + listeRecus;
 };
+
+
+// ════════════════════════════════════════════════════════════════════════════
+//  CONTRÔLE DES FRAIS — Caisse et Direction 1
+//
+//  Le MÊME QR que la carte de l'élève. Aucun second QR financier n'est créé :
+//  la carte porte le matricule, on le résout en identifiant depuis la liste
+//  déjà chargée, puis le serveur répond.
+//
+//  Contrats : get_cashier_student_fee_detail(p_sid) pour lire,
+//  record_payment_transaction(...) pour écrire. Le numéro de reçu vient du
+//  SERVEUR — jamais fabriqué ici.
+// ════════════════════════════════════════════════════════════════════════════
+
+window._cfEtat = { sid:null, dossier:null, chargement:false, msg:'' };
+
+// Le QR de la carte porte le matricule ; les RPC attendent l'identifiant.
+// La Caisse a déjà la liste des élèves : la résolution est locale, et aucune
+// donnée supplémentaire ne descend sur l'appareil pour cela.
+window._sidDepuisMatricule = (code) => {
+  const t = String(code||'').trim();
+  if (!t) return null;
+  const s1 = (DB.students||[]).find(x => (x.mat||'').toLowerCase() === t.toLowerCase());
+  if (s1) return s1.id;
+  const s2 = (DB.students||[]).find(x => x.id === t);
+  return s2 ? s2.id : null;
+};
+
+window.controlerFrais = async (code) => {
+  const brut = code !== undefined ? code : ($('cf_code')?.value || '');
+  const sid = _sidDepuisMatricule(brut);
+  if (!sid) {
+    _cfEtat = { sid:null, dossier:null, chargement:false, msg:'Aucun élève ne porte ce matricule.' };
+    render(); return;
+  }
+  if (!window.DB_ONLINE) {
+    _cfEtat = { sid, dossier:null, chargement:false, msg:'Hors ligne — le solde ne se lit que sur le serveur.' };
+    render(); return;
+  }
+  _cfEtat = { sid, dossier:null, chargement:true, msg:'' }; render();
+  const r = await _rpc('get_cashier_student_fee_detail', { p_sid: sid });
+  _cfEtat = r.ok
+    ? { sid, dossier:r.data, chargement:false, msg:'' }
+    : { sid, dossier:null, chargement:false, msg:_codeMsg(r.code) };
+  render();
+};
+
+window.enregistrerVersement = async () => {
+  if (_denyRole('direction','direction3')) return;
+  const sid = _cfEtat.sid;
+  if (!sid) { toast('Sélectionnez d\'abord un élève','error'); return; }
+
+  // Jamais parseFloat : « 12,50 » y vaut 12. lireMontant refuse aussi « 1O0 »
+  // avec la lettre O — refuser vaut mieux qu'interpréter.
+  const montant = lireMontant($('cf_montant')?.value);
+  if (montant === null) { markFieldError('cf_montant','Montant invalide'); return; }
+  if (!montant)         { markFieldError('cf_montant','Entrez un montant'); return; }
+
+  const restore = _btnBusy('#cf_valider');
+  try {
+    const r = await _rpc('record_payment_transaction', {
+      p_sid: sid,
+      p_amount: montant,
+      p_currency: ($('cf_devise')?.value || 'USD'),
+      p_payment_method: ($('cf_moyen')?.value || 'cash'),
+      p_external_reference: ($('cf_ref')?.value || '').trim() || null,
+      p_note: ($('cf_note')?.value || '').trim() || null,
+    });
+    if (!r.ok) { toast(_codeMsg(r.code), 'error'); return; }
+
+    const t = r.data.transaction || r.data;
+    const recu = t.receipt_no || '—';
+    logAudit('payment_record', `${_fmtMt(t.amount ?? montant, t.currency)} — reçu ${recu}`, sid);
+
+    // Le formulaire ne se vide qu'APRÈS confirmation du serveur.
+    ['cf_montant','cf_ref','cf_note'].forEach(id => { const e=$(id); if(e) e.value=''; });
+    openM('✅ Paiement enregistré', `<div style="text-align:center;padding:10px 0">
+        <div style="font-size:46px;margin-bottom:10px">🧾</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">Numéro de reçu</div>
+        <div style="font-family:monospace;font-size:17px;font-weight:800;margin-bottom:12px">${esc(recu)}</div>
+        <div style="font-size:20px;font-weight:800">${esc(_fmtMt(t.amount ?? montant, t.currency))}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">${esc(t.status||'confirmed')}</div>
+      </div>`, `<button class="btn btn-primary" onclick="closeModal()">Fermer</button>`);
+
+    // On relit le dossier : le solde qui s'affiche est celui du serveur, pas
+    // celui qu'on aurait déduit en soustrayant le versement.
+    await controlerFrais(sid);
+  } finally { restore(); }
+};
+
+R.controle_frais = () => {
+  const _g = _requireRole('direction','direction3'); if (_g) return _g;
+  const e = _cfEtat;
+  const el = e.sid ? (DB.students||[]).find(x => x.id === e.sid) : null;
+  const cl = el ? gc(el.cid) : null;
+
+  const recherche = `
+  <div class="premium-section">
+    <div class="premium-section-title">🔍 Contrôle des frais</div>
+    <p style="font-size:12px;color:var(--text-muted);margin:2px 0 12px">
+      Scannez la carte de l'élève ou saisissez son matricule. Le même QR que le portail — aucun second code.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input class="form-input" id="cf_code" placeholder="Matricule de l'élève" style="flex:1;min-width:170px"
+             onkeydown="if(event.key==='Enter')controlerFrais()">
+      <button class="btn btn-primary" onclick="controlerFrais()">Consulter</button>
+      <button class="btn btn-outline" onclick="go('scanner')">📷 Scanner</button>
+    </div>
+    ${e.msg ? `<div style="margin-top:11px;padding:11px 13px;background:#fee2e2;color:#991b1b;border-radius:11px;font-size:13px">${esc(e.msg)}</div>` : ''}
+  </div>`;
+
+  if (e.chargement) return `<div style="padding:0 0 80px">${recherche}
+    <div style="text-align:center;padding:40px;color:var(--text-muted)">Lecture du dossier…</div></div>`;
+  if (!e.dossier)   return `<div style="padding:0 0 80px">${recherche}</div>`;
+
+  const fiche = `
+  <div style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--card,#fff);border:1px solid var(--border);border-radius:15px;margin-bottom:13px">
+    <div style="width:46px;height:46px;border-radius:13px;background:#dbeafe;color:#205fae;display:flex;align-items:center;justify-content:center;font-weight:800;overflow:hidden;flex-shrink:0">
+      ${el?.photo ? `<img src="${el.photo}" style="width:100%;height:100%;object-fit:cover">` : esc(ini(el?.name||'?'))}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:800;font-size:15px">${esc(el?.name||'—')}</div>
+      <div style="font-size:12px;color:var(--text-secondary)">${esc(cl?.name||'—')} · <span style="font-family:monospace">${esc(el?.mat||'—')}</span></div>
+    </div>
+  </div>`;
+
+  const formulaire = `
+  <div class="premium-section" style="margin-top:14px">
+    <div class="premium-section-title">💵 Enregistrer un versement</div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label class="form-label">Montant reçu <span style="color:#ef5b5b">*</span></label>
+        <input class="form-input" id="cf_montant" inputmode="decimal" placeholder="Ex : 75 ou 75,50">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Devise</label>
+        <select class="form-select" id="cf_devise"><option value="USD">USD</option><option value="CDF">CDF</option></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Moyen</label>
+        <select class="form-select" id="cf_moyen">
+          <option value="cash">Espèces</option><option value="bank">Banque</option>
+          <option value="mobile_money">Mobile Money</option><option value="other">Autre</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1">
+        <label class="form-label">Référence externe</label>
+        <input class="form-input" id="cf_ref" placeholder="N° bordereau, transaction…">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Note</label>
+      <input class="form-input" id="cf_note" placeholder="Facultatif">
+    </div>
+    <button class="btn btn-primary" id="cf_valider" style="width:100%" onclick="enregistrerVersement()">💾 Enregistrer le versement</button>
+    <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;line-height:1.6">
+      L'école ne reçoit pas l'argent par l'application : la Caisse enregistre un versement
+      déjà reçu. Le numéro de reçu est attribué par le serveur, et le solde est relu après
+      l'enregistrement — il n'est jamais déduit ici.</p>
+  </div>`;
+
+  return `<div style="padding:0 0 80px">${recherche}${fiche}${_blocsFrais(e.dossier)}${formulaire}</div>`;
+};
+
+R.frais_parent = () => {
+  const _g = _requireRole('parent'); if (_g) return _g;
+  const kids = (DB.students||[]).filter(s => s.pid === S.user.id);
+  if (!kids.length) return `<div style="text-align:center;padding:60px;color:var(--text-muted)">
+    <div style="font-size:56px;margin-bottom:14px">👶</div>Aucun enfant rattaché à votre compte.</div>`;
+
+  // Le lien parent-enfant est revérifié à CHAQUE rendu : le menu ne propose
+  // que ses enfants, mais il est reconstruit à chaque fois — on revérifie
+  // plutôt que de faire confiance au DOM.
+  let sid = window._fraisEnCours;
+  if (!sid || !kids.some(k => k.id === sid)) sid = kids[0].id;
+  const kid = kids.find(k => k.id === sid);
+  const d = _fraisCache[sid];
+  if (d === undefined) { setTimeout(() => chargerFraisEnfant(sid), 0); }
+
+  const selecteur = kids.length > 1 ? `
+    <div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;-webkit-overflow-scrolling:touch">
+      ${kids.map(k => `<button onclick="chargerFraisEnfant('${esc(k.id)}')"
+        style="flex:0 0 auto;padding:9px 15px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid ${k.id===sid?'#9b6fd4':'var(--border)'};background:${k.id===sid?'#f0e9fa':'transparent'};color:${k.id===sid?'#6f44ab':'var(--text-secondary)'}">
+        ${esc(k.name)}</button>`).join('')}
+    </div>` : '';
+
+  const entete = `
+    <div class="ww-toolbar" style="animation:fadeInUp .3s ease both">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#9b6fd4,#6f44ab);display:flex;align-items:center;justify-content:center;font-size:19px">💳</div>
+        <div><div style="font-size:16px;font-weight:800">Frais scolaires</div>
+             <div style="font-size:11px;color:var(--text-muted)">${esc(kid?.name||'')}</div></div>
+      </div>
+    </div>${selecteur}`;
+
+  const cadre = corps => `<div style="padding:0 0 80px">${entete}${corps}
+    <div style="margin-top:18px;padding:14px 16px;background:var(--surface-2, #f4f6f8);border-radius:14px;font-size:12.5px;color:var(--text-secondary);line-height:1.7">
+      Pour toute correction, contactez la <strong>Caisse</strong> ou la <strong>Direction</strong> de l'école.
+    </div></div>`;
+
+  if (!d || d._chargement) return cadre(`<div style="text-align:center;padding:50px;color:var(--text-muted)">Chargement…</div>`);
+  if (d._hors_ligne)       return cadre(`<div style="text-align:center;padding:44px;color:var(--text-muted)">
+      <div style="font-size:40px;margin-bottom:12px">📡</div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Hors ligne</div>
+      <div style="font-size:13px">Le montant dû se lit sur le serveur. Reconnectez-vous pour le consulter.</div></div>`);
+  if (d._erreur)           return cadre(`<div style="text-align:center;padding:44px;color:var(--text-muted)">
+      <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">${esc(d._erreur)}</div></div>`);
+  if (d.student_found === false) return cadre(`<div style="text-align:center;padding:44px;color:var(--text-muted)">Aucun dossier de frais pour cet enfant.</div>`);
+  return cadre(_blocsFrais(d));
+};
+
 
 R.recus_parent = () => {
   const kids=DB.students.filter(s=>s.pid===S.user.id);
