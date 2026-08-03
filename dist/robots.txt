@@ -1,7 +1,8 @@
 User-agent: *
 Allow: /
 
-# Disallow app (requires login)
+# L'application exige une connexion — rien à indexer.
 Disallow: /index.html
+Disallow: /auth.html
 
-Sitemap: https://medt121.github.io/zalavrai/sitemap.xml
+Sitemap: https://cslesage.com/sitemap.xml
