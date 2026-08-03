@@ -1,38 +1,56 @@
 # SchoolSafe — Contrat Cloudflare R2
 
-Version serveur active : `r2-files` v5
+Date : 2026-08-03
 
-## Endpoint
+## Fonctions actives
 
-La fonction Supabase Edge Function `r2-files` doit être appelée avec la session JWT de l’utilisateur connecté.
+| Fonction | Version | Usage frontend |
+|---|---:|---|
+| `r2-upload` | 1 | Tous les nouveaux envois de photos, images et PDF |
+| `r2-files` | 5 | `list`, `download`, `delete` et contrôle interne du stockage actif |
+| `r2-archives` | 1 | Archives de Direction 1 uniquement |
+
+Toutes les fonctions exigent la session JWT de l’utilisateur connecté.
 
 Ne jamais envoyer au navigateur :
 
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-- clé Supabase secrète/service role
+- `R2_ACCESS_KEY_ID` ;
+- `R2_SECRET_ACCESS_KEY` ;
+- clé Supabase secrète ou service role.
 
-## Upload
+## Envoi de fichiers
+
+Le frontend doit appeler `r2-upload`, et non envoyer directement un nouveau fichier à `r2-files`.
 
 Requête `multipart/form-data` :
 
-- `action=upload`
-- `file=<File>`
-- `owner_type=student|user|authorized_person|class|school|devoir|cahier_prep|administrative_document`
-- `owner_id=<identifiant réel existant>`
-- `category=<catégorie autorisée pour ce propriétaire>`
-- `academic_year=<facultatif>`
-- `display_name=<nom lisible du fichier>`
-- `payment_transaction_id=<transaction>` uniquement pour un reçu
-- en-tête `x-idempotency-key=<clé stable 8 à 128 caractères>`
+- `file=<File>` ;
+- `owner_type=student|user|authorized_person|class|school|devoir|cahier_prep|administrative_document` ;
+- `owner_id=<identifiant réel existant>` ;
+- `category=<catégorie autorisée>` ;
+- `academic_year=<facultatif>` ;
+- `display_name=<nom lisible>` ;
+- `payment_transaction_id=<transaction>` uniquement pour un reçu ;
+- en-tête `x-idempotency-key=<clé stable 8 à 128 caractères>`.
 
-L’année scolaire n’est plus choisie par le navigateur. Le serveur utilise :
+Limites d’entrée :
+
+- JPEG, PNG, WebP ou PDF ;
+- source : 8 Mo maximum ;
+- image : 12 000 pixels maximum par côté et 40 mégapixels maximum ;
+- fichier final R2 : 5 Mo maximum.
+
+Les images sont automatiquement contrôlées, orientées, redimensionnées et converties en WebP lorsqu’une économie utile est obtenue. Les PDF restent inchangés. Le contrat détaillé se trouve dans `docs/R2_IMAGE_OPTIMIZATION_API.md`.
+
+## Année scolaire
+
+L’année n’est jamais décidée par le navigateur. Le serveur utilise :
 
 - `settings.year` pour les fichiers courants ;
 - `payment_transactions.school_year` pour un reçu ;
 - `administrative_documents.school_year` pour un dossier administratif.
 
-Lorsque le frontend envoie `academic_year`, le serveur le compare à cette source de vérité et répond `409` en cas de différence. Claude doit donc éviter de coder une année en dur.
+Lorsque le frontend envoie `academic_year`, le serveur répond `409` si elle ne correspond pas à la source officielle.
 
 ## Propriétaires et catégories
 
@@ -47,11 +65,9 @@ Lorsque le frontend envoie `academic_year`, le serveur le compare à cette sourc
 | `cahier_prep` | `teacher_preparation` |
 | `administrative_document` | `administrative_document` |
 
-Le serveur et un déclencheur PostgreSQL vérifient tous deux que le propriétaire existe et que la combinaison propriétaire/catégorie est valide.
+`r2-files` et PostgreSQL vérifient tous deux que le propriétaire existe et que la combinaison propriétaire/catégorie est autorisée.
 
 ## Reçu de paiement
-
-Un reçu utilise obligatoirement :
 
 ```text
 owner_type=student
@@ -60,40 +76,7 @@ category=receipt
 payment_transaction_id=<payment_transactions.id>
 ```
 
-La transaction doit :
-
-- exister ;
-- appartenir au même élève ;
-- avoir le statut `confirmed` ;
-- fournir l’année scolaire du fichier.
-
-Seuls Direction 1 et la Caisse peuvent envoyer un reçu. L’enseignant ne peut jamais lire ou envoyer un reçu. Le Parent ne peut lire que le reçu confirmé de son propre enfant.
-
-## Accès Parent
-
-Le Parent ne reçoit pas un accès général aux fichiers de l’enfant. La liste blanche actuelle est :
-
-- photo de l’élève ;
-- carte de l’élève ;
-- reçu confirmé ;
-- fichier de devoir ;
-- rapport autorisé ;
-- photo d’une personne autorisée liée à son enfant.
-
-Les catégories `identity`, les documents administratifs, les préparations et les fichiers internes ne sont pas accessibles au Parent.
-
-## Accès Enseignant
-
-L’Enseignant est limité à ses classes et à ses propres préparations.
-
-Pour un élève de sa classe, il peut lire :
-
-- `photo` ;
-- `document` pédagogique ;
-- `homework` ;
-- `report`.
-
-Il peut envoyer uniquement les éléments pédagogiques autorisés. Les catégories `receipt`, `card`, les documents administratifs et les personnes autorisées lui sont interdites.
+La transaction doit exister, appartenir au même élève et avoir le statut `confirmed`. Seuls Direction 1 et la Caisse peuvent envoyer un reçu. L’Enseignant ne peut jamais le lire ou l’envoyer. Le Parent ne lit que les reçus confirmés de ses propres enfants.
 
 ## Cahier de préparation
 
@@ -108,7 +91,7 @@ Accès : Direction 1, Direction 2 et enseignant propriétaire.
 
 ## Document administratif
 
-Créer d’abord une fiche dans `administrative_documents`, puis envoyer :
+Créer d’abord la fiche dans `administrative_documents`, puis envoyer une ou plusieurs pièces :
 
 ```text
 owner_type=administrative_document
@@ -117,31 +100,13 @@ category=administrative_document
 display_name=<nom de la pièce>
 ```
 
-Plusieurs photos ou PDF peuvent appartenir au même dossier administratif.
-
 ## Validation du contenu
 
-Le serveur ne se fie plus uniquement au type MIME fourni par le navigateur. Il vérifie la signature binaire réelle des formats suivants :
+Le serveur vérifie la signature binaire réelle des fichiers JPEG, PNG, WebP et PDF. Un contenu qui ne correspond pas au type déclaré reçoit `415`.
 
-- JPEG ;
-- PNG ;
-- WebP ;
-- PDF.
+## Liste
 
-Un fichier dont le contenu ne correspond pas au type annoncé reçoit une réponse `415`.
-
-## Download
-
-```json
-{
-  "action": "download",
-  "file_id": "uuid"
-}
-```
-
-La réponse contient une URL signée valable 300 secondes. L’application ne doit pas conserver cette URL comme chemin permanent.
-
-## List
+Appeler `r2-files` :
 
 ```json
 {
@@ -153,24 +118,24 @@ La réponse contient une URL signée valable 300 secondes. L’application ne do
 }
 ```
 
-Maximum serveur : 100 fichiers. Chaque ligne est filtrée selon le rôle avant d’être renvoyée.
+Maximum : 100 fichiers. Chaque ligne est filtrée selon le rôle.
 
-## Archive
+## Ouverture
 
-Direction 1 uniquement :
+Appeler `r2-files` :
 
 ```json
 {
-  "action": "archive",
+  "action": "download",
   "file_id": "uuid"
 }
 ```
 
-La consultation et la restauration spéciales des archives seront finalisées dans une étape séparée.
+La réponse contient une URL signée valable 300 secondes. Elle ne doit jamais être conservée comme chemin permanent.
 
-## Delete
+## Suppression
 
-Direction 1 uniquement :
+Direction 1 uniquement, via `r2-files` :
 
 ```json
 {
@@ -179,25 +144,29 @@ Direction 1 uniquement :
 }
 ```
 
-L’objet est supprimé de R2 et la métadonnée est conservée avec `deleted_at` et `deleted_by` pour l’audit.
+L’objet est retiré de R2 et la métadonnée conserve `deleted_at` et `deleted_by` pour l’audit.
+
+## Archives
+
+Les archives passent uniquement par `r2-archives`. Direction 1 peut les lister, les ouvrir et les restaurer. Les objets ne sont pas copiés ni déplacés dans R2 lors de l’archivage.
 
 ## Matrice résumée
 
-| Rôle | Lecture | Upload |
+| Rôle | Lecture | Envoi |
 |---|---|---|
-| Direction 1 | Tous les fichiers actifs autorisés | Tous, avec contrôles spécialisés |
+| Direction 1 | Tous les fichiers actifs autorisés et archives | Tous avec contrôles spécialisés |
 | Direction 2 | Pédagogique et administratif non financier | Hors finances |
-| Caisse | Reçus et dossiers financiers | Reçus et dossiers financiers autorisés |
-| Enseignant | Liste pédagogique stricte de ses classes et ses préparations | Éléments pédagogiques autorisés uniquement |
-| Parent | Liste blanche de ses propres enfants | Aucun upload actuellement |
+| Caisse | Reçus et dossiers financiers | Finances autorisées |
+| Enseignant | Liste pédagogique stricte de ses classes et préparations | Éléments pédagogiques autorisés |
+| Parent | Liste blanche de ses enfants | Aucun actuellement |
 | Gardien | Aucun accès direct R2 | Aucun |
 
-## Formats actuels
+## Endpoints interdits au frontend
 
-- `image/jpeg`
-- `image/png`
-- `image/webp`
-- `application/pdf`
-- maximum 5 Mo
+Ne jamais appeler :
 
-La compression automatique d’image n’est pas encore active dans la version 5. Le frontend doit réduire raisonnablement les photos avant l’envoi jusqu’au déploiement de la transformation serveur.
+- `r2-upload-test` ;
+- `r2-compression-self-test` ;
+- `r2-self-test`.
+
+Ils sont retirés ou réservés aux diagnostics internes.
