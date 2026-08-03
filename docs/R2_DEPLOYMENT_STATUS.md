@@ -17,10 +17,10 @@ Date : 2026-08-03
 - `20260803062940_harden_r2_files_and_link_receipts`
 - `20260803064521_add_teacher_preparation_and_administrative_documents_r2`
 - `20260803065147_optimize_administrative_documents_and_cahier_prep_rls`
-- `secure_r2_access_and_school_year`
-- `normalize_student_access_flags`
+- `20260803075027_secure_r2_access_and_school_year`
+- `20260803075840_normalize_student_access_flags`
 
-Les sources correspondantes de l’étape 2 sont maintenant enregistrées dans `supabase/migrations/` sur la branche de travail.
+Les sources correspondantes de l’étape 2 sont maintenant enregistrées dans `supabase/migrations/` sur la branche de travail avec les mêmes versions que l’historique Supabase.
 
 ## Capacités actives
 
@@ -47,8 +47,8 @@ Les sources correspondantes de l’étape 2 sont maintenant enregistrées dans `
 
 - `supabase/functions/r2-files/index.ts`
 - `supabase/functions/r2-files/deno.json`
-- `supabase/migrations/20260803084500_secure_r2_access_and_school_year.sql`
-- `supabase/migrations/20260803085200_normalize_student_access_flags.sql`
+- `supabase/migrations/20260803075027_secure_r2_access_and_school_year.sql`
+- `supabase/migrations/20260803075840_normalize_student_access_flags.sql`
 
 ## Tests effectués
 
