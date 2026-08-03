@@ -14,16 +14,75 @@ Responsabilité intégration frontend : Claude Code
 
 Aucune invitation massive n'a été envoyée pendant les tests.
 
-## 1. Création d'un compte enseignant, parent, gardien ou direction
+## 1. Enregistrer la fiche d'un enseignant ou d'un autre utilisateur
+
+### RPC déployée
+
+`public.save_school_user_profile(p_user jsonb)`
+
+- Fonction `SECURITY INVOKER` : les règles RLS de la personne connectée restent actives.
+- Seule Direction 1 peut créer ou modifier ces fiches.
+- Champs acceptés : `id`, `name`, `role`, `initials`, `phone`, `photo_url`, `email`, `status`.
+- Le navigateur ne peut jamais fournir `auth_user_id`, un mot de passe ou une clé serveur.
+- Une photo doit être une référence de fichier, jamais une chaîne base64 `data:`.
+- La Direction connectée ne peut pas désactiver ou rétrograder son propre compte.
+- L'adresse e-mail ou le rôle d'un compte déjà relié à Auth ne sont pas modifiés directement, afin d'éviter une désynchronisation.
+
+### Appel frontend
+
+```js
+const payload = {
+  id: user.id,
+  name: user.name,
+  role: user.role,
+  initials: user.initials || null,
+  phone: user.phone || null,
+  photo_url: user.photo_url || null,
+  email: user.email || null,
+  status: user.status || 'active'
+};
+
+const { data, error } = await window._authClient.rpc(
+  'save_school_user_profile',
+  { p_user: payload }
+);
+
+if (error) throw error;
+if (!data?.ok) throw new Error(data?.code || 'USER_SAVE_FAILED');
+
+const savedUser = data.user;
+```
+
+### Réponses positives
+
+- `USER_CREATED`
+- `USER_UPDATED`
+
+La réponse contient aussi `requires_invitation`. Lorsqu'il vaut `true`, le frontend doit appeler ensuite `invite-school-account`.
+
+### Codes à traduire
+
+| Code | Message utilisateur |
+|---|---|
+| `FORBIDDEN` | Seule la Direction générale peut enregistrer ce profil. |
+| `EMAIL_IN_USE` | Cette adresse e-mail est déjà utilisée. |
+| `AUTH_EMAIL_CHANGE_REQUIRED` | L'adresse d'un compte connecté doit être modifiée par la procédure Auth. |
+| `AUTH_ROLE_CHANGE_REQUIRED` | Le rôle d'un compte connecté doit être modifié par la procédure sécurisée. |
+| `CANNOT_DISABLE_CURRENT_DIRECTION` | Vous ne pouvez pas désactiver votre propre compte Direction. |
+| `PHOTO_MUST_BE_FILE_REFERENCE` | Téléversez la photo avant d'enregistrer le profil. |
+| `VALIDATION_ERROR` | Une information obligatoire est incorrecte. |
+| `DUPLICATE_USER` | Ce profil existe déjà. |
+
+## 2. Créer le compte de connexion Auth
 
 ### Fonction Edge déployée
 
 `invite-school-account`
 
 - JWT obligatoire.
-- Seule la Direction 1 (`role = direction`) peut l'appeler.
+- Seule Direction 1 (`role = direction`) peut l'appeler.
 - La clé `service_role` reste uniquement côté serveur.
-- Le compte cible doit déjà exister dans `public.users`.
+- Le compte cible doit déjà avoir été confirmé dans `public.users` par `save_school_user_profile`.
 - Le serveur crée une invitation courte, appelle Supabase Auth et laisse le trigger existant relier :
   - `auth.users` ;
   - `public.profiles` ;
@@ -45,8 +104,8 @@ const response = await fetch(
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      app_user_id: user.id,
-      email: user.email
+      app_user_id: savedUser.id,
+      email: savedUser.email
     })
   }
 );
@@ -72,7 +131,7 @@ if (!response.ok || result.ok !== true) {
 }
 ```
 
-### Codes à traduire dans l'interface
+### Codes à traduire
 
 | Code | Message utilisateur |
 |---|---|
@@ -86,7 +145,7 @@ if (!response.ok || result.ok !== true) {
 | `INVITE_FAILED` | L'invitation n'a pas pu être envoyée. Rien n'a été validé. |
 | `LINK_NOT_CONFIRMED` | Le compte Auth a été créé, mais sa liaison doit être contrôlée. |
 
-## 2. Enregistrement confirmé d'un élève
+## 3. Enregistrement confirmé d'un élève
 
 ### RPC déployée
 
@@ -106,7 +165,7 @@ if (!response.ok || result.ok !== true) {
   - photo sous forme de référence de fichier, jamais en base64 `data:`.
 - Elle renvoie la ligne réellement enregistrée par PostgreSQL.
 
-### Appel frontend avec Supabase JS
+### Appel frontend
 
 ```js
 const payload = {
@@ -158,7 +217,7 @@ const savedStudent = data.student;
 | `REFERENCE_NOT_FOUND` | Une classe ou un parent lié n'existe plus. |
 | `DUPLICATE_STUDENT` | Cet élève existe déjà. |
 
-## 3. Règle obligatoire pour tous les boutons Enregistrer
+## 4. Règle obligatoire pour tous les boutons Enregistrer
 
 Le frontend doit appliquer cet ordre :
 
@@ -171,7 +230,17 @@ Le frontend doit appliquer cet ordre :
 7. ne jamais effacer une erreur dans un `catch` vide ;
 8. ne jamais considérer une simple mise en file locale comme une sauvegarde terminée.
 
-## 4. Modification attendue dans le monolithe
+## 5. Ordre exact pour un profil avec connexion
+
+1. Appeler `save_school_user_profile`.
+2. Vérifier `data.ok === true`.
+3. Utiliser la ligne `data.user` retournée par PostgreSQL.
+4. Lorsque `data.requires_invitation === true`, appeler `invite-school-account`.
+5. Afficher le succès final seulement après `ACCOUNT_INVITED`.
+
+Un profil sans e-mail peut être une fiche interne, mais il ne doit pas être présenté comme un compte capable de se connecter.
+
+## 6. Modification attendue dans le monolithe
 
 Claude doit rechercher :
 
@@ -180,30 +249,27 @@ Claude doit rechercher :
 - la fonction de création/modification d'un utilisateur ;
 - les confirmations affichées avant la réponse serveur.
 
-Pour les élèves, remplacer l'écriture directe dans `students` par `save_student_profile`.
+Remplacements :
 
-Pour les comptes nécessitant une connexion, l'ordre est :
+- écriture directe dans `students` → `save_student_profile` ;
+- écriture directe dans `users` → `save_school_user_profile` ;
+- création d'un accès e-mail → `invite-school-account` après confirmation de la fiche.
 
-1. créer ou modifier la ligne `public.users` ;
-2. attendre sa confirmation ;
-3. appeler `invite-school-account` avec `app_user_id` et `email` ;
-4. afficher le succès uniquement lorsque `ACCOUNT_INVITED` est reçu.
-
-La création d'un profil sans e-mail peut rester une fiche locale dans `public.users`, mais elle ne doit pas être présentée comme un compte capable de se connecter.
-
-## 5. Tests déjà exécutés
+## 7. Tests déjà exécutés
 
 - Appel de l'Edge Function sans JWT : refus HTTP `401`.
 - Appel direct des fonctions d'invitation avec le rôle `authenticated` : permission refusée.
 - Acteur inexistant : réponse structurée `ACTOR_NOT_FOUND`.
-- Création d'un élève sous une session Direction : réussie.
-- Modification et relecture de cet élève : réussies.
-- Transaction de test annulée : aucune classe et aucun élève temporaire conservés.
+- Création puis modification d'une fiche enseignant sous une session Direction : réussies.
+- Création puis modification d'un élève sous une session Direction : réussies.
+- Relecture des valeurs confirmée depuis PostgreSQL.
+- Transactions de test annulées : aucun utilisateur, aucune classe et aucun élève temporaire conservés.
 
-## 6. Fichiers associés
+## 8. Fichiers associés
 
 - `supabase/functions/invite-school-account/index.ts`
 - `supabase/migrations/20260803180800_add_secure_account_invitation_contract.sql`
 - `supabase/migrations/20260803182000_add_confirmed_student_save_contract.sql`
+- `supabase/migrations/20260803184500_add_confirmed_school_user_save_contract.sql`
 
 Les migrations et la fonction Edge sont déjà appliquées sur le projet Supabase `lcnronymkccgyltttqry`. Les fichiers du dépôt servent de source versionnée et de contrat d'intégration.
