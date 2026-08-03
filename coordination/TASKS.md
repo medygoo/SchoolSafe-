@@ -56,13 +56,13 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [ ] Envoyer les fichiers avec la session JWT, jamais avec une clé R2.
 - [ ] Envoyer une `x-idempotency-key` stable de 8 à 128 caractères pour chaque tentative logique.
 - [ ] Réutiliser la même clé après une coupure réseau ou lorsque `retry_same_idempotency_key=true`.
-- [ ] Ne jamais appeler `r2-upload-test`, `r2-compression-self-test`, `r2-self-test`, `r2-role-self-test`, `r2-role-self-test-a`, `r2-role-self-test-b` ou `image-magick-diagnostic`.
+- [ ] Ne jamais appeler `r2-upload-test`, `r2-compression-self-test`, `r2-self-test`, `r2-role-self-test`, `r2-role-self-test-a`, `r2-role-self-test-b`, `image-magick-diagnostic` ou `r2-upload-v4-self-test`.
 - [ ] Ne jamais coder une année scolaire en dur.
 - [ ] Omettre `academic_year` ou utiliser la valeur fournie par le serveur.
 - [ ] En cas de réponse `409` sur l’année, afficher `current_academic_year` et recharger les paramètres.
 - [ ] Accepter côté sélection JPEG, PNG, WebP et PDF, avec source de 8 Mo maximum.
 - [ ] Afficher une erreur claire pour `413` : fichier trop lourd, dimensions trop grandes ou résultat final supérieur à 5 Mo.
-- [ ] Afficher une erreur claire pour `415` : contenu corrompu ou type déclaré incorrect.
+- [ ] Afficher une erreur claire pour `415` : contenu corrompu, image indécodable ou type déclaré incorrect.
 - [ ] Gérer `401`, `403`, `409`, `413`, `415` et `500` sans perdre la clé d’idempotence.
 - [ ] Lorsque `upload_committed=true`, ne pas envoyer une deuxième copie ; reprendre avec la même clé.
 - [ ] Afficher après réussite la taille source, la taille finale et le pourcentage économisé lorsque disponibles.
@@ -152,7 +152,7 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [x] Archivage transactionnel d’un dossier administratif et de toutes ses pièces.
 - [x] Service `r2-archives` Direction 1.
 - [x] Déploiement de `r2-files` version 5.
-- [x] Déploiement de `r2-upload` version 3 avec JWT obligatoire.
+- [x] Déploiement de `r2-upload` version 4 avec JWT obligatoire.
 - [x] Compression automatique JPEG/PNG/WebP avant R2.
 - [x] PDF transmis sans conversion.
 - [x] Profils de compression photo, identité, carte et document.
@@ -168,6 +168,8 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 - [x] Cycle Direction 1 validé : actif → archive → téléchargement archive → restauration → suppression.
 - [x] Gardien validé sans accès aux fichiers, aux téléchargements ou aux archives.
 - [x] Normalisation automatique de la devise administrative vide vers `USD`.
+- [x] Image réellement indécodable rejetée en HTTP `415` sans création d’objet R2.
+- [x] Validation ciblée `r2-upload` v4 : 4/4 contrôles réussis, image valide 133 → 100 octets et suppression réussie.
 - [x] Endpoints expérimentaux et fonctions de diagnostic remplacés par des réponses `410` protégées par JWT.
 - [x] Aucun compte, profil, invitation, fichier ou objet R2 temporaire conservé.
 
@@ -185,13 +187,14 @@ Ce fichier est la référence permanente pour la répartition du travail entre C
 
 ## Fonctions et actions disponibles
 
-### `r2-upload` version 3
+### `r2-upload` version 4
 
 - envoi obligatoire des nouveaux fichiers ;
 - compression d’images ;
 - transmission des PDF ;
 - métriques de stockage ;
-- reprise avec idempotence.
+- reprise avec idempotence ;
+- rejet `415` des images indécodables.
 
 ### `r2-files` version 5
 
