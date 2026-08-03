@@ -22,6 +22,10 @@ Ajoute le registre administratif, 18 types standards, les liaisons R2 vers `cahi
 
 Consolide les politiques et ajoute les index de performance.
 
+### `20260803070815_enable_pg_net_for_storage_jobs`
+
+Active `pg_net` pour les appels HTTP contrôlés utilisés par les tests de stockage et les futurs travaux planifiés côté serveur.
+
 ### `20260803075027_secure_r2_access_and_school_year`
 
 Ajoute la source unique de l’année scolaire, la validation du propriétaire/catégorie et les RLS des devoirs.
@@ -66,9 +70,15 @@ Ajoute :
 - contraintes de taille, dimensions et cohérence ;
 - index de suivi par année scolaire.
 
+## Documents administratifs
+
+### `20260803101640_normalize_administrative_document_currency`
+
+Normalise la devise des documents administratifs avant insertion ou modification : une valeur vide ou nulle devient `USD`, puis la devise est convertie en majuscules.
+
 ## État
 
-Toutes les migrations listées ont été appliquées avec succès dans Supabase. Les tests de contraintes ont été exécutés dans des transactions suivies d’un `ROLLBACK`. Aucune fausse donnée n’a été conservée.
+Toutes les migrations listées ont été appliquées avec succès dans Supabase. Les tests de contraintes ont été exécutés dans des transactions suivies d’un `ROLLBACK` ou avec un nettoyage complet. Aucune fausse donnée n’a été conservée.
 
 ## Règles
 
