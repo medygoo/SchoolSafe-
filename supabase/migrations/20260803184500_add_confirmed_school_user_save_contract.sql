@@ -1,0 +1,194 @@
+create or replace function public.save_school_user_profile(p_user jsonb)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_actor_id text := private.current_app_user_id();
+  v_actor_role text := private.current_app_role();
+  v_id text := btrim(coalesce(p_user->>'id', ''));
+  v_exists boolean;
+  v_current public.users%rowtype;
+  v_saved public.users%rowtype;
+  v_name text;
+  v_role text;
+  v_initials text;
+  v_phone text;
+  v_photo_url text;
+  v_email text;
+  v_status text;
+begin
+  if p_user is null or jsonb_typeof(p_user) <> 'object' then
+    return jsonb_build_object('ok', false, 'code', 'INVALID_PAYLOAD');
+  end if;
+
+  if v_actor_role <> 'direction' then
+    return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
+  end if;
+
+  if v_id = '' or length(v_id) > 160 then
+    return jsonb_build_object('ok', false, 'code', 'VALIDATION_ERROR', 'field', 'id');
+  end if;
+
+  select exists(select 1 from public.users where id = v_id) into v_exists;
+  if v_exists then
+    select * into v_current from public.users where id = v_id;
+  end if;
+
+  v_name := case
+    when p_user ? 'name' then nullif(btrim(coalesce(p_user->>'name', '')), '')
+    when v_exists then v_current.name
+    else null
+  end;
+  v_role := case
+    when p_user ? 'role' then nullif(btrim(coalesce(p_user->>'role', '')), '')
+    when v_exists then v_current.role
+    else null
+  end;
+  v_initials := case
+    when p_user ? 'initials' then nullif(btrim(coalesce(p_user->>'initials', '')), '')
+    when v_exists then v_current.initials
+    else null
+  end;
+  v_phone := case
+    when p_user ? 'phone' then nullif(btrim(coalesce(p_user->>'phone', '')), '')
+    when v_exists then v_current.phone
+    else null
+  end;
+  v_photo_url := case
+    when p_user ? 'photo_url' then nullif(btrim(coalesce(p_user->>'photo_url', '')), '')
+    when v_exists then v_current.photo_url
+    else null
+  end;
+  v_email := case
+    when p_user ? 'email' then nullif(lower(btrim(coalesce(p_user->>'email', ''))), '')
+    when v_exists then v_current.email
+    else null
+  end;
+  v_status := case
+    when p_user ? 'status' then nullif(btrim(coalesce(p_user->>'status', '')), '')
+    when v_exists then v_current.status
+    else 'active'
+  end;
+
+  if v_name is null or length(v_name) > 200 then
+    return jsonb_build_object('ok', false, 'code', 'VALIDATION_ERROR', 'field', 'name');
+  end if;
+
+  if v_role not in (
+    'direction', 'direction2', 'direction3',
+    'enseignant', 'enseignant_maternelle',
+    'parent', 'gardien'
+  ) then
+    return jsonb_build_object('ok', false, 'code', 'VALIDATION_ERROR', 'field', 'role');
+  end if;
+
+  if v_status not in ('active', 'disabled') then
+    return jsonb_build_object('ok', false, 'code', 'VALIDATION_ERROR', 'field', 'status');
+  end if;
+
+  if length(coalesce(v_initials, '')) > 20 then
+    return jsonb_build_object('ok', false, 'code', 'VALIDATION_ERROR', 'field', 'initials');
+  end if;
+  if length(coalesce(v_phone, '')) > 50 then
+    return jsonb_build_object('ok', false, 'code', 'VALIDATION_ERROR', 'field', 'phone');
+  end if;
+  if length(coalesce(v_photo_url, '')) > 2048 then
+    return jsonb_build_object('ok', false, 'code', 'VALIDATION_ERROR', 'field', 'photo_url');
+  end if;
+  if v_photo_url is not null and lower(v_photo_url) like 'data:%' then
+    return jsonb_build_object('ok', false, 'code', 'PHOTO_MUST_BE_FILE_REFERENCE');
+  end if;
+
+  if v_email is not null then
+    if length(v_email) > 320
+       or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
+      return jsonb_build_object('ok', false, 'code', 'VALIDATION_ERROR', 'field', 'email');
+    end if;
+
+    if exists(
+      select 1 from public.users
+      where id <> v_id
+        and email is not null
+        and lower(btrim(email)) = v_email
+    ) then
+      return jsonb_build_object('ok', false, 'code', 'EMAIL_IN_USE');
+    end if;
+
+    if exists(
+      select 1 from auth.users au
+      where au.email is not null
+        and lower(btrim(au.email)) = v_email
+        and (
+          not v_exists
+          or v_current.auth_user_id is null
+          or au.id <> v_current.auth_user_id
+        )
+    ) then
+      return jsonb_build_object('ok', false, 'code', 'EMAIL_IN_USE');
+    end if;
+  end if;
+
+  if v_exists and v_current.auth_user_id is not null then
+    if lower(coalesce(v_current.email, '')) <> lower(coalesce(v_email, '')) then
+      return jsonb_build_object('ok', false, 'code', 'AUTH_EMAIL_CHANGE_REQUIRED');
+    end if;
+
+    if v_current.role <> v_role then
+      return jsonb_build_object('ok', false, 'code', 'AUTH_ROLE_CHANGE_REQUIRED');
+    end if;
+  end if;
+
+  if v_id = v_actor_id and (v_role <> 'direction' or v_status <> 'active') then
+    return jsonb_build_object('ok', false, 'code', 'CANNOT_DISABLE_CURRENT_DIRECTION');
+  end if;
+
+  if v_exists then
+    update public.users
+    set name = v_name,
+        role = v_role,
+        initials = v_initials,
+        phone = v_phone,
+        photo_url = v_photo_url,
+        email = v_email,
+        status = v_status
+    where id = v_id
+    returning * into v_saved;
+  else
+    insert into public.users (
+      id, name, role, initials, phone, photo_url, email, status
+    ) values (
+      v_id, v_name, v_role, v_initials, v_phone, v_photo_url, v_email, v_status
+    )
+    returning * into v_saved;
+  end if;
+
+  if v_saved.auth_user_id is not null then
+    update public.profiles
+    set full_name = v_saved.name,
+        status = v_saved.status,
+        updated_at = now()
+    where id = v_saved.auth_user_id;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'code', case when v_exists then 'USER_UPDATED' else 'USER_CREATED' end,
+    'requires_invitation', (v_saved.auth_user_id is null and v_saved.email is not null),
+    'user', to_jsonb(v_saved)
+  );
+exception
+  when unique_violation then
+    return jsonb_build_object('ok', false, 'code', 'DUPLICATE_USER');
+  when foreign_key_violation then
+    return jsonb_build_object('ok', false, 'code', 'REFERENCE_NOT_FOUND');
+end;
+$$;
+
+revoke all on function public.save_school_user_profile(jsonb) from public, anon;
+grant execute on function public.save_school_user_profile(jsonb)
+to authenticated, service_role;
+
+comment on function public.save_school_user_profile(jsonb) is
+'Confirmed Direction-1-only SchoolSafe profile create/update contract. It never accepts auth_user_id or password fields and requires a separate server invitation for login access.';
