@@ -34,6 +34,7 @@ Date : 2026-08-03
 - `20260803082004_add_archive_summary_rpc`
 - `20260803082028_lock_archive_rpc_execution`
 - `20260803083125_index_archive_audit_foreign_keys`
+- `20260803083433_enforce_school_file_archive_audit`
 
 Les sources portent les mêmes versions dans `supabase/migrations/` sur la branche de travail.
 
@@ -56,7 +57,9 @@ Les sources portent les mêmes versions dans `supabase/migrations/` sur la branc
 - synchronisation transactionnelle d’un dossier administratif avec toutes ses pièces ;
 - consultation des archives uniquement par Direction 1 ;
 - résumé du nombre de fichiers et de la taille par année ;
-- URLs signées d’archive valables 300 secondes.
+- URLs signées d’archive valables 300 secondes ;
+- rejet de toute archive sans `archived_by` ;
+- rejet de toute restauration sans `restored_at` et `restored_by`.
 
 ## Code versionné
 
@@ -73,6 +76,9 @@ Les sources portent les mêmes versions dans `supabase/migrations/` sur la branc
 
 - cycle réel Cloudflare R2 : PUT, GET, contenu, taille, liste et suppression réussis ;
 - test transactionnel dossier administratif + pièce : archivage et restauration réussis ;
+- archive sans auteur refusée ;
+- restauration sans date et auteur refusée ;
+- transition auditée archive → restauration réussie ;
 - tous les tests de base suivis d’un `ROLLBACK` ;
 - endpoint `r2-archives` vérifié : absence de JWT refusée avec HTTP 401 ;
 - aucune fausse donnée conservée ;
