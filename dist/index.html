@@ -2288,6 +2288,7 @@ window.NAV = {
       {id:'devoirs_parent',i:'📚',l:'Devoirs'},
       {id:'palmares_parent',i:'🏆',l:'Palmarès'},
       {s:'Paiements & Services'},
+      {id:'frais_parent',i:'💳',l:'Frais scolaires'},
       {id:'recus_parent',i:'🧾',l:'Mes Reçus'},
       {id:'cantine_parent',i:'🍽️',l:'Cantine'},
       {id:'activites_parent',i:'⚽',l:'Activités'},
@@ -3535,6 +3536,7 @@ window.PT = {
   evaluations_ens:'Évaluations des enseignants',
   salaires:'Salaires & Fiches de paie',
   primes:'Primes Enseignants', fee_types:'Types de frais', mon_site:'Mon site web',
+  frais_parent:'Frais scolaires',
   paie:'Paie du Personnel',
   rapport_secope:'Rapport SECOPE/MEPSP',
   inscriptions:'Demandes d\'inscription',
@@ -7390,6 +7392,35 @@ function dashboardParent() {
 
   ${justifBanner}
   ${kidsHtml}
+
+  <!-- ══ SUIVI DE L'ENFANT — trois cartes de MÊME niveau visuel ══
+       Dossier du point 19 §2.1. Devoirs et Interrogations vivent dans la même
+       table, séparés par leur catégorie ; l'écran les rend en sections distinctes.
+       La carte des frais n'affiche AUCUN montant : il ne se lit que sur le
+       serveur, et une somme devinée ici serait pire que pas de somme. -->
+  <div class="dp-section" style="animation:fadeInUp .3s .1s ease both" role="region" aria-label="Suivi de l'enfant">
+    <div class="dp-section-head"><div class="dp-section-title">Suivi de l'enfant</div></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:2px 0 4px">
+      <div onclick="go('devoirs_parent')" role="button" tabindex="0" style="cursor:pointer;background:var(--card,#fff);border:1px solid var(--border);border-radius:15px;padding:14px 8px;text-align:center">
+        <div style="font-size:23px;line-height:1">📚</div>
+        <div style="font-size:21px;font-weight:800;margin-top:5px">${parentUpDevoirs.length}</div>
+        <div style="font-size:11px;color:var(--text-secondary);font-weight:600;margin-top:1px">Devoirs</div>
+        <div style="font-size:9.5px;color:var(--text-muted);margin-top:2px">à remettre</div>
+      </div>
+      <div onclick="go('devoirs_parent')" role="button" tabindex="0" style="cursor:pointer;background:var(--card,#fff);border:1px solid var(--border);border-radius:15px;padding:14px 8px;text-align:center">
+        <div style="font-size:23px;line-height:1">📝</div>
+        <div style="font-size:21px;font-weight:800;margin-top:5px">${parentUpExams.length}</div>
+        <div style="font-size:11px;color:var(--text-secondary);font-weight:600;margin-top:1px">Interrogations</div>
+        <div style="font-size:9.5px;color:var(--text-muted);margin-top:2px">programmées</div>
+      </div>
+      <div onclick="go('frais_parent')" role="button" tabindex="0" style="cursor:pointer;background:var(--card,#fff);border:1px solid var(--border);border-radius:15px;padding:14px 8px;text-align:center">
+        <div style="font-size:23px;line-height:1">💳</div>
+        <div style="font-size:13px;font-weight:800;margin-top:9px;color:#6f44ab">Consulter</div>
+        <div style="font-size:11px;color:var(--text-secondary);font-weight:600;margin-top:3px">Frais scolaires</div>
+        <div style="font-size:9.5px;color:var(--text-muted);margin-top:2px">solde et reçus</div>
+      </div>
+    </div>
+  </div>
 
   <div class="hqa-wrap" style="margin:4px 0 16px">
     <div class="hqa-ttl">⚡ Accès rapides</div>
@@ -12932,6 +12963,173 @@ window.printFicheInscription = (sid) => {
     ${_officialFooter('Direction Générale','Administration')}
   </div>`;
   dlPDF(html,`fiche_inscription_${s.name.replace(/\s+/g,'_')}.pdf`);
+};
+
+
+// ════════════════════════════════════════════════════════════════════════════
+//  FRAIS SCOLAIRES — espace Parent
+//
+//  Contrat : get_parent_fee_summary(p_sid) — RPC_REGISTRE §4, formes exactes
+//  dans API_CONTRACTS_V1 §3, parcours éprouvé dans J2_J3_VALIDATION §3.
+//
+//  LA règle : le serveur décide, l'interface affiche. Aucun solde n'est
+//  recalculé ici. Le modèle précédent — un booléen par trimestre — traitait
+//  une famille ayant versé 80 % EXACTEMENT comme une famille n'ayant rien
+//  versé : sur le jeu de 350, cela fait 141 familles sur 350.
+//
+//  Et `access_status` prime sur `status` : un solde `overdue` peut très bien
+//  s'accompagner d'un accès `orient`, quand l'école n'a pas activé le blocage.
+//  On n'en déduit donc jamais l'accès à partir du solde.
+// ════════════════════════════════════════════════════════════════════════════
+
+window._fraisCache = {};        // sid → réponse serveur
+window._fraisEnCours = null;
+
+const _FRAIS_ETAT = {
+  up_to_date:  {l:'À jour',            c:'#1f9d6b', bg:'#d8f3e6'},
+  due_soon:    {l:'Échéance proche',   c:'#205fae', bg:'#dbeafe'},
+  pending:     {l:'En attente',        c:'#5e6c78', bg:'#eef0f3'},
+  partial:     {l:'Partiellement réglé',c:'#d98a2b', bg:'#fdeccd'},
+  overdue:     {l:'En retard',         c:'#dc2626', bg:'#fee2e2'},
+  exception:   {l:'Dérogation active', c:'#8255c4', bg:'#f0e9fa'},
+  blocked:     {l:'Bloqué',            c:'#991b1b', bg:'#fee2e2'},
+  unavailable: {l:'Indisponible',      c:'#5e6c78', bg:'#eef0f3'},
+};
+const _OBLIG_ETAT = {
+  paid:    {l:'Réglé',   c:'#1f9d6b', bg:'#d8f3e6'},
+  partial: {l:'Partiel', c:'#d98a2b', bg:'#fdeccd'},
+  pending: {l:'À venir',  c:'#5e6c78', bg:'#eef0f3'},
+  overdue: {l:'En retard',c:'#dc2626', bg:'#fee2e2'},
+};
+// Une couleur ne porte jamais seule un état : chacun porte aussi son mot.
+
+const _fmtDate = d => { try { return d ? new Date(d).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}) : '—'; } catch(_) { return d||'—'; } };
+const _fmtMt = (m, dev) => (dev||'') + ' ' + Number(m||0).toLocaleString('fr-FR', {minimumFractionDigits:0, maximumFractionDigits:2});
+
+window.chargerFraisEnfant = async (sid) => {
+  if (!sid) return;
+  window._fraisEnCours = sid;
+  if (!window.DB_ONLINE) { _fraisCache[sid] = {_hors_ligne:true}; render(); return; }
+  _fraisCache[sid] = {_chargement:true}; render();
+  const r = await _rpc('get_parent_fee_summary', { p_sid: sid });
+  _fraisCache[sid] = r.ok ? r.data : { _erreur: _codeMsg(r.code) };
+  render();
+};
+
+R.frais_parent = () => {
+  const _g = _requireRole('parent'); if (_g) return _g;
+  const kids = (DB.students||[]).filter(s => s.pid === S.user.id);
+  if (!kids.length) return `<div style="text-align:center;padding:60px;color:var(--text-muted)">
+    <div style="font-size:56px;margin-bottom:14px">👶</div>Aucun enfant rattaché à votre compte.</div>`;
+
+  // Le lien parent-enfant est revérifié à CHAQUE rendu : le menu ne propose
+  // que ses enfants, mais il est reconstruit à chaque fois — on revérifie
+  // plutôt que de faire confiance au DOM.
+  let sid = window._fraisEnCours;
+  if (!sid || !kids.some(k => k.id === sid)) sid = kids[0].id;
+  const kid = kids.find(k => k.id === sid);
+  const d = _fraisCache[sid];
+  if (d === undefined) { setTimeout(() => chargerFraisEnfant(sid), 0); }
+
+  const selecteur = kids.length > 1 ? `
+    <div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;-webkit-overflow-scrolling:touch">
+      ${kids.map(k => `<button onclick="chargerFraisEnfant('${esc(k.id)}')"
+        style="flex:0 0 auto;padding:9px 15px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid ${k.id===sid?'#9b6fd4':'var(--border)'};background:${k.id===sid?'#f0e9fa':'transparent'};color:${k.id===sid?'#6f44ab':'var(--text-secondary)'}">
+        ${esc(k.name)}</button>`).join('')}
+    </div>` : '';
+
+  const entete = `
+    <div class="ww-toolbar" style="animation:fadeInUp .3s ease both">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#9b6fd4,#6f44ab);display:flex;align-items:center;justify-content:center;font-size:19px">💳</div>
+        <div><div style="font-size:16px;font-weight:800">Frais scolaires</div>
+             <div style="font-size:11px;color:var(--text-muted)">${esc(kid?.name||'')}</div></div>
+      </div>
+    </div>${selecteur}`;
+
+  const cadre = corps => `<div style="padding:0 0 80px">${entete}${corps}
+    <div style="margin-top:18px;padding:14px 16px;background:var(--surface-2, #f4f6f8);border-radius:14px;font-size:12.5px;color:var(--text-secondary);line-height:1.7">
+      Pour toute correction, contactez la <strong>Caisse</strong> ou la <strong>Direction</strong> de l'école.
+    </div></div>`;
+
+  if (!d || d._chargement) return cadre(`<div style="text-align:center;padding:50px;color:var(--text-muted)">Chargement…</div>`);
+  if (d._hors_ligne)       return cadre(`<div style="text-align:center;padding:44px;color:var(--text-muted)">
+      <div style="font-size:40px;margin-bottom:12px">📡</div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Hors ligne</div>
+      <div style="font-size:13px">Le montant dû se lit sur le serveur. Reconnectez-vous pour le consulter.</div></div>`);
+  if (d._erreur)           return cadre(`<div style="text-align:center;padding:44px;color:var(--text-muted)">
+      <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">${esc(d._erreur)}</div></div>`);
+  if (d.student_found === false) return cadre(`<div style="text-align:center;padding:44px;color:var(--text-muted)">Aucun dossier de frais pour cet enfant.</div>`);
+
+  const et = _FRAIS_ETAT[d.status] || _FRAIS_ETAT.unavailable;
+  const totaux = Array.isArray(d.totals_by_currency) ? d.totals_by_currency : [];
+  const oblig  = Array.isArray(d.obligations) ? d.obligations : [];
+  const recus  = Array.isArray(d.receipts) ? d.receipts : [];
+
+  // ── Résumé ────────────────────────────────────────────────────────────────
+  const resume = `
+  <div style="background:var(--card, #fff);border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <span style="padding:6px 13px;border-radius:20px;font-size:13px;font-weight:800;background:${et.bg};color:${et.c}">${et.l}</span>
+      ${d.next_due_date ? `<span style="font-size:12px;color:var(--text-secondary)">Prochaine échéance : <strong>${_fmtDate(d.next_due_date)}</strong></span>` : ''}
+    </div>
+    ${totaux.length ? totaux.map(t => `
+      <div style="margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
+          <div><div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Exigible</div>
+               <div style="font-size:17px;font-weight:800">${esc(_fmtMt(t.amount_due, t.currency))}</div></div>
+          <div><div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Réglé</div>
+               <div style="font-size:17px;font-weight:800;color:#1f9d6b">${esc(_fmtMt(t.amount_paid, t.currency))}</div></div>
+          <div><div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Reste dû</div>
+               <div style="font-size:17px;font-weight:800;color:${Number(t.balance)>0?'#dc2626':'#1f9d6b'}">${esc(_fmtMt(t.balance, t.currency))}</div></div>
+        </div>
+        ${(() => { const du=Number(t.amount_due)||0, pa=Number(t.amount_paid)||0;
+          const pct = du > 0 ? Math.min(100, Math.round(pa/du*100)) : 0;
+          return `<div style="margin-top:10px"><div style="height:8px;border-radius:8px;background:var(--surface-2,#e9edf1);overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#1f9d6b,#34d399)"></div></div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:5px;text-align:right">${pct}% réglé</div></div>`; })()}
+      </div>`).join('')
+      : `<div style="text-align:center;padding:14px;color:var(--text-muted);font-size:13px">Aucun frais enregistré pour cette année.</div>`}
+    ${d.exception_until ? `<div style="margin-top:10px;padding:11px 13px;background:#f0e9fa;border-radius:11px;font-size:12.5px;color:#6f44ab">
+      Dérogation accordée par la Direction jusqu'au <strong>${_fmtDate(d.exception_until)}</strong>.</div>` : ''}
+  </div>`;
+
+  // ── Échéancier ────────────────────────────────────────────────────────────
+  const echeancier = `
+  <div style="margin-bottom:14px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:9px">Échéancier</div>
+    ${oblig.length ? oblig.map(o => { const oe = _OBLIG_ETAT[o.status] || _OBLIG_ETAT.pending; return `
+      <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--border);border-radius:13px;margin-bottom:7px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:13.5px">${esc(o.label || 'Frais')}${o.installment_no ? ` · tranche ${esc(String(o.installment_no))}` : ''}</div>
+          <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">Échéance ${_fmtDate(o.due_date)}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:13.5px;font-weight:800">${esc(_fmtMt(o.amount_paid, o.currency))} <span style="color:var(--text-muted);font-weight:600">/ ${esc(_fmtMt(o.amount_due, o.currency))}</span></div>
+          <span style="display:inline-block;margin-top:3px;padding:2px 9px;border-radius:9px;font-size:10.5px;font-weight:700;background:${oe.bg};color:${oe.c}">${oe.l}</span>
+        </div>
+      </div>`; }).join('')
+      : `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;background:var(--card,#fff);border:1px solid var(--border);border-radius:13px">Aucune échéance enregistrée.</div>`}
+  </div>`;
+
+  // ── Reçus ─────────────────────────────────────────────────────────────────
+  const listeRecus = `
+  <div>
+    <div style="font-size:13px;font-weight:800;margin-bottom:9px">Reçus</div>
+    ${recus.length ? recus.map(rc => `
+      <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--border);border-radius:13px;margin-bottom:7px;${rc.status==='reversed'?'opacity:.6':''}">
+        <div style="width:34px;height:34px;border-radius:10px;background:#d8f3e6;color:#1f9d6b;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">🧾</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:13px;font-family:monospace">${esc(rc.receipt_no || '—')}</div>
+          <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">${_fmtDate(rc.payment_date)}${rc.payment_method ? ' · ' + esc(rc.payment_method) : ''}${rc.status==='reversed' ? ' · <strong>annulé</strong>' : ''}</div>
+        </div>
+        <div style="font-weight:800;font-size:14px;flex-shrink:0">${esc(_fmtMt(rc.amount, rc.currency))}</div>
+      </div>`).join('')
+      : `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;background:var(--card,#fff);border:1px solid var(--border);border-radius:13px">Aucun versement enregistré pour le moment.</div>`}
+  </div>`;
+
+  return cadre(resume + echeancier + listeRecus);
 };
 
 R.recus_parent = () => {
