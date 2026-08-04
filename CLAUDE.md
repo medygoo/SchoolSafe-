@@ -584,7 +584,7 @@ npm run audit        # tout d'un coup
 | `audits.mjs` | **les lance tous**, même quand l'un échoue — `npm run audit` |
 | `verif-coherence.mjs` | la chaîne de calcul, **exécutée** |
 | `audit-writes.mjs` | les écritures dont l'échec est invisible |
-| `audit-schema.mjs` | code ↔ SQL — **ne s'applique que s'il y a une base** |
+| `audit-schema.mjs` | code ↔ SQL — lit `supabase/migrations`, et **dit ce qu'il ne peut pas vérifier** |
 | `audit-portee-parent.mjs` | de quelles données un rôle a-t-il réellement besoin |
 
 **Dans un nouveau dépôt, commencer par les lancer.** Leur sortie *est* la liste
@@ -612,7 +612,28 @@ Trois principes appris en les écrivant :
    Trois lignes au lieu de neuf reproches. Une leçon écrite ne se retient pas
    toute seule : il faut la relire quand on écrit un outil.
 
-4. **Un enchaînement `&&` d'audits est un filet troué.** `npm run audit`
+4. **Un audit qui se trompe de source n'en trouve pas moins — il en invente.**
+   `audit-schema` cherchait six fichiers SQL nommés en dur : ceux de l'AUTRE
+   installation, absents d'ici. Il comparait donc 306 écritures à un schéma
+   **vide** et annonçait « 49 problèmes » — quarante-neuf tables parfaitement
+   normales, déclarées introuvables. On aurait pu passer une journée à
+   « réparer » le code contre un néant.
+
+   Réparé le 4 août 2026 : il lit `supabase/migrations`, dans l'ordre
+   chronologique. Et il a fallu lui apprendre la distinction qui décide de
+   tout — **une table n'est vérifiable colonne par colonne que si le dépôt
+   porte son `CREATE TABLE`.** Trois colonnes ajoutées par un `ALTER` à une
+   table créée ailleurs ne disent rien des trente autres : les prendre pour
+   le schéma complet ferait déclarer « absentes » toutes celles qu'on ne voit
+   pas. La même faute, dans l'autre sens.
+
+   D'où **trois verdicts et non deux** : des écarts trouvés · rien à comparer ·
+   conforme. Aujourd'hui c'est le deuxième — 49 tables sur 49 hors de portée,
+   parce que le schéma de fond vit dans le projet Supabase et n'a jamais été
+   déposé ici. L'outil le dit en toutes lettres et **sort en échec** : un « ✓ »
+   posé sur un angle mort serait le pire des mensonges.
+
+5. **Un enchaînement `&&` d'audits est un filet troué.** `npm run audit`
    s'arrêtait au troisième outil, en panne depuis une reprise du harnais —
    **donc l'emblème, la charte, les signatures et les contrastes n'étaient plus
    vérifiés du tout**, sans que rien ne le dise. C'est la faute que ces outils
