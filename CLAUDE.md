@@ -293,6 +293,17 @@ navigateur choisirait ne vaudrait rien.
 Corrigé au passage : l'autorité du reçu de versement était **la caissière
 elle-même**. La caissière n'est pas sa propre autorité.
 
+Même famille, trouvée le même jour sur les **fiches de paie** : elles portaient
+« Bénéficiaire — <nom> » et « Direction — <nom de l'ÉCOLE> ». La seconde case
+nommait l'école, donc personne, et **aucune case ne revenait à celui qui avait
+établi la paie** — sur un document où quelqu'un décide d'un montant versé à un
+employé. Les deux fiches sont passées sur le pied commun, avec le bénéficiaire
+nommé, l'auteur résolu depuis `sal.by`, et une autorité qui est une personne.
+
+À retenir : **`salaries` enregistre son auteur, `payments` ne l'enregistre
+pas.** La même question, deux réponses opposées selon la table — c'est le
+symptôme à décrire à ChatGPT, pas à corriger soi-même.
+
 **Et un piège trouvé en le faisant :** `dist/index.html` porte en dur une vraie
 signature manuscrite (`window.SCHOOL_SIGNATURE`, ~40 Ko). Elle n'est pas un
 exemple : c'est le **repli**. Une installation qui n'a rien téléversé imprime

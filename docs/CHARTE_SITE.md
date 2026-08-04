@@ -517,3 +517,67 @@ enregistrée, la décision est prise, on continue.
 Ce que ce lot y ajoute, et qui répond à la préoccupation d'origine : **le visa
 pré-imprimé ne peut plus couvrir seul un acte**, puisque la colonne du milieu
 nomme celui qui l'a établi, avec son profil et la date.
+
+---
+
+# 11. Les fiches de paie · 4 août 2026
+
+Demande de Loms : *« les fiches de paie doivent avoir la charte de couleur et
+la signature. »*
+
+## 11.1 La couleur
+
+Les deux fiches passaient l'audit de charte — mais parce que l'outil accepte
+les **gris neutres**, qu'il ne peut pas distinguer d'un choix délibéré. Elles
+portaient encore la grisaille par défaut d'un cadre HTML :
+
+| ancienne | nouvelle |
+|---|---|
+| `#374151` | `#1a2228` — l'encre |
+| `#6b7280` | `#5e6c78` — le gris de texte |
+| `#9ca3af` | `#8896a2` — le gris éclairci |
+| `#e5e7eb` | `#dadee2` — les filets |
+| `#f0f4ff` `#eaf3fc` | `#f0f1f2` — le fond clair |
+
+Un gris de texte ne dit aucun état : il dit seulement « secondaire ». Il n'est
+donc pas sémantique, et il prend la charte.
+
+Restent hors charte, et c'est voulu : le **vert du versé**, le **rouge des
+retenues**, l'**ambre de l'attente**. Elles disent un état.
+
+## 11.2 La signature — elle ne nommait personne
+
+Les deux fiches portaient **deux cases** :
+
+```
+Bénéficiaire — Josué Tshimanga        Direction — Complexe Scolaire Le Sage
+```
+
+La seconde nomme **l'école**, donc personne. Et **aucune case pour celui qui a
+établi la paie** — sur un document où quelqu'un décide d'un montant versé à un
+employé, c'est la case qui compte le plus.
+
+Les deux fiches passent maintenant sur le **pied officiel commun** — *une seule
+réponse par question* — avec trois signataires nommés :
+
+```
+   Lu et approuvé            Établi par              Visa & cachet
+   Josué Tshimanga           Espérance Kabongo       Mme Grâce Mbuyi
+   Enseignant(e)·Bénéficiaire  Caisse · 31/08/2026     Direction Générale
+```
+
+- **le bénéficiaire est nommé, avec son profil** — c'est lui qui acquitte ;
+  laisser la case vide reviendrait à faire signer n'importe qui ;
+- **l'auteur est enregistré**, résolu depuis `sal.by`, avec la date de
+  versement. `salaries` écrit bien `by: S.user.id` — la donnée existait, elle
+  n'était simplement pas lue ;
+- **l'autorité est une personne** de la Direction, plus le nom de l'école.
+
+Le pied officiel accepte pour cela un quatrième paramètre, `beneficiaire`.
+
+## 11.3 Ce que ce lot confirme
+
+`salaries` enregistre son auteur ; `payments` ne l'enregistre pas. **La même
+question, deux réponses opposées selon la table.** C'est exactement la demande
+P0-1 adressée à ChatGPT dans `coordination/DEMANDES_A_CHATGPT.md` : la fiche de
+paie sait dire qui a versé, le reçu de frais ne le sait pas.
