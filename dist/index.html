@@ -2557,6 +2557,20 @@ window._rpc = async (name, params) => {
 };
 
 // Appelle une Edge Function avec le JWT de la session. Même forme de retour.
+// Certaines RPC rendent leur résultat SANS l'enveloppe { ok, data, code } du
+// registre §8 : record_entry_scan et record_exit_scan répondent
+// { recorded:true, ... } ou une raison. _rpc() les prendrait pour un refus.
+// Celle-ci rend la donnée brute ; c'est l'appelant qui l'interprète.
+// (Ambiguïté signalée à ChatGPT — en attendant, on ne devine pas.)
+window._rpcData = async (name, params) => {
+  if (!window._authClient) return null;
+  try {
+    const { data, error } = await window._authClient.rpc(name, params);
+    if (error) { console.warn('[RPC]', name, error.message); return null; }
+    return data;
+  } catch (e) { console.warn('[RPC]', name, e && e.message); return null; }
+};
+
 window._edgeFn = async (name, body) => {
   if (!window._authClient) return { ok:false, code:'AUTH_REQUIRED' };
   try {
@@ -16071,6 +16085,34 @@ window.manualScanEntry = () => {
 window._cacheAcces = {};
 const _ACCES_TTL = 5 * 60 * 1000;
 
+// Le passage s'enregistre PAR LE SERVEUR quand il répond, et par la file
+// quand il ne répond pas. Un gardien au portail doit pouvoir travailler hors
+// ligne — mais l'écran ne dit jamais « enregistré » pour une opération qui
+// n'est encore que dans la file.
+window._enregistrerPassage = async (rpc, params, logLocal) => {
+  // Exposée globalement et elle écrit : elle vérifie donc le rôle elle-même.
+  // Les mêmes que private.can_scan() côté serveur — le parent en est exclu.
+  if (_denyRole('direction','direction2','direction3','enseignant','gardien'))
+    return { ok:false, raison:'forbidden' };
+  if (window.DB_ONLINE) {
+    const d = await _rpcData(rpc, params);
+    if (d && d.recorded === true) {
+      // La ligne rendue par le serveur fait foi ; on garde toutefois notre
+      // identifiant si le serveur n'en renvoie pas, car l'écran s'en sert
+      // ensuite pour rattacher l'accompagnant.
+      const rec = { ...logLocal, ...d, id: d.id || logLocal.id };
+      (DB.scan_log = DB.scan_log||[]).unshift(rec);
+      return { ok:true, serveur:true, data:d, rec };
+    }
+    if (d && d.reason) return { ok:false, raison:d.reason };
+    // Le serveur n'a pas répondu : on retombe sur la file plutôt que de perdre
+    // le passage. C'est un gardien devant un portail, pas un formulaire.
+  }
+  (DB.scan_log = DB.scan_log||[]).unshift(logLocal);
+  pushSync('scan_log','post',logLocal);
+  return { ok:true, serveur:false, rec: logLocal };
+};
+
 window._statutPortail = async (sid) => {
   const c = window._cacheAcces[sid];
   if (c && (Date.now() - c.at) < _ACCES_TTL) return c.r;
@@ -16222,7 +16264,6 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
     saveToCrypt(); return;
   }
 
-  const hasPaid=(DB.payments||[]).some(p=>p.sid===student.id&&p.paid);
 
   // Get arrival level
   const res=getArrivalStatus(cycle);
@@ -16233,10 +16274,17 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
     const att={id:_uid('a_'),sid:student.id,date:today(),arr_time:time,status:'ontime',school_id:window._currentSchoolId||null};
     (DB.attendance=DB.attendance||[]).push(att); pushSync('attendance','post',att);
     const log={id:_uid('sl_'),sid:student.id,date:today(),time,name:student.name,status:'ontime',label:'À l\'heure',type:'entry',by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role};
-    (DB.scan_log=DB.scan_log||[]).unshift(log); pushSync('scan_log','post',log);
+    const _r = await _enregistrerPassage('record_entry_scan',
+      { p_sid:student.id, p_status:'ontime', p_arr_time:time, p_manual:false }, log);
+    if (!_r.ok) { showScanResult('red','✕','Entrée refusée',student.name,
+      _r.raison==='duplicate' ? 'Déjà enregistré aujourd\'hui' :
+      _r.raison==='unknown_student' ? 'Élève inconnu du serveur' : 'Refusé par le serveur', time); return; }
     if(student.pid) await pushNotif(student.pid,`✅ ${student.name} est arrivé(e) à l'heure à ${time}`);
-    if(!hasPaid) showScanResult('orange','!','Entré — Frais en retard',student.name,(cls?cls.name+' — ':'')+'Entrée autorisée · frais non réglés',time,log.id,student.id);
-    else showScanResult(_qrWarn?'orange':'green',_qrWarn?'⚠':'✓',_qrWarn?'À l\'heure — Carte non certifiée':'À l\'heure',student.name,(cls?cls.name:'')+(_qrWarn?' — '+_qrWarn:''),time,log.id,student.id);
+    // Le `else` qui était ici pendait d'un `if(!hasPaid)` retiré avec la fuite
+    // financière : l'écran de succès ne s'affichait plus QUE pour les élèves
+    // sans parent enregistré. Du JavaScript parfaitement valide, donc invisible
+    // au contrôle de syntaxe — c'est la même famille que les pages blanches.
+    showScanResult(_qrWarn?'orange':'green',_qrWarn?'⚠':'✓',_qrWarn?'À l\'heure — Carte non certifiée':'À l\'heure',student.name,(cls?cls.name:'')+(_qrWarn?' — '+_qrWarn:''),time,log.id,student.id);
     saveToCrypt();
     return;
   }
@@ -16246,7 +16294,10 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
     const att={id:_uid('a_'),sid:student.id,date:today(),arr_time:time,status:'late',school_id:window._currentSchoolId||null};
     (DB.attendance=DB.attendance||[]).push(att); pushSync('attendance','post',att);
     const log={id:_uid('sl_'),sid:student.id,date:today(),time,name:student.name,status:'late',label:'Retard léger ⚠️',type:'entry',by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role};
-    (DB.scan_log=DB.scan_log||[]).unshift(log); pushSync('scan_log','post',log);
+    const _r = await _enregistrerPassage('record_entry_scan',
+      { p_sid:student.id, p_status:'late', p_arr_time:time, p_manual:false }, log);
+    if (!_r.ok) { showScanResult('red','✕','Entrée refusée',student.name,
+      _r.raison==='duplicate' ? 'Déjà enregistré aujourd\'hui' : 'Refusé par le serveur', time); return; }
     if(student.pid) await pushNotif(student.pid,`⚠️ ${student.name} est arrivé(e) en retard à ${time}`);
     showScanResult('orange','!','Retard léger',student.name,`${cls?cls.name+' — ':''}L'enfant entre, retard enregistré${_qrWarn?' — '+_qrWarn:''}`,time,log.id,student.id);
     saveToCrypt();
@@ -16439,7 +16490,13 @@ window.confirmExitWith = async (sid,personIdx) => {
   const log={id:_uid('sl_'),sid,name:s.name,type:'exit',status:'authorized',label:`Sortie avec ${a.name} ✅`,time,date:today(),
     by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role,
     escort_kind:(a.relation||'').includes('Parent principal')?'parent':'autorisee', escort_id:a.id||null, escort_name:a.name};
-  (DB.scan_log=DB.scan_log||[]).unshift(log); pushSync('scan_log','post',log);
+  const _rx = await _enregistrerPassage('record_exit_scan',
+    { p_sid:sid, p_escort_kind:log.escort_kind, p_escort_id:log.escort_id,
+      p_escort_name:log.escort_name, p_manual:false }, log);
+  if (!_rx.ok) { showExitDone('red','✕','Sortie refusée',s.name,
+    _rx.raison==='missing_entry' ? "Aucune entrée enregistrée aujourd'hui" :
+    _rx.raison==='duplicate' ? 'Sortie déjà enregistrée' :
+    _rx.raison==='invalid_escort' ? "Cet accompagnant n'est pas autorisé" : 'Refusé par le serveur', nowTime()); return; }
   if(s.pid) await pushNotif(s.pid,`🚪 ${s.name} a quitté l'école à ${time}. Récupéré(e) par ${a.name}${a.relation?' ('+a.relation+')':''}. Confirmé par : ${S.user.name}`);
   showExitDone('green','✅','Sortie autorisée',s.name,`Récupéré par ${a.name} (${a.relation||''})`,time);
   toast(`${s.name} — Sortie avec ${a.name} ✅`,'success');
