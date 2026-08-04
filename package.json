@@ -1,0 +1,25 @@
+{
+  "name": "schoolsafe-audits",
+  "private": true,
+  "type": "module",
+  "description": "Outils d'audit SchoolSafe — s'exécutent sans navigateur, ne modifient rien.",
+  "scripts": {
+    "audit": "node tools/audits.mjs",
+    "audit:detail": "node tools/audits.mjs --detail",
+    "audit:portee": "node tools/audit-portee.mjs",
+    "audit:invariant": "node tools/audit-invariant.mjs",
+    "audit:gardes": "node tools/audit-gardes.mjs",
+    "audit:mort": "node tools/audit-mort.mjs",
+    "audit:writes": "node tools/audit-writes.mjs",
+    "audit:coherence": "node tools/verif-coherence.mjs",
+    "audit:logo": "node tools/audit-logo.mjs",
+    "audit:charte": "node tools/audit-charte.mjs",
+    "audit:signature": "node tools/audit-signature.mjs",
+    "audit:contraste": "node tools/audit-contraste-site.mjs",
+    "audit:schema": "node tools/audit-schema.mjs"
+  },
+  "devDependencies": {
+    "acorn": "^8.12.0",
+    "acorn-walk": "^8.3.0"
+  }
+}
