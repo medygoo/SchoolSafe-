@@ -2539,6 +2539,11 @@ window._CODE_MSG = {
   ALREADY_LINKED:                   "Ce profil possède déjà un compte de connexion.",
   INVITE_FAILED:                    "L'invitation n'a pas pu être envoyée. Rien n'a été validé.",
   LINK_NOT_CONFIRMED:               "Le compte Auth a été créé, mais sa liaison doit être contrôlée.",
+  // Contrepassation d'un paiement — J6_BACKEND_FINANCE_ARCHIVE_VALIDATION §3
+  '23514':                          "Ce paiement est déjà annulé, ou n'est plus disponible.",
+  PAYMENT_NOT_FOUND:                "Ce paiement est introuvable.",
+  PAYMENT_NOT_CONFIRMED:            "Seul un paiement confirmé peut être annulé.",
+  REASON_REQUIRED:                  "Indiquez un motif de 5 à 500 caractères.",
 };
 window._codeMsg = code => window._CODE_MSG[code] || ('Erreur serveur : ' + (code || 'inconnue'));
 
@@ -13100,6 +13105,9 @@ window._blocsFrais = (d) => {
           <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px">${_fmtDate(rc.payment_date)}${rc.payment_method ? ' · ' + esc(rc.payment_method) : ''}${rc.status==='reversed' ? ' · <strong>annulé</strong>' : ''}</div>
         </div>
         <div style="font-weight:800;font-size:14px;flex-shrink:0">${esc(_fmtMt(rc.amount, rc.currency))}</div>
+        ${(rc.status==='confirmed' && S.user && ['direction','direction3'].includes(S.user.role))
+          ? `<button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626;flex-shrink:0"
+               onclick="annulerVersement('${esc(rc.id)}','${esc(rc.receipt_no||'')}')">Annuler</button>` : ''}
       </div>`).join('')
       : `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;background:var(--card,#fff);border:1px solid var(--border);border-radius:13px">Aucun versement enregistré pour le moment.</div>`}
   </div>`;
@@ -13193,6 +13201,54 @@ window.enregistrerVersement = async () => {
     // On relit le dossier : le solde qui s'affiche est celui du serveur, pas
     // celui qu'on aurait déduit en soustrayant le versement.
     await controlerFrais(sid);
+  } finally { restore(); }
+};
+
+// Contrepassation d'un paiement — reverse_payment_transaction.
+//
+// Le paiement n'est JAMAIS supprimé : son statut devient `reversed`, et le reçu
+// reste visible. Une école doit pouvoir dire ce qu'elle a encaissé ET ce
+// qu'elle a annulé ; un reçu qui disparaît est un reçu qu'on soupçonne.
+//
+// Le motif est obligatoire côté serveur — 5 à 500 caractères. On le demande
+// donc avant d'appeler, plutôt que d'essuyer un refus.
+window.annulerVersement = (transactionId, recu) => {
+  if (_denyRole('direction','direction3')) return;
+  openM('Annuler ce paiement', `
+    <div style="padding:4px 0">
+      <div style="padding:12px 14px;background:#fef3c7;border-radius:12px;font-size:12.5px;color:#92400e;line-height:1.6;margin-bottom:14px">
+        Le paiement <strong style="font-family:monospace">${esc(recu||transactionId)}</strong> ne sera pas supprimé :
+        il restera visible avec la mention « annulé ». L'école doit pouvoir dire ce qu'elle a
+        encaissé <em>et</em> ce qu'elle a annulé.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Motif de l'annulation <span style="color:#ef5b5b">*</span></label>
+        <input class="form-input" id="cf_motif" placeholder="Ex : erreur de saisie sur le montant" maxlength="500">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:5px">Entre 5 et 500 caractères. Il sera conservé au journal.</div>
+      </div>
+    </div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Renoncer</button>
+     <button class="btn btn-danger" id="cf_conf_annul" onclick="_confirmerAnnulation('${esc(transactionId)}')">Annuler le paiement</button>`);
+};
+
+window._confirmerAnnulation = async (transactionId) => {
+  const motif = ($('cf_motif')?.value || '').trim();
+  if (motif.length < 5)   { markFieldError('cf_motif','Motif trop court — 5 caractères au minimum'); return; }
+  if (motif.length > 500) { markFieldError('cf_motif','Motif trop long — 500 caractères au maximum'); return; }
+
+  const restore = _btnBusy('#cf_conf_annul', '⏳ Annulation…');
+  try {
+    const r = await _rpc('reverse_payment_transaction',
+                         { p_transaction_id: transactionId, p_reason: motif });
+    if (!r.ok) { toast(_codeMsg(r.code), 'error'); return; }
+
+    logAudit('payment_reversed', `${r.data.receipt_no || transactionId} — ${motif}`, r.data.student_id);
+    closeModal();
+    toast(`Paiement ${r.data.receipt_no || ''} annulé`, 'success');
+
+    // Le solde est relu chez le serveur : on ne le recalcule pas en ajoutant
+    // le montant annulé au reste dû.
+    if (_cfEtat.sid) await controlerFrais(_cfEtat.sid);
   } finally { restore(); }
 };
 
