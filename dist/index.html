@@ -11539,36 +11539,95 @@ window.downloadRecuPaiement = (sid) => {
   dlPDF(htmlStr, `Recu_${s.name.replace(/\s+/g,'_')}_${today()}.pdf`);
 };
 
+// LES TARIFS SONT ENREGISTRÉS PAR LA DIRECTION — Loms, 4 août 2026.
+//
+// « Pour la cantine, on avait laissé vide : on doit y introduire les prix et
+// les modalités de paiement. Dès que le prix sera fixé, ça se fera dans la
+// branche cantine. C'est Direction 1 qui enregistre les prix. »
+//
+// Rien n'est donc écrit en dur ici, et rien ne doit l'être : un montant que
+// je fixerais serait faux le jour où l'école change de tarif. La politique
+// RLS de `settings` dit déjà la même chose que Loms — `settings_d1_all`,
+// `private.is_direction()` : seule Direction 1 peut écrire. Le serveur et la
+// règle métier disent la même chose, ce qui est le meilleur des cas.
 window.openFeesConfig = () => {
   const f=getFees();
+  const modalites=[['mensuel','Mensuel'],['trimestriel','Par trimestre'],['repas','Par repas'],['annuel','Annuel']];
   openM('Configurer les frais scolaires',`
-<p style="font-size:13px;color:var(--text-secondary);margin-bottom:14px">Définissez le montant attendu par trimestre (en $). Ces montants servent à calculer la dette de chaque élève.</p>
+<p style="font-size:13px;color:var(--text-secondary);margin-bottom:14px">Définissez le montant attendu par trimestre (${_cur()}). Ces montants servent à calculer la dette de chaque élève.</p>
 <div class="form-row">
   <div class="form-group"><label class="form-label">Trimestre 1 (${_cur()})</label><input class="form-input" id="fee_t1" type="number" min="0" value="${f.T1||0}"></div>
   <div class="form-group"><label class="form-label">Trimestre 2 (${_cur()})</label><input class="form-input" id="fee_t2" type="number" min="0" value="${f.T2||0}"></div>
   <div class="form-group"><label class="form-label">Trimestre 3 (${_cur()})</label><input class="form-input" id="fee_t3" type="number" min="0" value="${f.T3||0}"></div>
   <div class="form-group"><label class="form-label">Frais d'inscription (${_cur()})</label><input class="form-input" id="fee_ins" type="number" min="0" value="${f.inscription||0}"></div>
-</div>`,
+</div>
+<div class="premium-section-title" style="margin:18px 0 8px">🍽️ Cantine scolaire</div>
+<p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px">Tant que ce tarif n'est pas fixé, aucun montant de cantine n'est proposé nulle part — ni à l'inscription d'un élève, ni sur un document.</p>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Tarif cantine (${_cur()})</label>
+    <input class="form-input" id="fee_cantine" type="number" min="0" placeholder="non fixé" value="${f.cantine===undefined||f.cantine===null?'':f.cantine}"></div>
+  <div class="form-group"><label class="form-label">Modalité de paiement</label>
+    <select class="form-input" id="fee_cantine_mod">
+      ${modalites.map(([v,l])=>`<option value="${v}"${(f.cantine_modalite||'mensuel')===v?' selected':''}>${l}</option>`).join('')}
+    </select></div>
+</div>
+<div class="form-group"><label class="form-label">Précisions sur le paiement de la cantine</label>
+  <input class="form-input" id="fee_cantine_note" placeholder="Ex : payable d'avance, à la caisse, avant le 5 du mois" value="${esc(f.cantine_note||'')}"></div>`,
 `<button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveFeesConfig()">Sauvegarder</button>`);
 };
 
-window.saveFeesConfig = () => {
+window.saveFeesConfig = async () => {
   if(!S.user||S.user.role!=='direction'){toast('Accès non autorisé','error');return;}
-  if(!DB.settings.fees) DB.settings.fees={};
-  DB.settings.fees.T1=lireMontant($('fee_t1')?.value)||0;
-  DB.settings.fees.T2=lireMontant($('fee_t2')?.value)||0;
-  DB.settings.fees.T3=lireMontant($('fee_t3')?.value)||0;
-  DB.settings.fees.inscription=lireMontant($('fee_ins')?.value)||0;
-  // Sync fee_types.montant_defaut so both sources stay consistent
+  // Une valeur vide n'écrase pas ce qui existe : on part de l'objet en place.
+  const f = { ...(DB.settings.fees||{}) };
+  f.T1=lireMontant($('fee_t1')?.value)||0;
+  f.T2=lireMontant($('fee_t2')?.value)||0;
+  f.T3=lireMontant($('fee_t3')?.value)||0;
+  f.inscription=lireMontant($('fee_ins')?.value)||0;
+  // La cantine se distingue de zéro : « non fixé » et « gratuit » ne sont pas
+  // la même chose. Vide ⇒ null, et rien ne s'affichera nulle part.
+  const _brut = ($('fee_cantine')?.value||'').trim();
+  f.cantine = _brut === '' ? null : (lireMontant(_brut) ?? null);
+  if (_brut !== '' && f.cantine === null) { markFieldError('fee_cantine','Montant invalide'); return; }
+  f.cantine_modalite = $('fee_cantine_mod')?.value || 'mensuel';
+  f.cantine_note = ($('fee_cantine_note')?.value||'').trim() || null;
+
+  // CE QUI MANQUAIT : la table `settings` n'était jamais écrite ici. Les
+  // montants qui décident de la dette de chaque élève restaient en mémoire et
+  // dans le cache local. Ils n'atteignaient le serveur que si la Direction
+  // ouvrait plus tard un AUTRE écran de réglages qui, lui, pousse tout
+  // l'objet. Un tarif d'école ne peut pas dépendre de ce hasard.
+  const _avant = DB.settings.fees;
+  DB.settings.fees = f;
+  const ok = await pushSync('settings','upsert',DB.settings);
+  if (!ok) {
+    DB.settings.fees = _avant;
+    toast('Enregistrement refusé — les tarifs n\'ont pas changé','error');
+    return;
+  }
+
+  // Les deux sources restent d'accord : fee_types porte le même montant.
   const trimMap={T1:'ft_T1',T2:'ft_T2',T3:'ft_T3',inscription:'ft_insc'};
-  Object.entries(trimMap).forEach(([t,fid])=>{
-    const ft=(DB.fee_types||[]).find(f=>f.id===fid);
-    if(ft){ ft.montant_defaut=DB.settings.fees[t]||0; pushSync('fee_types','patch',{montant_defaut:ft.montant_defaut},'id=eq.'+fid); }
-  });
-  logAudit('fees_control', `T1:$${DB.settings.fees.T1} · T2:$${DB.settings.fees.T2} · T3:$${DB.settings.fees.T3} · Inscription:$${DB.settings.fees.inscription}`);
-  toast('Frais scolaires mis à jour','success');
+  for (const [t,fid] of Object.entries(trimMap)) {
+    const ft=(DB.fee_types||[]).find(x=>x.id===fid);
+    if(ft){ ft.montant_defaut=f[t]||0; await pushSync('fee_types','patch',{montant_defaut:ft.montant_defaut},'id=eq.'+fid); }
+  }
+  logAudit('fees_control', `T1:${_cur()}${f.T1} · T2:${_cur()}${f.T2} · T3:${_cur()}${f.T3} · Inscription:${_cur()}${f.inscription}`
+    + ` · Cantine:${f.cantine===null?'non fixé':_cur()+f.cantine+' ('+f.cantine_modalite+')'}`
+    + ` — par ${window._acteur()}`);
+  toast('Tarifs enregistrés','success');
   closeModal(); saveToCrypt(); render();
 };
+
+// Le tarif de cantine, ou null tant que la Direction ne l'a pas fixé.
+// Aucun repli, aucune valeur « par défaut » : un prix inventé sur un document
+// scolaire serait pire que son absence.
+window._tarifCantine = () => {
+  const f = getFees();
+  return (f.cantine === undefined || f.cantine === null || f.cantine === '') ? null : Number(f.cantine);
+};
+window._modaliteCantine = () => ({mensuel:'par mois', trimestriel:'par trimestre',
+  repas:'par repas', annuel:'par an'})[(getFees().cantine_modalite)||'mensuel'] || 'par mois';
 
 window.openAssignCaissePayment = (sid) => {
   const s=DB.students.find(x=>x.id===sid); if(!s) return;
@@ -14131,28 +14190,43 @@ window.openInscrireEleve = () => {
       <option value="annee">Annuel</option>
     </select>
   </div>
-  <div class="form-group"><label class="form-label">Montant mensuel (${_cur()}) *</label>
-    <input class="form-input" id="caAmount" type="number" min="0" placeholder="Ex: 30">
+  <div class="form-group"><label class="form-label">Montant ${_modaliteCantine()} (${_cur()}) *</label>
+    <input class="form-input" id="caAmount" type="number" min="0" placeholder="${_tarifCantine()===null?'aucun tarif fixé':'Ex: '+_tarifCantine()}" value="${_tarifCantine()===null?'':_tarifCantine()}">
+    ${_tarifCantine()===null
+      ? `<div style="font-size:12px;color:#b45309;background:#fef3c7;border-radius:8px;padding:8px 10px;margin-top:6px">Le tarif de la cantine n'a pas encore été fixé. La Direction l'enregistre dans <strong>Configurer les frais scolaires</strong> ; il sera ensuite proposé ici tout seul.</div>`
+      : `<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Tarif de l'école : ${_cur()}${_tarifCantine()} ${_modaliteCantine()}${getFees().cantine_note?` — ${esc(getFees().cantine_note)}`:''}. Vous pouvez le modifier pour cet élève.</div>`}
   </div>`,
   `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
    <button class="btn btn-primary" onclick="saveInscrireEleve()">Inscrire</button>`);
 };
 
-window.saveInscrireEleve = () => {
+window.saveInscrireEleve = async () => {
   if(!S.user||!['direction','direction2','direction3'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
   const sid=$('caSid')?.value;
   const type=$('caType')?.value;
-  const amount=lireMontant($('caAmount')?.value)||0;
-  if(!sid||!amount){toast('Remplissez tous les champs','error');return;}
+  const brut=($('caAmount')?.value||'').trim();
+  // Un champ vide et un montant nul ne sont pas la même chose : une cantine
+  // offerte à un élève est une décision, pas un oubli. On refuse le vide, on
+  // accepte zéro.
+  if(!sid){toast('Choisissez un élève','error');return;}
+  if(brut===''){markFieldError('caAmount','Indiquez le montant — ou faites fixer le tarif de l\'école');return;}
+  const amount=lireMontant(brut);
+  if(amount===null){markFieldError('caAmount','Montant invalide');return;}
   if(!DB.cantine) DB.cantine=[];
-  const ins={id:'ca'+Date.now(),sid,type,amount,active:true,date_inscription:today(),by:S.user.id};
+  // `'ca'+Date.now()` : deux inscriptions faites dans la même milliseconde
+  // partageaient une clé primaire, et une seule survivait.
+  const ins={id:_uid('ca_'),sid,type,amount,active:true,date_inscription:today(),by:S.user.id};
+  const ok = await pushSync('cantine','post',ins);
+  if(!ok){toast('Enregistrement refusé — l\'élève n\'est pas inscrit','error');return;}
   DB.cantine.push(ins);
-  pushSync('cantine','post',ins);
   const s=DB.students.find(x=>x.id===sid);
-  logAudit('cantine_inscription',`${s?s.name:sid} — ${type} — $${amount}`,ins.id);
+  logAudit('cantine_inscription',`${s?s.name:sid} — ${type} — ${_cur()}${amount} ${_modaliteCantine()} — par ${window._acteur()}`,ins.id);
   if(s?.pid){
-    const n={id:'n'+Date.now(),uid:s.pid,msg:`🍽️ ${s.name} est maintenant inscrit(e) à la cantine (${type}) — ${_cur()}${amount}/mois`,date:today(),time:nowTime(),read:false,type:'info'};
-    DB.notifs.unshift(n); pushSync('notifs','post',n);
+    await pushNotif(s.pid, `🍽️ ${s.name} est maintenant inscrit(e) à la cantine (${type}) — ${_cur()}${amount} ${_modaliteCantine()}`);
+  }
+  // La Caisse ou Direction 2 peut inscrire ; l'argent regarde Direction 1.
+  if (window._normRole && window._normRole(S.user.role) !== 'direction') {
+    await window._notifDirection1(`🍽️ Inscription cantine — ${s?s.name:sid}\n${_cur()}${amount} ${_modaliteCantine()} · ${type}\nPar ${window._acteur()}`);
   }
   closeModal(); saveToCrypt(); render();
   toast(`✅ ${s?s.name:'Élève'} inscrit(e) à la cantine`,'success');
