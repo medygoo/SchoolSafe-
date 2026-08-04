@@ -2546,6 +2546,19 @@ async function _del(t,q){try{const r=await fetch(`${SUPA_URL}/rest/v1/${t}?${q}`
 // Traduction des codes du serveur. Un code inconnu n'est jamais avalé : il
 // s'affiche tel quel, ce qui vaut toujours mieux qu'un « erreur » générique.
 window._CODE_MSG = {
+  // Contrat de préinscription P0-6, ChatGPT, 4 août 2026. Une caissière ou
+  // une Directrice ne lit pas « CLASS_AMBIGUOUS » : elle lit ce qu'elle doit
+  // faire ensuite.
+  PREINSCRIPTION_NOT_FOUND: "Cette demande n'existe plus.",
+  PREINSCRIPTION_EXPIRED:  "Cette demande a expiré. Demandez à la famille d'en refaire une, ou inscrivez l'élève directement.",
+  ALREADY_VALIDATED:       'Cette demande a déjà été validée — le dossier existe. Rien n\'a été créé en double.',
+  CLASS_NOT_FOUND:         "La classe demandée n'existe pas dans l'application. Créez-la, puis validez.",
+  CLASS_AMBIGUOUS:         'Plusieurs classes portent ce nom. Précisez laquelle avant de valider.',
+  STUDENT_ALREADY_EXISTS:  'Un élève identique existe déjà. Rattachez-le plutôt que d\'en créer un second.',
+  PARENT_PHONE_AMBIGUOUS:  'Ce numéro correspond à plusieurs parents. Vérifiez lequel avant de valider.',
+  PARENT_EMAIL_IN_USE:     'Cette adresse e-mail est déjà celle d\'un autre compte.',
+  FEES_NOT_CONFIGURED:     "Aucun type de frais n'est configuré : le dossier est créé, mais sans obligation financière.",
+
   FORBIDDEN:                        "Votre profil n'est pas autorisé à faire cet enregistrement.",
   ACTOR_NOT_FOUND:                  "Votre compte SchoolSafe n'est pas relié correctement.",
   CLASS_NOT_FOUND:                  "La classe sélectionnée n'existe pas dans la base.",
@@ -10564,7 +10577,27 @@ window.validerPreinscription = async (id) => {
     }
     d.statut = 'validee'; d.traite_par = S.user.id;
     d.traite_par_nom = S.user.name; d.traite_le = today();
-    toast('✅ Dossier créé. Prenez maintenant les photographies.', 'success');
+
+    // Ce que le serveur a fait, dit en clair. Trois choses valent d'être
+    // annoncées et ne se devinent pas :
+    const v = r.data || {};
+    const dits = [];
+    if (v.matricule) dits.push('Matricule ' + esc(v.matricule));
+    // Une fratrie réutilise le parent existant : sans cette mention, la
+    // Direction croit qu'un second compte a été créé et va le chercher.
+    if (v.parent_reused) dits.push('parent existant réutilisé — fratrie');
+    if (v.authorized_pending) dits.push(v.authorized_pending + ' personne(s) autorisée(s) EN ATTENTE');
+    toast('✅ Dossier créé. ' + dits.join(' · '), 'success');
+
+    // « Ne rien afficher vaut mieux qu'afficher faux » : si aucun type de
+    // frais n'est configuré, le serveur n'invente aucune somme. Il faut le
+    // dire, sinon la Caisse cherchera une obligation qui n'existe pas.
+    if (v.warning === 'FEES_NOT_CONFIGURED')
+      setTimeout(() => toast(_codeMsg('FEES_NOT_CONFIGURED'), 'warning'), 900);
+    // Les personnes autorisées naissent inactives et sans photo : elles ne
+    // servent au portail qu'une fois approuvées ET photographiées.
+    if (v.authorized_pending)
+      setTimeout(() => toast('📷 Photographiez les personnes autorisées, puis approuvez-les — sans cela le Gardien ne peut pas les reconnaître.', 'info'), 1800);
     logAudit('preinscription_validee', 'Préinscription validée : ' + d.nom);
     await loadFromSupabase();
     render();

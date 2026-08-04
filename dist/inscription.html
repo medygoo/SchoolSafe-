@@ -317,7 +317,7 @@
 
   <div class="etapes">
     <div class="etape"><span class="num">1</span><strong>Vous remplissez la fiche ici</strong><span>5 minutes, depuis votre téléphone</span></div>
-    <div class="etape"><span class="num">2</span><strong>Vous l'envoyez à l'école</strong><span>par WhatsApp, ou vous l'imprimez</span></div>
+    <div class="etape"><span class="num">2</span><strong>Vous l'envoyez à l'école</strong><span>la Direction la reçoit aussitôt — WhatsApp et impression restent possibles</span></div>
     <div class="etape"><span class="num">3</span><strong>Vous passez payer à l'école</strong><span>la fiche est déjà prête, il ne reste qu'à confirmer</span></div>
   </div>
 
@@ -384,8 +384,16 @@
       le versement se fait <strong>à l'école, auprès de la Caisse</strong>, contre un reçu.<br>Cette fiche est une <strong>demande</strong> : elle est validée par la Direction, qui prend alors les photographies et ouvre le dossier de l'enfant.
     </div>
 
+    <div class="piege" aria-hidden="true">
+      <label for="f_website">Ne pas remplir</label>
+      <input id="f_website" name="website" type="text" tabindex="-1" autocomplete="off" />
+      <input name="company" type="text" tabindex="-1" autocomplete="off" />
+      <input name="url" type="text" tabindex="-1" autocomplete="off" />
+    </div>
+
     <div class="full form-actions">
-      <button type="button" class="btn btn-solid" id="f_whatsapp">📲 Envoyer par WhatsApp</button>
+      <button type="button" class="btn btn-solid" id="f_envoyer">📨 Envoyer à l'école</button>
+      <button type="button" class="btn btn-ghost" id="f_whatsapp">📲 WhatsApp</button>
       <button type="button" class="btn btn-gold" id="f_imprimer">🖨️ Imprimer la fiche</button>
       <button type="reset" class="btn btn-ghost">Effacer</button>
     </div>

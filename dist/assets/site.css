@@ -773,3 +773,8 @@ form.fiche > div:first-child .bloc-titre{padding-top:0;border-top:0;margin-top:0
 .bf .v{display:block;font-family:var(--serif);font-size:25px;color:var(--ground);line-height:1.2;margin-top:2px;}
 .bf .s{display:block;font-size:13px;color:var(--muted);line-height:1.45;}
 @media(max-width:900px){ .bil-grid{grid-template-columns:1fr;gap:30px;} }
+
+/* Le piège anti-robot : invisible à l'œil ET aux lecteurs d'écran, hors de
+   l'ordre de tabulation. `display:none` ne suffirait pas — certains robots
+   l'ignorent justement parce qu'ils savent que les humains ne le voient pas. */
+.piege{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}
