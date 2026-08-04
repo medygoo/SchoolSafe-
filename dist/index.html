@@ -3330,10 +3330,40 @@ window._roleOfficiel = (r) => ({
 // Aucune signature ne s'imprime toute seule ici : les trois lignes sont
 // vierges. Une signature pré-imprimée ne signe plus rien, et celle de la
 // Direction, imprimée d'office, serait donnée à quiconque produit un reçu.
-function _officialFooter(name, role){
+// L'AUTEUR — qui a établi ce document, et à quel titre.
+//
+// Troisième paramètre : `auteur`, de la forme { nom, role, le }. Il porte la
+// personne qui a CRÉÉ l'acte, telle qu'elle a été enregistrée au moment où
+// l'acte a eu lieu — pas celle qui a le document sous les yeux.
+//
+// La différence n'est pas théorique. Un reçu réimprimé trois mois plus tard
+// par la Direction dirait « Établi par la Direction » alors que c'est la
+// caissière qui a encaissé devant la famille. Un duplicata dirait qui l'a
+// retiré, pas qui a reçu l'argent. Un document doit dire QUI A FAIT L'ACTE,
+// sinon la signature ne désigne personne.
+//
+// Sans auteur enregistré, on retombe sur la personne connectée et on le DIT :
+// la mention porte « (à la réimpression) ». Mieux vaut une réserve honnête
+// qu'un nom présenté comme celui de l'auteur alors qu'il ne l'est pas.
+function _officialFooter(name, role, auteur){
   const n=esc(name||'');
   const r=esc(role||'');
   const u=(typeof S!=='undefined'&&S&&S.user)?S.user:null;
+  const aNom  = auteur && auteur.nom  ? esc(auteur.nom)  : '';
+  const aRole = auteur && auteur.role ? esc(auteur.role) : '';
+  const aDate = auteur && auteur.le   ? esc(auteur.le)   : '';
+  // Deux titres, parce que ce ne sont pas deux fois la même chose :
+  //   « Établi par »  — l'auteur ENREGISTRÉ de l'acte. Il ne change pas d'une
+  //                     impression à l'autre, et c'est lui qui engage.
+  //   « Délivré par »  — à défaut, la personne qui produit le document
+  //                     maintenant. C'est vrai, et ça ne prétend pas être
+  //                     l'auteur de l'acte.
+  // Un reçu réimprimé trois mois plus tard par la Direction ne doit pas dire
+  // « Établi par la Direction » si c'est la caissière qui a encaissé.
+  const etabliTitre = aNom ? 'Établi par' : 'Délivré par';
+  const etabliNom  = aNom || (u ? esc(u.name) : '');
+  const etabliRole = aNom ? (aRole || '')
+                          : (u ? esc(window._roleOfficiel(u.role)||'') : 'Agent de l\'école');
   // Si l'autorité est la personne connectée, on ne la fait pas signer deux
   // fois : l'autorité redevient la Direction de l'école — et si l'école n'en
   // déclare aucune, on n'affiche pas de nom. Ne rien afficher vaut mieux
@@ -3345,7 +3375,7 @@ function _officialFooter(name, role){
   const _case = (titre, nom, sous) => `<div style="flex:1;text-align:center;min-width:0"><div style="height:44px"></div><div style="border-top:1.5px solid #1a2228;padding-top:7px;font-size:11px;color:#5e6c78">${titre}<br><strong style="font-size:12px;color:#1a2228">${nom||'……………………………'}</strong><br><span style="font-size:10px">${sous}</span></div></div>`;
   return `<div style="margin-top:28px;padding-top:14px;border-top:2px dashed #c09018;page-break-inside:avoid;break-inside:avoid;display:flex;justify-content:space-between;gap:16px">
   ${_case('Lu et approuvé', '', 'Bénéficiaire / Destinataire')}
-  ${_case('Établi par', u?esc(u.name):'', u?esc(window._roleOfficiel(u.role)||''):'Agent de l\'école')}
+  ${_case(etabliTitre, etabliNom, etabliRole + (aDate?' · '+aDate:''))}
   ${_case('Visa &amp; cachet', autoriteNom, autoriteRole)}
   </div>
   <div style="text-align:center;font-size:10px;color:#5e6c78;margin-top:10px">${(()=>{const _fc=DB.settings?.school||{};const _fp=[esc(_fc.name||'SchoolSafe')];if(_fc.phone)_fp.push('Tél: '+esc(_fc.phone));if(_fc.email)_fp.push(esc(_fc.email));_fp.push('Document officiel · Généré le '+today());return _fp.join(' · ');})()}</div>`;
@@ -11208,7 +11238,7 @@ window.downloadRecuPaiement = (sid) => {
       <span>TOTAL PAYÉ</span>
       <span>${_cur()}${totalPaid} / ${_cur()}${totalDue}</span>
     </div>
-    ${_officialFooter(S.user.name, S.user.role==='direction3'?'Caisse':'Direction')}
+    ${_officialFooter((DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale')}
   </div>
   </body></html>`;
   dlPDF(htmlStr, `Recu_${s.name.replace(/\s+/g,'_')}_${today()}.pdf`);
@@ -18118,7 +18148,7 @@ ${(()=>{
     return `<div style="background:#d8f3e6;border:1.5px solid #86efac;border-radius:8px;padding:8px 14px;margin:10px 0;font-size:12px;text-align:center;font-weight:700;color:#065f46">✅ ${esc(ftt.label)} — Entièrement soldé (${_cur()}${target})</div>`;
   })()}
 <div class="stamp"><span class="ic">✅</span><div class="tx">Versement enregistré dans SchoolSafe<br>${esc(school)} — ${DB.settings?.year||''}</div></div>
-${_officialFooter(v.by_name||v.by,'Caisse')}
+${_officialFooter((DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',{nom:v.by_name||v.by,role:'Caisse',le:v.date||''})}
 </div>
 <button class="pbtn" onclick="window.print()">🖨 Imprimer le reçu</button>
 </div></body></html>`;
@@ -18161,7 +18191,7 @@ window.viewReceipt = (nid) => {
   const _dvName2=_dvLbls2[sc.devise||'$']||(sc.devise||'dollars');
   const amtWords=(numToWords(r.amount)||'').charAt(0).toUpperCase()+(numToWords(r.amount)||'').slice(1)+' '+_dvName2;
   const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;display:flex;justify-content:center;align-items:flex-start;padding:20px;min-height:100vh}.page{background:#fff;width:100%;max-width:500px;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.15)}.hdr{background:#556777;padding:20px 24px;display:flex;align-items:center;gap:16px}.logo{width:70px;height:70px;border-radius:50%;object-fit:cover;border:3px solid #fff;flex-shrink:0}.school-name{color:#fff}.school-name h1{font-size:14px;font-weight:800;line-height:1.2}.school-name p{font-size:10px;opacity:.8;margin-top:3px}.badge{margin-top:16px;text-align:center;padding:12px 20px;background:#f8faff;border-bottom:2px dashed #dadee2}.badge .num{font-size:11px;color:#6b7280;letter-spacing:1px;text-transform:uppercase}.badge .title{font-size:18px;font-weight:800;color:#556777;margin-top:4px;text-transform:uppercase;letter-spacing:2px}.body{padding:20px 24px}.row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f1f2}.row:last-child{border-bottom:none}.lbl{font-size:12px;color:#6b7280;font-weight:500}.val{font-size:13px;font-weight:700;color:#1a1a1a;text-align:right}.amount-box{background:#556777;color:#fff;border-radius:10px;padding:16px 20px;text-align:center;margin:16px 0}.amount-box .av{font-size:28px;font-weight:900;letter-spacing:1px}.amount-box .aw{font-size:11px;opacity:.8;margin-top:6px;font-style:italic}.stamp{display:flex;align-items:center;gap:10px;background:#d8f3e6;border-radius:8px;padding:10px 14px;margin-top:14px}.stamp .icon{font-size:24px}.stamp .txt{font-size:11px;color:#065f46;font-weight:600}.footer{background:#f8faff;border-top:1px solid #e5e7eb;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#9ca3af}.pbtn{display:block;margin:16px auto;padding:11px 32px;background:#556777;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600}@media print{.pbtn{display:none}body{background:#fff;padding:0}.page{box-shadow:none;max-width:100%;border-radius:0}@page{margin:10mm}}`;
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bordereau ${esc(r.num)}</title><style>${CSS}</style></head><body><div class="page"><div class="hdr">${window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" class="logo" alt="">`:`<div class="logo" style="background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px">🏫</div>`}<div class="school-name"><h1>${school}</h1>${sc.address||sc.sub?`<p>${esc(sc.address||sc.sub)}</p>`:''}<p>${sc.phone?`📞 ${esc(sc.phone)}`:''}</p></div></div><div class="badge"><div class="num">Bordereau officiel de paiement · N° ${esc(r.num)}</div><div class="title">🧾 Reçu de paiement</div></div><div class="body"><div class="row"><span class="lbl">👶 Élève</span><span class="val">${esc(r.student)}</span></div><div class="row"><span class="lbl">Matricule</span><span class="val" style="font-family:monospace">${esc(r.mat||'—')}</span></div><div class="row"><span class="lbl">🎓 Classe</span><span class="val">${esc(r.classe||'—')}</span></div><div class="row"><span class="lbl">📋 Type de paiement</span><span class="val">${esc(r.type_label)}${r.trimestre?' · '+esc(r.trimestre):''}</span></div><div class="row"><span class="lbl">📅 Date</span><span class="val">${printDate}</span></div><div class="row"><span class="lbl">⏰ Heure</span><span class="val">${r.time}</span></div><div class="row"><span class="lbl">💼 Reçu par</span><span class="val" style="color:#556777">${esc(r.by)}</span></div>${r.note?`<div class="row"><span class="lbl">📝 Note</span><span class="val">${esc(r.note)}</span></div>`:''}<div class="amount-box"><div class="av">${_cur()}${r.amount}</div><div class="aw">${amtWords}</div></div><div class="stamp"><span class="icon">✅</span><div class="txt">Paiement reçu et enregistré dans le système SchoolSafe<br>${school} — Année ${DB.settings.year||'2025-2026'}</div></div><div style="padding:0 24px 16px">${_officialFooter(r.by,'Caisse')}</div></div></body></html>`;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bordereau ${esc(r.num)}</title><style>${CSS}</style></head><body><div class="page"><div class="hdr">${window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" class="logo" alt="">`:`<div class="logo" style="background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px">🏫</div>`}<div class="school-name"><h1>${school}</h1>${sc.address||sc.sub?`<p>${esc(sc.address||sc.sub)}</p>`:''}<p>${sc.phone?`📞 ${esc(sc.phone)}`:''}</p></div></div><div class="badge"><div class="num">Bordereau officiel de paiement · N° ${esc(r.num)}</div><div class="title">🧾 Reçu de paiement</div></div><div class="body"><div class="row"><span class="lbl">👶 Élève</span><span class="val">${esc(r.student)}</span></div><div class="row"><span class="lbl">Matricule</span><span class="val" style="font-family:monospace">${esc(r.mat||'—')}</span></div><div class="row"><span class="lbl">🎓 Classe</span><span class="val">${esc(r.classe||'—')}</span></div><div class="row"><span class="lbl">📋 Type de paiement</span><span class="val">${esc(r.type_label)}${r.trimestre?' · '+esc(r.trimestre):''}</span></div><div class="row"><span class="lbl">📅 Date</span><span class="val">${printDate}</span></div><div class="row"><span class="lbl">⏰ Heure</span><span class="val">${r.time}</span></div><div class="row"><span class="lbl">💼 Reçu par</span><span class="val" style="color:#556777">${esc(r.by)}</span></div>${r.note?`<div class="row"><span class="lbl">📝 Note</span><span class="val">${esc(r.note)}</span></div>`:''}<div class="amount-box"><div class="av">${_cur()}${r.amount}</div><div class="aw">${amtWords}</div></div><div class="stamp"><span class="icon">✅</span><div class="txt">Paiement reçu et enregistré dans le système SchoolSafe<br>${school} — Année ${DB.settings.year||'2025-2026'}</div></div><div style="padding:0 24px 16px">${_officialFooter((DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',{nom:r.by,role:'Caisse',le:r.date||''})}</div></div></body></html>`;
   dlPDF(html,`Recu-${(r.num||'').replace(/[^a-z0-9]/gi,'_')||today()}.pdf`);
 };
 
@@ -18655,6 +18685,7 @@ window.exportEtatFinancierPDF = () => {
     <div class="sec"><h2>💸 Dépenses</h2>${exps.slice(0,20).map(e=>`<div class="row"><span class="lbl">${esc(e.motif||'?')} · ${e.date||''}</span><span class="val" style="color:#dc2626">${_cur()}${e.amount}</span></div>`).join('') || '<div style="color:#9ca3af;font-size:12px">Aucune dépense</div>'}</div>
     <div class="footer">${esc(school)} · SchoolSafe · ${printDate}</div>
     <button class="pbtn" onclick="window.print()" style="display:block;margin:16px auto;padding:10px 32px;background:#556777;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ Imprimer</button>
+  ${_pdfSignatureBlock(_cur())}
   </div></body></html>`;
   dlPDF(html,`EtatFinancier-${today()}.pdf`);
 };
@@ -19558,7 +19589,8 @@ function _pdfSignatureBlock(devise) {
   <table style="width:100%;border-top:2px dashed #c09018;margin-top:22px;page-break-inside:avoid;break-inside:avoid;font-size:10px">
     <tr>
       <td style="width:33%;padding:14px 8px 6px;vertical-align:top">
-        <div style="font-weight:700;margin-bottom:18px">Etabli par le Responsable Comptable</div>
+        <div style="font-weight:700;margin-bottom:4px">Établi par</div>
+        <div style="margin-bottom:12px;color:#1a2228"><strong>${esc(S.user?.name||"")}</strong><br><span style="color:#5e6c78">${esc(window._roleOfficiel(S.user?.role)||"Responsable comptable")}</span></div>
         <div style="border-bottom:1px solid #8896a2;height:30px;margin-bottom:4px"></div>
         <div style="color:#5e6c78">Nom &amp; signature</div>
       </td>
@@ -19569,7 +19601,8 @@ function _pdfSignatureBlock(devise) {
         <div style="color:#5e6c78">Cachet de l’établissement</div>
       </td>
       <td style="width:33%;padding:14px 8px 6px;vertical-align:top;text-align:right">
-        <div style="font-weight:700;margin-bottom:18px">Lu et approuvé par la Direction</div>
+        <div style="font-weight:700;margin-bottom:4px">Lu et approuvé</div>
+        <div style="margin-bottom:12px;color:#1a2228"><strong>${esc((DB.users||[]).find(x=>x.role==="direction")?.name||"")}</strong><br><span style="color:#5e6c78">Direction Générale</span></div>
         <div style="border-bottom:1px solid #8896a2;height:30px;margin-bottom:4px"></div>
         <div style="color:#5e6c78">Nom &amp; signature</div>
       </td>

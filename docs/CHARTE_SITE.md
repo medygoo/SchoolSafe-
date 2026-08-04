@@ -443,3 +443,77 @@ d'emblème intégré, et le lire est sans risque n'importe où.
 Trois lignes au lieu de neuf reproches — et il attrape la vraie faute.
 Éprouvé : on lui a glissé `window.SCHOOL_LOGO = 'data:image/png;base64,…'`,
 il l'a refusé ; le fichier a été restauré.
+
+---
+
+# 10. Qui a établi ce document · 4 août 2026
+
+Demande de Loms : *« la signature doit être, mais bien définir quel profil et
+le nom de la personne qui a créé ce reçu ; et dans le document financier et
+reçu doit avoir la signature. »*
+
+## 10.1 Une case de signature vide ne désigne personne
+
+`_officialFooter` remplissait la colonne du milieu avec **la personne
+connectée**. Ce n'est pas la même chose que l'auteur de l'acte.
+
+> Un reçu réimprimé trois mois plus tard par la Direction disait
+> **« Établi par la Direction »** — alors que c'est la caissière qui a
+> encaissé devant la famille.
+
+Le pied accepte maintenant un troisième argument, `{nom, role, le}` : l'auteur
+**enregistré au moment où l'acte a eu lieu**.
+
+| ce que le document porte | quand |
+|---|---|
+| **Établi par** — nom · profil · date de l'acte | l'auteur est enregistré. Une réimpression six mois plus tard donne **toujours le même nom** |
+| **Délivré par** — nom · profil | aucun auteur enregistré. C'est vrai, et ça ne prétend pas être l'auteur de l'acte |
+
+Vérifié en exécutant la vraie fonction, dans les deux cas.
+
+## 10.2 Ce qui est raccordé
+
+- **`printVersementRecu`** et **`viewReceipt`** portent désormais leur auteur
+  enregistré — `v.by_name` / `r.by`, avec la date du versement.
+- L'**autorité** de ces deux reçus était la caissière elle-même. Corrigé :
+  l'autorité est la Direction. *La caissière n'est pas sa propre autorité.*
+- Le **bloc SYSCOHADA** des états comptables disait « Etabli par le
+  Responsable Comptable » avec une ligne vide — **aucun nom**. Il porte
+  maintenant le nom et le profil de celui qui établit, et celui de la
+  Direction qui approuve.
+- L'**état financier** passe de « document de travail » à document signé, avec
+  le même bloc que les cinq autres états — *une seule réponse par question*.
+
+## 10.3 ⚠️ Un champ à demander — six reçus ne peuvent pas nommer leur auteur
+
+`DB.payments` **n'enregistre pas qui a encaissé**. Les lignes sont créées
+vides à l'inscription de l'élève, puis passées à `paid:true` par un `patch`
+qui ne porte ni auteur ni horodatage.
+
+```
+pushSync('payments','patch',{paid:true},'sid=eq.'+sid+'&t=eq.'+t)
+                            ↑ ni qui, ni quand
+```
+
+`CLAUDE.md` : *« Avant de lire un champ, vérifier qu'une écriture le
+renseigne. »* Aucune écriture ne renseigne l'auteur — donc aucune lecture ne
+le peut. Les six reçus concernés portent honnêtement « Délivré par ».
+
+**Ce n'est pas un défaut du frontend : c'est un champ à demander à ChatGPT.**
+On ne pose pas une garde là où la valeur ne peut pas exister. Demandé sur la
+PR : que la ligne de paiement porte `paid_by`, `paid_by_name` et `paid_at`,
+écrits côté serveur — un auteur que le navigateur pourrait choisir ne vaudrait
+rien.
+
+Les **états comptables** ne sont pas concernés : un état est *établi au moment
+où on le tire*, donc celui qui le génère en est bien l'auteur, et il est nommé.
+
+## 10.4 La signature pré-imprimée reste
+
+Loms a tranché : *« la signature doit être »*. `window.SCHOOL_SIGNATURE` n'est
+pas retirée. La réserve du §8.3 tient et n'est pas répétée ici : elle est
+enregistrée, la décision est prise, on continue.
+
+Ce que ce lot y ajoute, et qui répond à la préoccupation d'origine : **le visa
+pré-imprimé ne peut plus couvrir seul un acte**, puisque la colonne du milieu
+nomme celui qui l'a établi, avec son profil et la date.

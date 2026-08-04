@@ -94,13 +94,13 @@ const REGLE = {
   exportGrandLivrePDF:         ['signe', 'grand livre — arrêté SYSCOHADA'],
   exportComptabilitePDF:       ['signe', 'comptabilité — arrêtée SYSCOHADA'],
   exportBilanPDF:              ['signe', 'bilan — arrêté SYSCOHADA'],
+  exportEtatFinancierPDF:      ['signe', 'état financier — Loms : tout document financier se signe'],
 
   // ─── DOCUMENTS DE TRAVAIL — emblème seul ──────────────────────────────
   downloadPrepPDF:             ['travail', 'CAHIER DE PRÉPARATION — l’enseignant l’écrit pour lui'],
   genererRapportMensuel:       ['travail', 'rapport interne de la Direction'],
   genererPalmaresAnnuel:       ['travail', 'palmarès — affichage interne'],
   printMonthlyAttendance:      ['travail', 'relevé de présences interne'],
-  exportEtatFinancierPDF:      ['travail', 'état financier de suivi interne'],
   exportArchivePDF:            ['travail', 'archive de fin d’année'],
 
   // ─── EXTRACTIONS — ni emblème ni signature ────────────────────────────
@@ -136,8 +136,32 @@ lignes.forEach((l, i) => {
 const A_SIGNATURE = /_officialFooter\(|_pdfSignatureBlock\(|sig-grid|sig-box|sig-line|Signature (de|du|des|parent|Direction|Infirmier)|Visa de |Lu et approuvé|cachet et signature|Cachet &amp; Signature|Cachet et signature/i;
 const A_EMBLEME   = /_logoDoc|_logoImg|SCHOOL_LOGO/;
 
+// Loms, 4 août 2026 : « la signature doit être, mais bien définir quel profil
+// et le nom de la personne qui a créé ce reçu ».
+//
+// Une case de signature vide ne désigne personne. Un document qui engage
+// l'école doit porter le NOM et le PROFIL de celui qui l'a établi.
+//
+// Deux situations à ne pas confondre :
+//   · AUTEUR ENREGISTRÉ — le document reçoit un troisième argument
+//     `{nom, role, le}` : la personne qui a fait l'acte, telle qu'elle a été
+//     enregistrée au moment où l'acte a eu lieu. Une réimpression six mois
+//     plus tard donne toujours le même nom.
+//   · À DÉFAUT — le pied porte « Délivré par » et la personne connectée. Ce
+//     n'est pas un mensonge, mais ce n'est pas l'auteur de l'acte.
+//
+// Ce n'est PAS compté comme un défaut du frontend quand la donnée n'existe
+// pas : DB.payments n'enregistre pas qui a encaissé. On ne pose pas une garde
+// là où la valeur ne peut pas exister — on demande le champ.
+const AUTEUR_ENREGISTRE = /_officialFooter\([^;]*?\{\s*nom\s*:/;
+const NOMME_QUELQU_UN   = /_officialFooter\(|_pdfSignatureBlock\(|S\.user\?\.name|S\.user\.name|by_name|\br\.by\b|\bv\.by\b/;
+const FINANCIER = new Set(['downloadRecuPaiement','downloadRecuFrais','downloadRecuRattrapage',
+  'downloadRecuCantine','downloadRecuActivites','printVersementRecu','viewReceipt',
+  'downloadAttestationPaiement','exportJournalPDF','exportBalancePDF','exportGrandLivrePDF',
+  'exportComptabilitePDF','exportBilanPDF','exportEtatFinancierPDF']);
+
 const preuve = process.argv.includes('--preuve');
-let manquantes = 0, superflues = 0, inconnus = [], lignesSortie = [];
+let manquantes = 0, superflues = 0, inconnus = [], lignesSortie = [], financiers = [];
 
 for (const [d, i] of [...plages].sort((a, b) => a[0] - b[0])) {
   const nom = nomDe(lignes[d]);
@@ -148,7 +172,13 @@ for (const [d, i] of [...plages].sort((a, b) => a[0] - b[0])) {
   const signe = A_SIGNATURE.test(corps);
   const emblm = A_EMBLEME.test(corps);
 
+  const auteurEnr = AUTEUR_ENREGISTRE.test(corps);
+  const nomme     = NOMME_QUELQU_UN.test(corps);
+  if (FINANCIER.has(nom)) financiers.push({ nom, auteurEnr, nomme });
+
   let verdict = '·', note = '';
+  // Un document financier qui ne nomme personne du tout : c'est un défaut.
+  if (FINANCIER.has(nom) && !nomme) { verdict = '✘'; manquantes++; note = 'NE NOMME PERSONNE'; }
   if (attendu === 'signe' && !signe)      { verdict = '✘'; manquantes++; note = 'SIGNATURE MANQUANTE'; }
   else if (attendu === 'travail' && signe){ verdict = '✘'; superflues++; note = 'SIGNATURE DE TROP'; }
   else if (attendu === 'donnee' && signe) { verdict = '✘'; superflues++; note = 'SIGNATURE DE TROP'; }
@@ -182,6 +212,26 @@ console.log('\n═══ QUEL DOCUMENT SE SIGNE ? ═══');
 console.log('    un document se signe quand il ENGAGE l\'école envers un TIERS ;');
 console.log('    un document de TRAVAIL porte l\'emblème et ne se signe pas.\n');
 console.log(lignesSortie.join('\n'));
+
+// ── Les documents financiers : qui les a établis ? ────────────────────────
+console.log('\n  DOCUMENTS FINANCIERS ET REÇUS — l\'auteur est-il nommé ?');
+for (const f of financiers)
+  console.log(`    ${f.auteurEnr ? '✓ auteur enregistré ' : f.nomme ? '· délivré par        ' : '✘ personne          '} ${f.nom}`);
+// Un état comptable est ÉTABLI au moment où on le tire : celui qui le génère
+// en est bien l'auteur. Un reçu, lui, atteste un encaissement ANTÉRIEUR — son
+// auteur est le caissier qui a reçu l'argent, et cette donnée manque.
+const ETAT_COMPTABLE = new Set(['exportEtatFinancierPDF','exportJournalPDF','exportBalancePDF',
+  'exportGrandLivrePDF','exportComptabilitePDF','exportBilanPDF']);
+const recusSansAuteur = financiers.filter(f => !f.auteurEnr && f.nomme && !ETAT_COMPTABLE.has(f.nom));
+if (recusSansAuteur.length) {
+  console.log(`\n  ⓘ ${recusSansAuteur.length} reçu(s) portent « Délivré par » et non « Établi par ».`);
+  console.log('    Un reçu atteste un encaissement ANTÉRIEUR : son auteur est le caissier');
+  console.log('    qui a reçu l\'argent. Or DB.payments n\'enregistre pas qui a encaissé —');
+  console.log('    aucune écriture ne renseigne ce champ, donc aucune lecture ne le peut.');
+  console.log('    Ce n\'est pas un défaut du frontend : c\'est un champ à DEMANDER.');
+  console.log('    (Les états comptables, eux, sont établis au moment du tirage :');
+  console.log('     celui qui les génère en est bien l\'auteur, et il est nommé.)');
+}
 
 // Un outil doit déclarer ce qu'il ne sait pas vérifier.
 console.log('\n  Ce que cet outil ne vérifie pas :');

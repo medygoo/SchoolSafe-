@@ -271,9 +271,27 @@ bas d'un reçu ne veut plus rien dire de particulier.
 les deux sens — la signature manquante **et** la signature de trop.
 
 **Posées le 4 août 2026** dans `_officialFooter`, appelé par quinze documents.
-La colonne du milieu se remplit avec la personne connectée. Si l'autorité *est*
+La colonne du milieu porte l'**auteur enregistré** de l'acte quand il existe. Si l'autorité *est*
 cette personne, elle ne signe pas deux fois : l'autorité redevient la Direction
 Générale — et si l'école n'en déclare aucune, aucun nom ne s'imprime.
+
+**Auteur enregistré, ou personne qui délivre — ce n'est pas la même chose.**
+Le pied disait « Établi par » et nommait la personne CONNECTÉE. Un reçu
+réimprimé trois mois plus tard par la Direction annonçait donc « Établi par la
+Direction », alors que c'est la caissière qui avait encaissé devant la famille.
+Deux titres désormais : **« Établi par »** quand l'auteur est enregistré — nom,
+profil, date de l'acte, identiques à chaque réimpression — et **« Délivré
+par »** sinon. Une réserve honnête vaut mieux qu'un nom présenté comme celui de
+l'auteur alors qu'il ne l'est pas.
+
+Et la conséquence du principe « avant de lire un champ, vérifier qu'une
+écriture le renseigne » : **six reçus ne peuvent pas nommer leur auteur**, parce
+que `DB.payments` passe à `paid:true` par un `patch` qui ne porte ni qui ni
+quand. Champ demandé à ChatGPT — écrit côté serveur, car un auteur que le
+navigateur choisirait ne vaudrait rien.
+
+Corrigé au passage : l'autorité du reçu de versement était **la caissière
+elle-même**. La caissière n'est pas sa propre autorité.
 
 **Et un piège trouvé en le faisant :** `dist/index.html` porte en dur une vraie
 signature manuscrite (`window.SCHOOL_SIGNATURE`, ~40 Ko). Elle n'est pas un
