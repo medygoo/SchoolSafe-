@@ -10,42 +10,77 @@
  *
  * Usage :  node tools/audit-schema.mjs [--table students] [--verbose]
  */
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import * as acorn from 'acorn';
 
 const ROOT = new URL('..', import.meta.url).pathname;
-const SQL_FILES = [
-  'supabase_setup.sql',
-  'supabase_missing_tables.sql',
-  'supabase_fix_columns.sql',
-  'supabase_fix_columns_v2.sql',
-  'supabase_fix_columns_v3.sql',
-  // Migration consolidée : c'est ce fichier qui est réellement exécuté sur
-  // la base de l'école. Les v2/v3 restent lus pour l'historique.
-  'supabase_migration_finale.sql',
+
+// Le schéma se lit là où il est réellement écrit : `supabase/migrations`.
+//
+// Cet outil cherchait six fichiers SQL nommés en dur — ceux de l'AUTRE
+// installation, absents d'ici. Il ne trouvait donc aucune table, comparait
+// 306 écritures à un schéma vide, et annonçait « 49 problèmes » : quarante-neuf
+// tables parfaitement normales, déclarées introuvables parce qu'il regardait
+// au mauvais endroit. Un audit qui se trompe de source ne trouve pas moins de
+// défauts que la réalité — il en invente.
+//
+// Les fichiers historiques restent lus s'ils existent : une installation plus
+// ancienne peut encore les porter.
+const HERITAGE = [
+  'supabase_setup.sql', 'supabase_missing_tables.sql', 'supabase_fix_columns.sql',
+  'supabase_fix_columns_v2.sql', 'supabase_fix_columns_v3.sql', 'supabase_migration_finale.sql',
 ];
+function fichiersSql() {
+  const liste = [];
+  const dir = ROOT + 'supabase/migrations';
+  if (existsSync(dir)) {
+    // L'ordre chronologique compte : une colonne ajoutée puis retirée doit
+    // suivre le même chemin que sur la base.
+    for (const f of readdirSync(dir).filter(f => f.endsWith('.sql')).sort())
+      liste.push('supabase/migrations/' + f);
+  }
+  for (const f of HERITAGE) if (existsSync(ROOT + f)) liste.push(f);
+  return liste;
+}
 
 const args = process.argv.slice(2);
 const only = args.includes('--table') ? args[args.indexOf('--table') + 1] : null;
 const verbose = args.includes('--verbose');
 
 // ── 1. Schéma déclaré ────────────────────────────────────────────────────
-function loadSchema() {
-  const cols = new Map(), policies = new Map();
-  for (const f of SQL_FILES) {
-    const p = ROOT + f;
-    if (!existsSync(p)) continue;
-    const sql = readFileSync(p, 'utf8');
+// Une déclaration de colonne commence par un nom ; une contrainte de table
+// commence par un mot-clé. Sans cette liste, `primary`, `constraint` ou `check`
+// entrent au schéma comme des colonnes, et l'outil accepte n'importe quoi.
+const MOTS_CLES = new Set(['primary', 'foreign', 'unique', 'check', 'constraint', 'exclude', 'like']);
 
-    for (const m of sql.matchAll(/CREATE TABLE IF NOT EXISTS\s+([a-z_0-9]+)\s*\(([\s\S]*?)\n\);/gi)) {
-      const set = cols.get(m[1]) || new Set();
-      for (const c of m[2].matchAll(/^\s+"?([A-Za-z_][A-Za-z_0-9]*)"?\s+[A-Z]/gm)) set.add(c[1].toLowerCase());
-      cols.set(m[1], set);
+function loadSchema() {
+  const cols = new Map(), policies = new Map(), fichiers = fichiersSql();
+  // Une table n'est vérifiable COLONNE PAR COLONNE que si le dépôt porte son
+  // CREATE TABLE. Trois colonnes ajoutées par un ALTER à une table créée
+  // ailleurs ne disent rien des trente autres : les compter comme le schéma
+  // complet ferait déclarer « absentes » toutes celles qu'on ne voit pas.
+  const creees = new Set();
+  const sansSchema = (t) => t.replace(/^"?(public|private)"?\./i, '').replace(/"/g, '');
+  for (const f of fichiers) {
+    const sql = readFileSync(ROOT + f, 'utf8');
+
+    for (const m of sql.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?([a-z_0-9."]+)\s*\(([\s\S]*?)\n\s*\);/gi)) {
+      // `private.` n'est pas exposé à PostgREST : le navigateur n'y écrit
+      // jamais, et le porter au schéma ferait croire l'inverse.
+      if (/^"?private"?\./i.test(m[1])) continue;
+      const t = sansSchema(m[1]);
+      const set = cols.get(t) || new Set();
+      for (const c of m[2].matchAll(/^\s+"?([A-Za-z_][A-Za-z_0-9]*)"?\s+[A-Za-z]/gm))
+        if (!MOTS_CLES.has(c[1].toLowerCase())) set.add(c[1].toLowerCase());
+      cols.set(t, set); creees.add(t);
     }
-    for (const m of sql.matchAll(/ALTER TABLE\s+([a-z_0-9]+)([\s\S]*?);/gi)) {
-      const set = cols.get(m[1]) || new Set();
-      for (const c of m[2].matchAll(/ADD COLUMN IF NOT EXISTS\s+"?([A-Za-z_][A-Za-z_0-9]*)"?/gi)) set.add(c[1].toLowerCase());
-      cols.set(m[1], set);
+    for (const m of sql.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_0-9."]+)([\s\S]*?);/gi)) {
+      if (/^"?private"?\./i.test(m[1])) continue;
+      const t = sansSchema(m[1]);
+      const set = cols.get(t) || new Set();
+      for (const c of m[2].matchAll(/ADD COLUMN\s+(?:IF NOT EXISTS\s+)?"?([A-Za-z_][A-Za-z_0-9]*)"?/gi)) set.add(c[1].toLowerCase());
+      for (const c of m[2].matchAll(/DROP COLUMN\s+(?:IF EXISTS\s+)?"?([A-Za-z_][A-Za-z_0-9]*)"?/gi)) set.delete(c[1].toLowerCase());
+      if (set.size) cols.set(t, set);
     }
     // Migration consolidée : les colonnes y sont déclarées en tuples
     // ('table','colonne','type') passés à une boucle, et non en ALTER TABLE.
@@ -71,7 +106,7 @@ function loadSchema() {
       }
     }
   }
-  return { cols, policies };
+  return { cols, policies, creees, fichiers };
 }
 
 // ── 2. Code : extraire le script principal ───────────────────────────────
@@ -205,13 +240,12 @@ function analyse(ast) {
 }
 
 // ── 5. Rapport ───────────────────────────────────────────────────────────
-const { cols, policies } = loadSchema();
+const { cols, policies, creees, fichiers } = loadSchema();
 const { code, offset } = loadScript();
 const ast = acorn.parse(code, { ecmaVersion: 2022, locations: true, allowReturnOutsideFunction: true });
 const writes = analyse(ast);
 
 const missing = new Map();   // table → Map(colonne → [lignes])
-const noTable = new Set();
 const opsByTable = new Map();
 // Champs que l'analyse n'a pas su résoudre — un objet construit dans une
 // boucle, par exemple. L'outil les taisait : une écriture pouvait ainsi
@@ -219,10 +253,16 @@ const opsByTable = new Map();
 // vérifier, mais il doit dire qu'il ne les vérifie pas.
 const opaques = new Map();
 
+// Tables écrites dont le dépôt ne porte pas la déclaration. Ce n'est PAS la
+// même chose qu'une table absente de la base : le schéma de fond vit dans le
+// projet Supabase et n'a jamais été déposé ici. L'outil ne peut donc rien en
+// dire — et il le dit, au lieu de les compter comme des défauts.
+const horsPortee = new Set();
+
 for (const w of writes) {
   if (only && w.table !== only) continue;
   (opsByTable.get(w.table) || opsByTable.set(w.table, new Set()).get(w.table)).add(w.op);
-  if (!cols.has(w.table)) { noTable.add(w.table); continue; }
+  if (!creees.has(w.table)) { horsPortee.add(w.table); continue; }
   const known = cols.get(w.table);
   for (const f of w.fields) {
     if (f.startsWith('?')) {                         // valeur non résoluble
@@ -238,7 +278,8 @@ for (const w of writes) {
 
 let problems = 0;
 console.log('═══ CONFORMITÉ CODE ↔ SCHÉMA ═══\n');
-console.log(`${writes.length} écritures analysées · ${cols.size} tables déclarées\n`);
+console.log(`${fichiers.length} fichier(s) SQL lus · ${creees.size} table(s) déclarées dans le dépôt`);
+console.log(`${writes.length} écritures analysées · ${opsByTable.size} table(s) écrites par le code\n`);
 
 if (opaques.size) {
   console.log('── Non vérifiable : objets construits dynamiquement ──');
@@ -248,11 +289,16 @@ if (opaques.size) {
   console.log();
 }
 
-if (noTable.size) {
-  problems += noTable.size;
-  console.log('── Tables écrites mais absentes du schéma ──');
-  [...noTable].sort().forEach(t => console.log('   ✗', t));
-  console.log();
+if (horsPortee.size) {
+  console.log('── HORS DE PORTÉE : le dépôt ne porte pas la déclaration de ces tables ──');
+  console.log('   Elles existent dans le projet Supabase ; leur schéma n\'a pas été');
+  console.log('   déposé ici. L\'outil ne peut donc PAS dire si le code écrit des');
+  console.log('   colonnes qui existent. Ce ne sont pas des défauts — ce sont des');
+  console.log('   angles morts, et ils le resteront tant que le schéma manquera.');
+  const l = [...horsPortee].sort();
+  for (let i = 0; i < l.length; i += 6) console.log('     ' + l.slice(i, i + 6).join(' · '));
+  console.log(`   → ${l.length} table(s) non vérifiables sur ${opsByTable.size} écrites.`);
+  console.log('     Demandé à ChatGPT : coordination/DEMANDES_A_CHATGPT.md · P0-7\n');
 }
 
 if (missing.size) {
@@ -286,5 +332,19 @@ if (rls.length) {
   console.log();
 }
 
-console.log(problems ? `✗ ${problems} problème(s)` : '✓ Aucun écart entre le code et le schéma');
-process.exit(problems ? 1 : 0);
+// Trois verdicts, pas deux. « Aucun écart » quand rien n'a pu être comparé
+// serait le pire des mensonges : un feu vert posé sur un angle mort.
+const verifiees = opsByTable.size - horsPortee.size;
+if (problems) {
+  console.log(`✗ ${problems} problème(s) sur ${verifiees} table(s) vérifiable(s)`);
+  process.exit(1);
+}
+if (!verifiees) {
+  console.log('⚠ CET AUDIT NE VÉRIFIE RIEN POUR L\'INSTANT.');
+  console.log('  Aucune des tables écrites par le code n\'est déclarée dans le dépôt :');
+  console.log('  il n\'a rien à comparer, et un « ✓ » ici ne voudrait rien dire.');
+  console.log('  Il retrouvera son utilité le jour où le schéma sera déposé.');
+  process.exit(1);
+}
+console.log(`✓ Aucun écart entre le code et le schéma, sur ${verifiees} table(s) vérifiable(s)`);
+process.exit(0);

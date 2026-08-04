@@ -1,4 +1,4 @@
-# Ce que Claude attend de ChatGPT — état au 4 août 2026
+# Ce que Claude attend de ChatGPT — état au 4 août 2026 (soir)
 
 **Écrit par Claude, à la demande de Loms.** Un seul document, tenu à jour, au
 lieu de demandes éparpillées dans les commentaires de la Pull Request nº6.
@@ -24,7 +24,90 @@ effacée, pour qu'on sache ce qui a déjà été tranché.
 
 ---
 
+# L'ordre de marche — arrêté par Loms le 4 août 2026
+
+Loms a demandé qu'on **finisse de brancher toutes les fonctionnalités de toutes
+les pages**, et que je conduise le travail. Voici l'ordre. Il n'est pas
+négociable entre nous : il vient de lui.
+
+**Le branchement de fond est déjà fait et il tient** — `ROLE_LOAD` déclare par
+rôle les tables et les colonnes lues, `pushSync` porte 306 écritures avec file
+d'attente hors ligne. Ce n'est donc pas 78 écrans à raccorder un par un. Ce qui
+reste tient en trois tas : **210 écritures dont l'échec est invisible** (107
+fonctions), une dizaine de contrats non encore branchés, et les reliquats du
+modèle multi-écoles.
+
+Le travail se fait **par rôle**, une passe à la fois, parce que c'est le rôle
+qui décide de ce qui se charge :
+
+| | passe | ce que j'attends de toi pour cette passe |
+|---|---|---|
+| 0 | **écran de connexion** ✅ *fait le 4 août* | rien |
+| 1 | **Caisse + Direction 1** | `P0-1` (l'auteur de l'encaissement) · `P1-3` (le numéro de reçu) |
+| 2 | **Gardien** | rien de neuf — le contrat v2 du scanner me suffit |
+| 3 | **Enseignant** | `P0-2` (qui a le droit d'écrire le visa) |
+| 4 | **Parent** | `P1-1` (lecture pédagogique) · `P1-2` (le nom du titulaire) |
+| 5 | **Direction 2** | `P1-4` (le site connecté), qui vaut aussi pour Direction 1 |
+
+Chaque passe se termine de la même façon : les audits, une recette dans le
+navigateur, une branche courte, une Pull Request. **Une seule tâche ouverte à
+la fois sur `dist/index.html`** — c'est la règle qui nous évite un conflit
+qu'on ne saurait pas résoudre.
+
+**`P0-7` ci-dessous ne dépend d'aucune passe : il les conditionne toutes.**
+
+---
+
 # P0 — bloquant
+
+## P0-7 · Le schéma des tables n'est pas dans le dépôt
+
+**C'est la demande la plus importante de ce document.** Elle ne débloque pas un
+écran : elle débloque la vérification de tous les autres.
+
+**Ce qui se passe.** Le dépôt porte six migrations — l'invitation de compte,
+l'enregistrement confirmé d'un élève et d'un utilisateur, la santé du serveur,
+la préinscription, un index. Elles sont complètes et je m'appuie dessus. Mais
+**les 49 tables de fond n'y sont pas** : `students`, `classes`, `payments`,
+`users`, `attendance`, `grades`, `notifs`, `aps`, `scan_log`… Leur schéma
+n'existe que dans le projet Supabase.
+
+**Ce que ça coûte, mesuré.** `tools/audit-schema.mjs` analyse **306 écritures**
+du navigateur et sait dire, colonne par colonne, laquelle n'existe pas dans la
+base. Aujourd'hui il rend ce verdict :
+
+```
+6 fichier(s) SQL lus · 1 table(s) déclarées dans le dépôt
+306 écritures analysées · 49 table(s) écrites par le code
+
+⚠ CET AUDIT NE VÉRIFIE RIEN POUR L'INSTANT.
+  49 table(s) non vérifiables sur 49 écrites.
+```
+
+Autrement dit : je ne peux pas savoir **avant** de brancher qu'un écran écrit
+une colonne qui n'existe pas. Je le découvre en recette, ou l'école le découvre
+devant une famille. C'est exactement le défaut que nos deux moitiés du travail
+sont censées s'empêcher mutuellement.
+
+**Ce dont j'ai besoin — et rien de plus.** Le schéma déposé dans
+`supabase/migrations/`, sous la forme qui te convient : une migration de
+référence, un `pg_dump --schema-only`, un fichier par table. Il me faut :
+
+```
+   les tables et leurs colonnes, avec le type
+   les politiques RLS par table et par opération (SELECT/INSERT/UPDATE/DELETE)
+```
+
+**Ce dont je n'ai PAS besoin, et que je ne veux pas voir dans le dépôt :**
+aucune donnée, aucune clé, aucun mot de passe, aucun identifiant de projet,
+aucun `service_role`. Un schéma seul.
+
+**Je ne touche à rien.** Ce fichier ne sert qu'à comparer. Je ne l'exécuterai
+pas, je ne le modifierai pas : si mon outil trouve un écart, je te le signale,
+comme d'habitude. Et si tu préfères le déposer ailleurs que dans
+`supabase/migrations/`, dis-moi où — j'y pointerai l'outil.
+
+---
 
 ## P0-1 · L'auteur d'un encaissement n'est écrit nulle part
 
@@ -285,7 +368,27 @@ de la PR nº6.
 ou la bascule vers `payment_transactions`), P0-4 (l'enveloppe du scanner) et
 P0-5 (`orient`).**
 
+**P0-4 et P0-5 sont servis** — tes tests de rôles du 4 août confirment
+`recorded:false` et `reason:orientation_required` sur une orientation. **P0-1
+reste ouvert, et c'est lui qui ouvre la passe 1.**
+
 ---
+
+# P0-6 · ✅ SERVI le 4 août 2026 — les préinscriptions
+
+**Livré en entier**, et raccordé de mon côté le même jour :
+`submit_preinscription`, `validate_preinscription`, `refuse_preinscription`,
+avec le frein anti-robot, l'expiration à 30 jours, la réutilisation du parent
+pour les fratries et le matricule sans trou. La garantie que j'avais posée
+comme condition est tenue : **une personne autorisée venue du site naît
+`pending`, `active=false`, sans photo.**
+
+De mon côté : le formulaire du site appelle ta RPC, tes codes d'erreur sont
+traduits pour la Direction, et la validation rend compte de ce que le serveur a
+réellement fait — matricule attribué, parent réutilisé, autorisées en attente.
+Fusionné dans `main` (PR nº8).
+
+Le texte de la demande d'origine est conservé ci-dessous, pour mémoire.
 
 # P0-6 · Les préinscriptions — Loms a tranché, l'interface est prête
 

@@ -161,7 +161,12 @@ body{font-family:'DM Sans',-apple-system,sans-serif;background:var(--bg);color:v
 /* ── LOGIN ── */
 .login-screen{position:fixed;inset:0;height:var(--app-vh,100vh);z-index:900;background:radial-gradient(circle at 25% -10%,#1c2e6b 0%,#101b44 42%,#070b1f 75%,#03050f 100%);display:flex;align-items:center;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px 0 40px}
 .login-screen.hidden{opacity:0;pointer-events:none}
-.login-container{background:transparent;width:100%;max-width:380px;margin:auto 16px;position:relative;z-index:1;animation:loginCardIn .6s cubic-bezier(.16,.84,.44,1) both;will-change:transform}
+/* La carte pose son propre fond. Sans lui, le texte tombe sur une photographie
+   dont on ne maîtrise ni la clarté ni la zone : un placeholder blanc sur un
+   visage en plein soleil ne se lit pas, et aucune mesure faite sur le dégradé
+   déclaré ne l'aurait vu. Ici le pire cas — photo entièrement blanche — reste
+   au-dessus du seuil. */
+.login-container{background:linear-gradient(180deg,rgba(7,11,30,.68),rgba(5,8,24,.78));backdrop-filter:blur(14px) saturate(120%);-webkit-backdrop-filter:blur(14px) saturate(120%);border:1px solid rgba(255,255,255,.10);border-radius:28px;box-shadow:0 24px 60px rgba(0,0,0,.45);padding:26px 22px 22px;width:100%;max-width:380px;margin:auto 16px;position:relative;z-index:1;animation:loginCardIn .6s cubic-bezier(.16,.84,.44,1) both;will-change:transform}
 @keyframes loginCardIn{from{opacity:0;transform:translateY(28px) scale(.97)}to{opacity:1;transform:none}}
 .login-logo-wrap{position:relative;width:104px;height:104px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center}
 .login-logo-wrap img{width:84px!important;height:84px!important;position:relative;z-index:2;animation:logoBounce 3s ease-in-out infinite;filter:drop-shadow(0 10px 26px rgba(0,0,0,.5))}
@@ -172,24 +177,36 @@ body{font-family:'DM Sans',-apple-system,sans-serif;background:var(--bg);color:v
 .login-subtitle{text-align:center;color:rgba(255,255,255,.55);font-size:13.5px;margin:8px 0 28px;letter-spacing:.2px}
 .pin-message{height:20px;text-align:center;font-size:13px;color:#f87171;margin-bottom:4px}
 .login-field{position:relative;margin-bottom:14px}
-.login-field .lfi{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:16px;opacity:.6;z-index:2;pointer-events:none}
+.login-field .lfi{position:absolute;left:16px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:rgba(255,255,255,.62);z-index:2;pointer-events:none}
 .login-input{width:100%;padding:14px 16px 14px 44px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#fff;text-align:left;font-size:15px;font-weight:600;height:52px;border-radius:16px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);outline:none;font-family:inherit;transition:border-color .2s,background .2s}
 .login-input:focus{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.1)}
+/* Le placeholder porte le nom du champ : c'est du texte, il se mesure. */
+.login-input::placeholder{color:rgba(255,255,255,.68)}
 .login-input.pin{letter-spacing:6px;font-size:18px}
 .btn-login{width:100%;padding:16px;font-size:16px;font-weight:800;border:0;border-radius:16px;cursor:pointer;color:#1a1206;background:linear-gradient(100deg,var(--login-accent,var(--gold)),#f3c768);box-shadow:0 14px 30px rgba(217,164,58,.35);position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px;font-family:inherit}
 .btn-login:hover{transform:translateY(-2px);box-shadow:0 20px 40px rgba(217,164,58,.45)}
 .btn-login:active{transform:translateY(0)}
 .btn-login::after{content:"";position:absolute;top:0;left:-130%;width:55%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);transform:skewX(-18deg);animation:loginShine 3.4s ease-in-out infinite}
 @keyframes loginShine{0%{left:-130%}55%{left:160%}100%{left:160%}}
-.btn-outline-login{width:100%;padding:14px;font-size:14px;font-weight:700;border:1px solid rgba(255,255,255,.22);border-radius:16px;cursor:pointer;color:rgba(255,255,255,.85);background:rgba(255,255,255,.05);text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;font-family:inherit;transition:border-color .2s,background .2s}
-.btn-outline-login:hover{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.09)}
-.login-badges{display:flex;gap:6px;justify-content:space-between;margin:28px 0 0}
-.login-badges span{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10px;font-weight:600;color:rgba(255,255,255,.55);text-align:center}
-.login-badges span .lbi{font-size:18px}
+/* Les actions secondaires ne concurrencent pas la connexion : deux liens de
+   texte sur une ligne, puis un pied discret. Auparavant quatre boutons pleine
+   largeur pesaient 232 px contre 54 px pour l'action principale. */
+.login-links{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px 10px;margin-top:16px}
+.login-link{background:none;border:0;padding:6px 2px;font-family:inherit;font-size:13.5px;font-weight:600;color:rgba(255,255,255,.72);cursor:pointer;text-decoration:none;border-radius:8px;transition:color .2s}
+.login-link:hover,.login-link:focus-visible{color:#fff;text-decoration:underline}
+.login-sep{color:rgba(255,255,255,.56);font-size:13.5px;user-select:none}
+.login-foot{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px 18px;margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12)}
+.login-foot-item{display:inline-flex;align-items:center;gap:7px;background:none;border:0;padding:6px 2px;font-family:inherit;font-size:12.5px;font-weight:600;color:rgba(255,255,255,.68);cursor:pointer;text-decoration:none;transition:color .2s}
+.login-foot-item:hover,.login-foot-item:focus-visible{color:#fff}
+.login-foot-item svg{width:14px;height:14px;flex:none}
 .login-bg{position:absolute;inset:0;overflow:hidden;z-index:0}
 .login-bg-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:40% 8%;opacity:0;transition:opacity 1.4s ease;will-change:opacity}
-.login-bg::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,17,48,.05) 0%,rgba(13,21,56,.2) 38%,rgba(9,14,40,.4) 62%,rgba(7,11,31,.55) 88%,rgba(3,5,15,.65) 100%);pointer-events:none}
-.login-container .login-title,.login-container .login-subtitle,.login-badges span{text-shadow:0 2px 10px rgba(0,0,0,.55)}
+/* Le voile ne descendait qu'à 5 % en haut de l'écran : la photographie y
+   passait presque en clair, et c'est justement là que se trouvent les champs. */
+.login-bg::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,17,48,.42) 0%,rgba(13,21,56,.5) 38%,rgba(9,14,40,.62) 62%,rgba(7,11,31,.72) 88%,rgba(3,5,15,.8) 100%);pointer-events:none}
+/* Le fond est une photographie : sans cette ombre portée, un texte clair passe
+   sur une zone claire et disparaît. Elle vaut aussi pour les liens. */
+.login-container .login-title,.login-container .login-subtitle,.login-link,.login-sep,.login-foot-item{text-shadow:0 2px 10px rgba(0,0,0,.55)}
 
 /* ── GUARDIAN SCREEN ── */
 #GUARDIAN{position:fixed;inset:0;z-index:950;overflow:hidden;cursor:pointer;user-select:none;opacity:0;pointer-events:none;background:#0a0e27}
@@ -1183,36 +1200,31 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
     <h1 class="login-title">Bienvenue 👋</h1>
     <p class="login-subtitle">Connectez-vous à votre espace sécurisé</p>
     <div class="login-field">
-      <span class="lfi">👤</span>
+      <svg class="lfi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20c0-3.3 3.6-5.5 8-5.5s8 2.2 8 5.5"/><circle cx="12" cy="8" r="4"/></svg>
       <input class="login-input" id="LN" type="email" placeholder="Adresse e-mail" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
     </div>
     <div class="login-field" style="margin-bottom:4px">
-      <span class="lfi">🔒</span>
+      <svg class="lfi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
       <input class="login-input" id="LP" placeholder="Mot de passe" type="password" autocomplete="current-password">
     </div>
-    <div id="LP_HINT" style="font-size:11px;color:rgba(255,255,255,.55);text-align:center;margin-bottom:12px;min-height:16px">Utilisez l’e-mail invité et votre mot de passe.</div>
+    <div id="LP_HINT" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;margin-bottom:12px;min-height:16px">Utilisez l’e-mail invité et votre mot de passe.</div>
     <div class="pin-message" id="PM"></div>
-    <div id="NO_SCHOOL_WARN" style="display:none;font-size:12px;line-height:1.5;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.4);color:#fde68a;border-radius:10px;padding:10px 12px;margin-bottom:12px">
-      ⚠️ Aucune école associée à ce lien — la connexion se fera hors ligne.
-      Ouvre l'application depuis le lien fourni par ton école (il contient <code>?school=…</code>).
+    <button class="btn-login" id="LOGIN_BUTTON" onclick="tryLogin()">Se connecter</button>
+    <div class="login-links">
+      <button type="button" class="login-link" onclick="window._requestPasswordReset()">Mot de passe oublié</button>
+      <span class="login-sep" aria-hidden="true">·</span>
+      <button type="button" class="login-link" onclick="window._resumeInvitation()">Première connexion</button>
     </div>
-    <button class="btn-login" id="LOGIN_BUTTON" onclick="tryLogin()">🔓 Se connecter</button>
-    <button type="button" class="btn-outline-login" onclick="window._requestPasswordReset()">🔑 Mot de passe oublié ?</button>
-    <button type="button" class="btn-outline-login" onclick="window._resumeInvitation()">✉️ Première connexion / invitation</button>
-    <a href="site.html" class="btn-outline-login">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-      Visiter le site de l'école
-    </a>
-    <button type="button" id="btnInstallApp" class="btn-outline-login" style="display:none" onclick="_installApp()">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
-      Installer l'application
-    </button>
-    <div id="LOAD_IND" style="display:none;margin-top:14px;text-align:center;font-size:12px;color:rgba(255,255,255,.5);animation:pulse 1.5s ease-in-out infinite">⏳ Synchronisation en cours…</div>
-    <div class="login-badges">
-      <span><span class="lbi">🛡️</span>Sécurité</span>
-      <span><span class="lbi">📷</span>Scan QR</span>
-      <span><span class="lbi">💬</span>Messages</span>
-      <span><span class="lbi">📊</span>Suivi</span>
+    <div id="LOAD_IND" style="display:none;margin-top:14px;text-align:center;font-size:12px;color:rgba(255,255,255,.62);animation:pulse 1.5s ease-in-out infinite">⏳ Synchronisation en cours…</div>
+    <div class="login-foot">
+      <a href="site.html" class="login-foot-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>
+        Site de l'école
+      </a>
+      <button type="button" id="btnInstallApp" class="login-foot-item" style="display:none" onclick="_installApp()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>
+        Installer l'application
+      </button>
     </div>
   </div>
   <div class="login-container" id="PASSWORD_SETUP" style="display:none">
@@ -1222,17 +1234,19 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
     <h1 class="login-title" id="PASSWORD_SETUP_TITLE">Créez votre mot de passe</h1>
     <p class="login-subtitle">Compte : <strong id="INVITE_EMAIL"></strong></p>
     <div class="login-field">
-      <span class="lfi">🔒</span>
+      <svg class="lfi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
       <input class="login-input" id="NEW_PASSWORD" type="password" placeholder="Nouveau mot de passe" autocomplete="new-password" minlength="8">
     </div>
     <div class="login-field" style="margin-bottom:4px">
-      <span class="lfi">🔒</span>
+      <svg class="lfi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
       <input class="login-input" id="CONFIRM_PASSWORD" type="password" placeholder="Confirmer le mot de passe" autocomplete="new-password" minlength="8">
     </div>
     <div style="font-size:11px;color:rgba(255,255,255,.72);text-align:center;margin-bottom:12px;min-height:16px">Choisissez au moins 8 caractères. Gardez ce mot de passe secret.</div>
     <div class="pin-message" id="SET_PASSWORD_MESSAGE"></div>
-    <button class="btn-login" id="SET_PASSWORD_BUTTON" type="button" onclick="window._completePasswordSetup()">✅ Enregistrer le mot de passe</button>
-    <button type="button" class="btn-outline-login" onclick="window._cancelPasswordSetup()">Retour à la connexion</button>
+    <button class="btn-login" id="SET_PASSWORD_BUTTON" type="button" onclick="window._completePasswordSetup()">Enregistrer le mot de passe</button>
+    <div class="login-links">
+      <button type="button" class="login-link" onclick="window._cancelPasswordSetup()">Retour à la connexion</button>
+    </div>
   </div>
 </div>
 
@@ -4187,46 +4201,19 @@ window.closeSB = () => { S.sbOpen=false; $('SB').classList.remove('open'); $('SO
 
 
 // ── LOGIN ──
-// Différencie l'écran de connexion par école : couleur d'accent (.btn-login,
-// via --login-accent) + petit badge logo de l'école accolé au logo SchoolSafe
-// (qui reste affiché tel quel). Source : school_sites (site public), via le
-// même license_key que _loadSiteDataForPage(). Best-effort, silencieux hors ligne.
-window._loginBrandingApplied = false;
-window._applyLoginBranding = async function(){
-  if (window._loginBrandingApplied) return;
-  const key = (DB.settings?.license_key||'').trim();
-  if (!key || !CENTRAL_URL || !CENTRAL_KEY) return;
-  try {
-    const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(), 6000);
-    const r = await fetch(
-      CENTRAL_URL + '/rest/v1/school_sites?license_key=eq.' + encodeURIComponent(key) + '&select=logo_url,primary_color&limit=1',
-      { headers: { apikey: CENTRAL_KEY, Authorization: 'Bearer ' + CENTRAL_KEY }, signal: ctrl.signal }
-    );
-    const rows = r.ok ? await r.json() : [];
-    const d = rows[0];
-    if (!d) return;
-    window._loginBrandingApplied = true;
-    const ls = $('LS');
-    if (d.primary_color && ls) ls.style.setProperty('--login-accent', d.primary_color);
-    if (d.logo_url) {
-      const wrap = document.querySelector('.login-logo-wrap');
-      if (wrap && !$('schoolLogoBadge')) {
-        wrap.style.position = 'relative';
-        const img = document.createElement('img');
-        img.id = 'schoolLogoBadge'; img.src = d.logo_url; img.alt = '';
-        img.style.cssText = 'width:34px;height:34px;border-radius:50%;object-fit:cover;position:absolute;right:-4px;bottom:4px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.25);background:#fff';
-        wrap.appendChild(img);
-      }
-    }
-  } catch(e) { /* hors ligne — pas de branding cette session, pas grave */ }
-};
-
+// L'écran de connexion ne va chercher aucune marque ailleurs.
+//
+// Il appelait un registre central par `license_key` pour teindre le bouton et
+// coller l'emblème de l'ÉCOLE sur le logo du LOGICIEL. Deux règles y passaient
+// à la fois : SchoolSafe est livré à une seule école — aucun tiers, aucune
+// clé de licence — et l'emblème de l'école n'entre pas dans l'interface.
+// Retiré le 4 août 2026. Le reste du dispositif central (« Mon site web »)
+// part avec la passe consacrée au site.
 window.showLogin = () => {
   const sp=$('SPLASH'), ls=$('LS');
   const loginForm=$('login-form'), passwordSetup=$('PASSWORD_SETUP');
   if(loginForm) loginForm.style.display='';
   if(passwordSetup) passwordSetup.style.display='none';
-  window._applyLoginBranding();
 
   // Splash disparaît instantanément
   if(sp){ sp.style.transition='none'; sp.style.opacity='0'; sp.style.pointerEvents='none'; setTimeout(()=>{ if(sp) sp.style.display='none'; },80); }
