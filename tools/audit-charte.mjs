@@ -65,12 +65,22 @@ const SEMANTIQUES = new Set([
   '#ea580c','#9a3412','#fff7ed','#fdba74','#b45309','#fef3c7',
   // bleu d'information, employé pour un état neutre
   '#eff6ff','#1e40af','#dbeafe',
+  // rose — l'élève est MALADE. Vérifié à la source : status==='sick'.
+  // C'est un état de santé, pas une identité ; il ne prend pas la charte.
+  '#9d174d','#fce7f3',
 ]);
-// Le « gris » de l'école n'est PAS un gris neutre : c'est un vert de gris,
-// teinte 136°, relevé sur le pot de peinture de la Direction (#a9b4ac).
-// Un classement qui exigeait R = G = B rejetait donc toute la charte.
-// On accepte l'écart tant que le vert domine sans excès — au-delà, c'est
-// un vert franc, hors charte.
+// Le « gris » de l'école n'est PAS un gris neutre : c'est un GRIS BLEUTÉ,
+// teinte 207–210°, relevé sur le mur peint de l'école (#657786, revérifié le
+// 4 août 2026 sur photographie : #6e7984, 210° · 9 % · 47 %).
+// Un classement qui exigeait R = G = B rejetait donc la charte elle-même.
+// On accepte l'écart tant que le bleu domine sans excès — au-delà, c'est un
+// bleu franc, hors charte. C'est ce seuil qui a fait tomber les 167 emplois
+// du bleu du logiciel dans les documents.
+//
+// Le commentaire précédent décrivait un vert de gris (#a9b4ac, 136°) :
+// c'était le TROISIÈME des quatre essais de couleur, abandonné. Le code, lui,
+// a toujours mis en œuvre le gris bleuté retenu. Corrigé pour que l'outil ne
+// raconte pas autre chose que ce qu'il fait.
 const nature = ([r,g,b]) => {
   const e = Math.max(r,g,b) - Math.min(r,g,b);
   if (e <= 6) return 'gris';                                  // gris neutre pur

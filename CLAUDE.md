@@ -90,6 +90,30 @@ l'emblème de l'école que si la Direction l'a elle-même téléversé.
 Symétriquement : **les documents imprimés représentent l'école**, donc ils en
 portent les couleurs — jamais celles de l'interface.
 
+**Confirmé par Loms le 4 août 2026 :** la charte couvre le site **et tout
+document que l'application produit** — reçu, bulletin, certificat, convocation,
+fiche de paie, carte d'élève. L'interface, elle, garde le bleu du logiciel.
+
+Le passage a été fait ce jour-là : **520 couleurs sur 43 documents**, dont
+**167 emplois du seul bleu du logiciel `#243a6b`**. Ce n'étaient pas 520
+décisions mais trente et une, chacune répétée. Trois leçons en sont sorties :
+
+1. **Le pied de page partagé avait bien échappé à tout**, comme annoncé plus
+   haut — `_officialFooter` ne produit pas de PDF, donc aucun outil qui
+   parcourt « les fonctions qui produisent un document » ne le voyait. Un
+   assistant partagé se reprend **par son nom**, pas par balayage.
+2. **Un écart de charte cachait un défaut de lisibilité** : `#a89c8b` portait
+   ce pied de page en corps de 10 px, à **3,03:1**. Mesurer pour la charte a
+   trouvé ce que personne ne cherchait.
+3. **Le commentaire de `audit-charte.mjs` décrivait le vert de gris** — le
+   troisième essai, abandonné — alors que son code appliquait le gris bleuté
+   retenu. Un outil dont le commentaire contredit le code est un piège : le
+   prochain lecteur corrigera le code pour lui obéir, et rejettera la charte.
+
+Les cartes d'élève sortent d'un **studio à dix familles** que la Direction
+choisit. Aucune n'a été retirée : une onzième, `L · Le Sage`, a été ajoutée
+et **elle est le défaut**. Ce qui sort sans qu'on touche à rien porte l'école.
+
 ---
 
 ## L'école

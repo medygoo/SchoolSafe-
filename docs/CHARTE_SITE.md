@@ -1,4 +1,18 @@
-# Le site aux couleurs de l'école — 4 août 2026
+# La charte de l'école — le site ET les documents · 4 août 2026
+
+> **Décision de Loms, 4 août 2026 :** la charte couvre **le site de l'école et
+> tout document que l'application produit** — reçu, bulletin, certificat,
+> convocation, fiche de paie, carte d'élève.
+>
+> L'**interface** de l'application garde le bleu du logiciel. Ce n'est pas une
+> exception mais la même règle vue de l'autre côté : **l'interface porte le
+> logiciel, le document porte l'école.** Un parent qui ouvre l'application
+> ouvre SchoolSafe ; une administration qui reçoit un certificat reçoit Le Sage.
+
+Ce document décrit d'abord le site (§1 à §6), puis les documents (§7).
+
+---
+
 
 Le site déposé sur `cslesage.com` portait **la première des quatre tentatives
 de couleur** : crème, brun et laiton, avec une variable CSS littéralement
@@ -116,3 +130,114 @@ contact.html
 Ils écrasent les anciens. Après le dépôt, **forcer le rechargement** du
 navigateur (Ctrl+Maj+R, ou vider le cache sur téléphone) : sans cela l'ancien
 `site.css` reste en mémoire et les couleurs paraissent inchangées.
+
+---
+
+# 7. Les documents produits par l'application
+
+`node tools/audit-charte.mjs` disait, avant ce lot :
+
+```
+✗ 505 couleur(s) hors charte sur 43 documents
+```
+
+Il dit maintenant :
+
+```
+✓ Les 43 documents de l'école ne portent que du gris, du blanc et de l'or
+```
+
+## 7.1 Ce qui a été remplacé
+
+**520 couleurs, sur 332 lignes, dans 46 plages de documents.** Ce n'étaient
+pas 505 décisions : trente et une couleurs distinctes revenaient partout.
+
+| ancienne | où | nouvelle | mesure sur blanc |
+|---|---|---|---|
+| `#243a6b` ×167 | **le bleu du logiciel** — titres, en-têtes de tableaux, filets | `#556777` | 5,85:1 |
+| `#205fae` `#2f7bd6` | bleus d'accent | `#657786` | 4,63:1 |
+| `#1d4ed8` `#3b5998` `#1e3a6e` `#1446aa` | bleus divers | `#556777` | 5,85:1 |
+| `#93c5fd` `#c7d7f5` `#c7d2fe` `#d0eaf5` `#dbe7fb` | bleus pâles de fond | `#dadee2` | — |
+| `#0f7ea8` `#0a5b7a` | turquoise de la liste EXETAT | `#556777` · `#1a2228` | |
+| `#9b6fd4` `#8255c4` `#6f44ab` | violets du TENAFEP et des préparations | `#657786` · `#556777` · `#1a2228` | |
+| `#6f6557` ×119 | texte secondaire brun | `#5e6c78` | 5,40:1 |
+| `#a89c8b` ×20 | petit texte du pied de page | `#5e6c78` | **3,03 → 5,40:1** |
+| `#2a2622` `#241f1a` `#44403c` | encre brune | `#1a2228` | 16,1:1 |
+| `#efe3d3` `#ddd0bf` | bandes crème | `#dadee2` | |
+| `#fff5ea` `#f6ede0` `#fff8f0` `#fdf4e7` | papier crème | `#f0f1f2` | |
+
+`#a89c8b` mérite d'être relevé à part : il portait le pied de page officiel en
+**corps de 10 pixels**, à **3,03:1**. Ce n'était pas seulement un écart de
+charte, c'était une ligne difficile à lire sur un document imprimé. Elle est
+maintenant à 5,40:1.
+
+## 7.2 L'assistant partagé — le défaut annoncé était bien là
+
+`CLAUDE.md` prévenait : *« Le pied de page officiel n'appartient à aucun
+document : il est appelé par quatorze d'entre eux. Il avait gardé l'ancien
+papier crème quand tous les autres avaient été repris. »*
+
+**C'était vrai ici aussi.** `_officialFooter` ne produit pas de PDF, donc aucun
+outil qui parcourt « les fonctions qui produisent un document » ne le voyait.
+Il a été repris explicitement, avec `ssBuildBadge` et `ssBuildCarte`.
+
+Deux corrections y ont été faites au passage :
+
+- le filet de séparation passe à l'**or de l'emblème** — la troisième couleur
+  de la charte, employée comme filet et non comme texte ;
+- `page-break-inside:avoid` sur le bloc des signatures. *« Une signature
+  séparée de son intitulé ne signe plus rien. »* Rien ne le garantissait.
+
+## 7.3 Les cartes d'élève — rien n'a été retiré
+
+Les cartes sortent d'un **studio à dix familles** que la Direction choisit
+(Arc-en-ciel, Prestige Or, Jungle Safari…). Supprimer ce choix aurait dépassé
+la demande.
+
+**Une onzième famille a été ajoutée — `L · Le Sage — charte de l'école` — et
+c'est elle le défaut.** Ce qui sort de l'application sans qu'on touche à rien
+porte donc l'école. Les dix autres restent disponibles.
+
+```
+--ss-navy  #1a2228   --ss-navy2 #556777    en-tête : encre → mur, texte blanc
+--ss-gold  #c09018   --ss-gold2 #e2b84f    l'étoile de l'emblème
+--ss-cc    #556777   --ss-cc-soft #dadee2  --ss-cc-dark #1a2228
+```
+
+Quatre variantes d'accent, toutes dans la charte : *Le mur · Mur clair ·
+Or de l'emblème · Encre*.
+
+## 7.4 Ce qui reste hors charte, et pourquoi
+
+- **Les couleurs sémantiques** — vert d'un paiement, rouge d'une dette, orange
+  d'une alerte, et le rose de `status==='sick'`. Elles disent un **état**, pas
+  une identité. Vérifié à la source avant de le décider : `#9d174d` est bien
+  écrit sous `a.status==='sick'`. Il a été ajouté à la liste des couleurs
+  sémantiques de l'outil plutôt que remplacé.
+- **Les couleurs par classe** — distinguer les classes est une fonction.
+- **L'interface** — elle porte le logiciel.
+
+## 7.5 Une correction dans l'outil lui-même
+
+`tools/audit-charte.mjs` portait un commentaire qui décrivait le gris de
+l'école comme un **vert de gris, teinte 136°, `#a9b4ac`** — le *troisième* des
+quatre essais, abandonné. Son code, lui, a toujours mis en œuvre le gris
+bleuté retenu.
+
+Un outil dont le commentaire dit autre chose que le code est un piège à
+retardement : le prochain qui le lira corrigera le code pour le faire
+correspondre au commentaire, et rejettera la charte. Le commentaire a été mis
+en accord avec le code.
+
+## 7.6 Ce qui n'a PAS été fait, et devrait l'être
+
+Le pied de page officiel compte **deux colonnes** : *Signature & cachet* et
+*Lu et approuvé*. `CLAUDE.md` en demande **trois** :
+
+> **bénéficiaire · acteur · autorité.** Sur un reçu, le caissier signe de sa
+> main devant la famille qui paie, à côté du visa. Une signature qui s'imprime
+> toute seule ne signe plus rien.
+
+Aujourd'hui la ligne de **celui qui accomplit l'acte** manque. Ce n'est pas un
+défaut de couleur — c'est une règle métier, elle touche quatorze documents, et
+elle appartient à Loms. **Signalée, pas décidée.**
