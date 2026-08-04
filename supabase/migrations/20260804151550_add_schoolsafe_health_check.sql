@@ -1,4 +1,5 @@
 -- SchoolSafe — contrôle de santé externe minimal
+-- Version réellement appliquée dans Supabase : 20260804151550.
 --
 -- Cette RPC sert à vérifier que PostgREST et PostgreSQL répondent. Elle ne lit
 -- aucune table et ne renvoie aucune donnée d'élève, parent, paiement, compte ou
