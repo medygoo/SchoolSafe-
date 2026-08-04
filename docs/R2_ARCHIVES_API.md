@@ -28,7 +28,31 @@ Cela évite des copies inutiles et permet une restauration auditée.
 { "action": "summary" }
 ```
 
-Retour : année scolaire, nombre de fichiers, taille totale, première et dernière date d’archivage.
+Retour Edge Function :
+
+```json
+{
+  "ok": true,
+  "years": [
+    {
+      "academic_year": "2025-2026",
+      "file_count": 120,
+      "total_bytes": 48234410,
+      "archived_count": 80,
+      "active_count": 40
+    }
+  ]
+}
+```
+
+Les champs viennent de `get_archive_summary()` :
+
+- `file_count` : tous les fichiers non supprimés de l’année ;
+- `total_bytes` : taille totale correspondante ;
+- `archived_count` : fichiers archivés ;
+- `active_count` : fichiers encore actifs.
+
+`years: []` est un état vide autorisé : aucune archive ou aucun fichier enregistré. Ce n’est pas une erreur de contrat.
 
 ## Liste paginée
 
@@ -104,11 +128,11 @@ Cette opération restaure le dossier et toutes ses pièces non supprimées.
 ## Interface Claude attendue
 
 - Rubrique « Archives » visible uniquement dans Direction 1.
-- Cartes de résumé par année.
+- Cartes de résumé par année utilisant `file_count`, `total_bytes`, `archived_count` et `active_count`.
 - Recherche et filtres par année, type de propriétaire, catégorie et nom.
 - Pagination.
 - Bouton « Ouvrir » utilisant l’URL temporaire.
 - Bouton « Restaurer » avec confirmation.
 - Pour un dossier administratif, restauration du dossier complet et non d’une page isolée.
-- Affichage de la personne et de la date d’archivage/restauration.
+- Affichage de la personne et de la date d’archivage/restauration depuis la liste détaillée.
 - Aucun bouton de suppression physique depuis l’écran Archives.
