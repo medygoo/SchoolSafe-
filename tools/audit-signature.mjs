@@ -153,7 +153,15 @@ const A_EMBLEME   = /_logoDoc|_logoImg|SCHOOL_LOGO/;
 // Ce n'est PAS compté comme un défaut du frontend quand la donnée n'existe
 // pas : DB.payments n'enregistre pas qui a encaissé. On ne pose pas une garde
 // là où la valeur ne peut pas exister — on demande le champ.
-const AUTEUR_ENREGISTRE = /_officialFooter\([^;]*?\{\s*nom\s*:/;
+// L'auteur peut arriver de deux façons, et l'outil doit reconnaître les deux.
+//
+// Il ne reconnaissait qu'un objet ÉCRIT EN CLAIR dans l'appel. Le jour où un
+// reçu a reçu son auteur par une fonction — `_auteurDesLignes(lignes)`, qui
+// rend `{nom, role, le}` ou `null` selon ce que la base porte — l'outil a
+// continué à annoncer « délivré par ». Il mesurait la FORME de l'appel, pas
+// ce qui s'imprime. Un audit qui ne voit qu'une écriture sur deux ne dit pas
+// « je ne sais pas » : il dit « non », et c'est faux.
+const AUTEUR_ENREGISTRE = /_officialFooter\([^;]*?(\{\s*nom\s*:|_auteurDesLignes\()/;
 const NOMME_QUELQU_UN   = /_officialFooter\(|_pdfSignatureBlock\(|S\.user\?\.name|S\.user\.name|by_name|\br\.by\b|\bv\.by\b/;
 const FINANCIER = new Set(['downloadRecuPaiement','downloadRecuFrais','downloadRecuRattrapage',
   'downloadRecuCantine','downloadRecuActivites','printVersementRecu','viewReceipt',

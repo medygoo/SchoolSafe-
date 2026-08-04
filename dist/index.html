@@ -11354,14 +11354,32 @@ R.payments = () => {
 window._payFilterClass='';
 window._payFilterStatus='';
 
-window.togglePay = (sid, t) => {
+// DIRECTION 1 EST LE ROI — mais son geste porte son nom.
+//
+// Règle de Loms, 4 août 2026. Direction 1 garde le droit de lever un
+// trimestre sans encaissement : une famille peut avoir un arrangement, payer
+// en nature, ou être dispensée. Ce droit ne se discute pas.
+//
+// Ce qui manquait, c'est la trace. La ligne partait avec le seul booléen :
+//     pushSync('payments','patch',{paid:p.paid}, …)
+// ni QUI, ni QUAND, ni POURQUOI — et le message « T1 activé » s'affichait
+// avant même que le serveur ait répondu. La colonne `by` existe depuis
+// toujours dans la table ; personne ne l'écrivait.
+//
+// Ce n'est pas un encaissement : aucun argent n'entre. C'est une décision de
+// la Direction, et elle se lit comme telle dans le journal.
+window.togglePay = async (sid, t) => {
   if(!S.user||S.user.role!=='direction'){toast('Accès non autorisé','error');return;}
   const p=(DB.payments||[]).find(x=>x.sid===sid&&x.t===t); if(!p) return;
-  p.paid=!p.paid;
-  pushSync('payments','patch',{paid:p.paid},'sid=eq.'+sid+'&t=eq.'+t);
   const s=DB.students.find(x=>x.id===sid);
-  logAudit('payment_toggle', `${s?s.name:sid} — T${t} ${p.paid?'payé':'impayé'}`, sid);
-  toast(p.paid?`T${t} activé`:`T${t} désactivé`, p.paid?'success':'info');
+  const vise = !p.paid;
+  const _trace = { paid: vise, by: S.user.id, date: today(),
+                   note: `${vise?'Levé':'Retiré'} par ${window._acteur()} — décision de la Direction, sans encaissement` };
+  const ok = await pushSync('payments','patch',_trace,'sid=eq.'+sid+'&t=eq.'+t);
+  if (!ok) { toast('Enregistrement refusé — rien n\'a changé', 'error'); return; }
+  Object.assign(p, _trace);
+  logAudit('payment_toggle', `${s?s.name:sid} — T${t} ${p.paid?'levé':'retiré'} par ${window._acteur()}`, sid);
+  toast(p.paid?`T${t} levé — sans encaissement`:`T${t} retiré`, p.paid?'success':'info');
   // Auto-activation accès parent quand tous les frais sont payés
   if (s) {
     const pays = (DB.payments||[]).filter(x=>x.sid===sid);
@@ -11515,7 +11533,7 @@ window.downloadRecuPaiement = (sid) => {
       <span>TOTAL PAYÉ</span>
       <span>${_cur()}${totalPaid} / ${_cur()}${totalDue}</span>
     </div>
-    ${_officialFooter((DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale')}
+    ${_officialFooter((DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',window._auteurDesLignes(paidTrims))}
   </div>
   </body></html>`;
   dlPDF(htmlStr, `Recu_${s.name.replace(/\s+/g,'_')}_${today()}.pdf`);
@@ -12987,7 +13005,7 @@ window.downloadRecuFrais = (sid) => {
       <tbody>${rows}</tbody>
       <tfoot><tr style="background:#f0fdf4"><td colspan="1" style="padding:10px 12px;font-weight:700">TOTAL PAYÉ</td><td style="padding:10px 12px;text-align:right;font-weight:900;font-size:16px;color:#1f9d6b">${_cur()}${total}</td><td colspan="2"></td></tr></tfoot>
     </table>
-    ${_officialFooter(dir?.name||'Direction','Direction Générale')}
+    ${_officialFooter(dir?.name||'Direction','Direction Générale',window._auteurDesLignes(pays))}
   </div>`;
   dlPDF(html,`recu_frais_${s.name.replace(/\s+/g,'_')}.pdf`);
 };
@@ -13157,7 +13175,7 @@ window.downloadAttestationPaiement = (sid) => {
     <div style="background:#fffbeb;border:1px dashed #d97706;border-radius:12px;padding:14px;font-size:12px;color:#92400e;margin-bottom:20px">
       <strong>Note :</strong> Le présent document atteste que l'élève sus-mentionné ne présente aucun impayé au titre des frais scolaires de l'année académique ${DB.settings.year||'2025-2026'}. Ce document est établi à la demande du bénéficiaire et ne constitue pas un droit d'inscription automatique pour l'année suivante.
     </div>
-    ${_officialFooter(dir?.name||'Direction','Direction Générale')}
+    ${_officialFooter(dir?.name||'Direction','Direction Générale',window._auteurDesLignes(pays))}
   </div>`;
   dlPDF(html,`attestation_paiement_${s.name.replace(/\s+/g,'_')}.pdf`);
 };
@@ -13547,6 +13565,17 @@ window.enregistrerVersement = async () => {
     const t = r.data.transaction || r.data;
     const recu = t.receipt_no || '—';
     logAudit('payment_record', `${_fmtMt(t.amount ?? montant, t.currency)} — reçu ${recu}`, sid);
+
+    // Direction 1 est prévenue de tout mouvement d'argent, nommément.
+    // Le serveur a déjà enregistré QUI a encaissé — on le lui redit ici pour
+    // qu'elle n'ait pas à ouvrir un écran pour le savoir. Direction 2 n'est
+    // pas dans la liste : elle ne voit jamais un montant.
+    const _el = (DB.students||[]).find(x => x.id === sid);
+    await window._notifDirection1(
+      `💵 Versement encaissé — ${_el ? _el.name : sid}\n`
+      + `${_fmtMt(t.amount ?? montant, t.currency)} · reçu n° ${recu}\n`
+      + `Par ${t.recorded_by_name ? `${t.recorded_by_name} (${window._roleOfficiel ? window._roleOfficiel(t.recorded_by_role) : t.recorded_by_role||''})` : window._acteur()}`
+    );
 
     // Le formulaire ne se vide qu'APRÈS confirmation du serveur.
     ['cf_montant','cf_ref','cf_note'].forEach(id => { const e=$(id); if(e) e.value=''; });
@@ -16426,6 +16455,56 @@ window._notifDirection = async (msg) => {
   const dirs=(DB.users||[]).filter(u=>u.role==='direction'||u.role==='direction2');
   for(const u of dirs) await pushNotif(u.id,msg);
   return dirs.length;
+};
+
+// L'ARGENT NE VA QU'À DIRECTION 1.
+//
+// Règle de Loms, 4 août 2026 : « la Caisse enregistre le paiement et notifie
+// la Direction 1 ; tout mouvement et tout reçu porte le nom et le profil de
+// celui qui l'a fait, pour identifier qui fait quoi. »
+//
+// `_notifDirection` prévient AUSSI la Direction 2. S'en servir pour un
+// versement lui enverrait le montant — alors que sa table de chargement lui
+// retire déjà, expressément, le montant et la devise de tout document. Une
+// notification aurait contourné par la porte de derrière ce que la couche de
+// données interdit par la grande porte.
+window._notifDirection1 = async (msg) => {
+  const dirs = (DB.users||[]).filter(u => window._normRole ? window._normRole(u.role)==='direction' : u.role==='direction');
+  for (const u of dirs) await pushNotif(u.id, msg);
+  return dirs.length;
+};
+
+// L'AUTEUR D'UN REÇU QUI COUVRE PLUSIEURS LIGNES.
+//
+// Un reçu de frais scolaires ne couvre pas un geste mais plusieurs : T1 levé
+// par la Direction en octobre, T2 encaissé par la Caisse en janvier. Il n'a
+// donc pas UN auteur — sauf si toutes les lignes portent le même.
+//
+// On ne choisit pas « le plus probable ». Quand les auteurs diffèrent, ou
+// qu'une seule ligne n'en porte pas, on rend `null` : le pied de page
+// retombe alors sur « Délivré par », qui est vrai. Nommer quelqu'un comme
+// auteur d'un acte qu'il n'a pas fait est pire que ne nommer personne.
+window._auteurDesLignes = (lignes) => {
+  const l = (lignes||[]).filter(x => x && x.paid);
+  if (!l.length || l.some(x => !x.by)) return null;
+  const ids = [...new Set(l.map(x => x.by))];
+  if (ids.length !== 1) return null;
+  const u = (DB.users||[]).find(x => x.id === ids[0]);
+  if (!u) return null;
+  const dates = l.map(x => x.date).filter(Boolean).sort();
+  return { nom: u.name,
+           role: (window._roleOfficiel ? window._roleOfficiel(u.role) : u.role) || '',
+           le: dates.length ? dates[dates.length-1] : '' };
+};
+
+// Qui agit, et à quel titre — la signature d'un mouvement, en une chaîne.
+// Un nom seul ne suffit pas : c'est le PROFIL qui dit de quel droit la
+// personne a agi. « Mireille » ne veut rien dire dans un journal ;
+// « Mireille (Caisse) » se lit sans connaître l'école.
+window._acteur = (u) => {
+  const p = u || S.user || {};
+  const role = window._roleOfficiel ? window._roleOfficiel(p.role) : (p.role||'');
+  return p.name ? (role ? `${p.name} (${role})` : p.name) : '—';
 };
 
 // `blocked` n'est écrit nulle part — seul `access_blocked` l'est. Cinq
