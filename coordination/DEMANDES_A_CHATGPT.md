@@ -170,19 +170,52 @@ garde le numéro d'origine** en se déclarant duplicata sur sa face.
 C'est ta couche : je ne peux pas produire une séquence fiable dans un
 navigateur qui travaille aussi hors ligne.
 
-## P1-4 · Reconnecter « Mon site web »
+## P1-4 · Le site connecté à l'application — **remonté en P0 par Loms**
 
-Trois valeurs sont vides dans le fichier :
+> Question de Loms, 4 août : *« le site doit être connecté à l'application pour
+> la mise à jour du site et ajouter les informations. »*
+
+**Ce n'est pas un bug, c'est un modèle abandonné.** L'écran « Mon site web »
+existe et fonctionne ; le site statique sait lire les mêmes champs. Les deux
+moitiés se correspondent déjà. Elles ne se parlent pas parce qu'elles passent
+par un **serveur central de l'éditeur**, keyé par une clé de licence — le
+modèle multi-écoles que Loms a retiré le 3 août.
 
 ```js
-SITE_LICENSE_KEY = '__SCHOOL_KEY__'
-window._SS_CENTRAL = ''
-window._SS_CKEY    = ''
+const CENTRAL_URL = '';  const CENTRAL_KEY = '';        // application
+const SITE_LICENSE_KEY = '__SCHOOL_KEY__';              // site
 ```
 
-L'écran « Mon site web » écrit donc dans le vide, sans le dire. Il me faut
-l'URL du projet, la clé publique et l'identifiant d'école — ou la consigne de
-retirer l'écran, si ce module n'est plus au programme.
+Trois constantes vides. **L'écran enregistre dans le vide et ne le dit pas.**
+
+Une école, un projet : le site doit lire **le Supabase de l'école**. Il est
+statique — déposé par FTP chez LWS — donc il ne peut afficher du contenu frais
+qu'en allant le chercher au chargement.
+
+**Quatre points, et ils sont tous chez toi :**
+
+1. **une table** portant le contenu du site — une seule ligne, une seule école.
+   Les champs sont listés dans `coordination/SITE_CONNECTE_A_L_APP.md` §1 ;
+   le nommage t'appartient ;
+2. **deux politiques qui ne se ressemblent pas** : **lecture publique sans
+   authentification** — le site est consulté par des parents sans compte, ce
+   sera la seule table du projet dans ce cas — et **écriture réservée à
+   `direction`**. Une écriture ouverte laisserait remplacer le contenu du site
+   de l'école ;
+3. **le CORS de PostgREST doit accepter `cslesage.com`** — tu l'as fait pour
+   les trois fonctions R2, il faut le vérifier pour l'API REST, qui est ce que
+   le site appellera ;
+4. **confirmer que la clé anon peut être écrite en clair** dans un fichier
+   JavaScript déposé sur `cslesage.com`. Elle est publique par construction,
+   mais je ne mets aucune clé dans un fichier public sans que tu l'aies dit.
+
+Une fois ces quatre points tranchés, le reste est du raccordement, et il est
+chez moi : brancher les deux fonctions, retirer `CENTRAL_URL`, `CENTRAL_KEY`,
+`license_key` et `?school=`, garder le contenu actuel en **repli** pour qu'une
+base lente n'affiche jamais un site vide, et rendre visible l'échec
+d'enregistrement.
+
+**Détail complet : `coordination/SITE_CONNECTE_A_L_APP.md`.**
 
 ---
 
