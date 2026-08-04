@@ -47,7 +47,22 @@
     ['email',            'E-mail'],
     ['blood_group',      'Groupe sanguin'],
     ['urgence',          'À prévenir en urgence'],
-    ['medical_notes',    'Santé']
+    ['medical_notes',    'Santé'],
+    // La tutelle et les trois personnes autorisées. Sans photo : elles se
+    // prennent à l'école, à la validation. Un gardien doit reconnaître un
+    // visage en trois secondes au portail — une photo de WhatsApp n'y suffit
+    // pas, et un formulaire public n'est pas un endroit où déposer la photo
+    // d'un enfant.
+    ['tutelle',          'Tuteur principal'],
+    ['a1_nom',           'Autorisée 1 — nom'],
+    ['a1_relation',      'Autorisée 1 — lien'],
+    ['a1_telephone',     'Autorisée 1 — téléphone'],
+    ['a2_nom',           'Autorisée 2 — nom'],
+    ['a2_relation',      'Autorisée 2 — lien'],
+    ['a2_telephone',     'Autorisée 2 — téléphone'],
+    ['a3_nom',           'Autorisée 3 — nom'],
+    ['a3_relation',      'Autorisée 3 — lien'],
+    ['a3_telephone',     'Autorisée 3 — téléphone']
   ];
 
   function valeurs() {
@@ -73,7 +88,8 @@
   function manquant(d) {
     var requis = [['nom', "le nom de l'élève"], ['sexe', 'le sexe'],
                   ['dob', 'la date de naissance'], ['classe', 'la classe demandée'],
-                  ['telephone', 'le téléphone du parent']];
+                  ['telephone', 'le téléphone du parent'],
+                  ['tutelle', 'le tuteur principal']];
     for (var i = 0; i < requis.length; i++) {
       if (!d[requis[i][0]]) {
         var el = form.elements[requis[i][0]];

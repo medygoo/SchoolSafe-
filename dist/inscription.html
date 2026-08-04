@@ -290,6 +290,28 @@
     <div class="full"><label for="f_adresse">Adresse du domicile</label><input id="f_adresse" name="adresse" placeholder="Avenue, numéro, quartier, commune" /></div>
     <div class="full"><label for="f_email">Adresse e-mail</label><input id="f_email" name="email" type="email" placeholder="Facultatif — pour recevoir les communiqués" /></div>
 
+    <div class="full"><div class="bloc-titre">Tutelle et personnes autorisées</div></div>
+    <div class="full note-form" style="margin-top:0">
+      Le <strong>tuteur principal</strong> est la personne qui répond de l'enfant.
+      Il désigne <strong>jusqu'à trois personnes</strong> qui pourront venir le chercher.
+      <strong>Les photographies se prennent à l'école</strong>, le jour de la confirmation —
+      jamais sur ce site. C'est ce qui permet au gardien de reconnaître quelqu'un au portail.
+    </div>
+    <div class="full"><label for="f_tutelle">Tuteur principal *</label>
+      <input id="f_tutelle" name="tutelle" required placeholder="Nom et lien de parenté — ex. Kabongo Daniel, père" /></div>
+
+    <div><label for="f_a1n">Personne autorisée 1 — nom</label><input id="f_a1n" name="a1_nom" /></div>
+    <div><label for="f_a1r">Lien de parenté</label><input id="f_a1r" name="a1_relation" placeholder="Mère, oncle, tante…" /></div>
+    <div class="full"><label for="f_a1t">Téléphone</label><input id="f_a1t" name="a1_telephone" type="tel" inputmode="tel" /></div>
+
+    <div><label for="f_a2n">Personne autorisée 2 — nom</label><input id="f_a2n" name="a2_nom" /></div>
+    <div><label for="f_a2r">Lien de parenté</label><input id="f_a2r" name="a2_relation" /></div>
+    <div class="full"><label for="f_a2t">Téléphone</label><input id="f_a2t" name="a2_telephone" type="tel" inputmode="tel" /></div>
+
+    <div><label for="f_a3n">Personne autorisée 3 — nom</label><input id="f_a3n" name="a3_nom" /></div>
+    <div><label for="f_a3r">Lien de parenté</label><input id="f_a3r" name="a3_relation" /></div>
+    <div class="full"><label for="f_a3t">Téléphone</label><input id="f_a3t" name="a3_telephone" type="tel" inputmode="tel" /></div>
+
     <div class="full"><div class="bloc-titre">Santé — pour la sécurité de l'enfant</div></div>
     <div><label for="f_sang">Groupe sanguin</label>
       <select id="f_sang" name="blood_group"><option value="">—</option>
@@ -301,7 +323,7 @@
     <div class="full note-form">
       Les renseignements ci-dessus servent uniquement au dossier scolaire de votre enfant.
       <strong>Rien n'est publié</strong>, et aucun paiement ne se fait sur ce site :
-      le versement se fait <strong>à l'école, auprès de la Caisse</strong>, contre un reçu.
+      le versement se fait <strong>à l'école, auprès de la Caisse</strong>, contre un reçu.<br>Cette fiche est une <strong>demande</strong> : elle est validée par la Direction, qui prend alors les photographies et ouvre le dossier de l'enfant.
     </div>
 
     <div class="full form-actions">

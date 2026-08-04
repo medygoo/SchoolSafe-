@@ -1811,6 +1811,7 @@ window.DB = {
   users: [], classes: [], students: [], payments: [],
   attendance: [], scan_log: [], conduct: [], grades: [],
   absences: [], notifs: [], events: [], messages: [], aps: [],
+  preinscriptions: [],   // demandes venues du site — voir R.preinscriptions
   daily_records: [], daily_expenses: [], daily_reports: [],
   devoirs: [], cahier_texte: [], matieres: [], rattrapages: [],
   convocations: [], timetables: [], approbations: [],
@@ -2180,6 +2181,7 @@ window.NAV = {
       {s:'Principal'},
       {id:'dashboard',i:'🏠',l:'Tableau de bord'},
       {id:'approbations',i:'✅',l:'Approbations',badge:true},
+      {id:'preinscriptions',i:'📨',l:'Préinscriptions',badge:true},
       {id:'inscriptions',i:'📝',l:'Inscriptions',badge:true},
       {s:'Personnes'},
       {id:'students',i:'🎓',l:'Élèves'},
@@ -2679,6 +2681,13 @@ if(!window._iv_clock) window._iv_clock = setInterval(() => { if (window.DB_ONLIN
 // ════════════════════════════════════════════════════════════════════════════
 
 const _COLS_NOTIFS = 'id,uid,from,msg,type,date,time,read,devoir_id,status,to_role,by,wa_links,receipt';
+// Une demande de préinscription venue du site public.
+// AUCUNE PHOTO : les photos se prennent à l'école, à la validation — décision
+// de Loms, 4 août 2026. Un formulaire public n'est pas un endroit où déposer
+// la photo d'un enfant, et une photo de WhatsApp ne sert pas au portail.
+const _COLS_PREINSC = 'id,statut,created_at,expire_le,nom,sexe,dob,lieu_naissance,classe,'
+  + 'ecole_provenance,nom_papa,nom_maman,telephone,telephone2,adresse,email,blood_group,'
+  + 'urgence,medical_notes,tutelle,autorisees,motif_refus,traite_par,traite_par_nom,traite_le';
 const _COLS_SCAN   = 'id,sid,type,status,date,time,name,label,description,manual,escort_kind,escort_id,escort_name,created_at';
 
 // Un raccourci : { t: table, q: paramètres PostgREST }
@@ -2691,6 +2700,9 @@ window.ROLE_LOAD = {
       _T('students', 'select=id,name,mat,cid,pid,photo,access_blocked,blocked,access_parent,archived,may_leave_alone,leave_alone_until&archived=eq.false'),
       _T('users',    'select=id,name,role,initials,phone,photo_url,email,status,created_at'),
       _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
+      // Les demandes de préinscription arrivent du site public. Direction 1
+      // seule les voit et les valide — décision de Loms, 4 août 2026.
+      _T('preinscriptions', 'select='+_COLS_PREINSC+'&order=created_at.desc&limit=200'),
     ],
     modules: {
       pedagogie:      ['matieres','attendance','devoirs','grades','appreciations','conduct','cahier_prep','cahier_texte','evaluations','prevision_matiere','timetables','rattrapages','tenafep','exetat'],
@@ -3626,6 +3638,9 @@ window.getPendingCount = () => {
     + (DB.messages||[]).filter(m=>m.status==='pending').length
     + (DB.rattrapages||[]).filter(r=>r.status==='pending'&&!r.validated_by).length
     + (DB.convocations||[]).filter(c=>c.status==='pending').length
+    // Les demandes du site : Direction 1 seule les traite. Une demande périmée
+    // ne compte pas — elle n'appelle plus d'action.
+    + (isDir1 ? (DB.preinscriptions||[]).filter(d=>window._preinscStatut(d)==='nouvelle').length : 0)
     + (isDir1?(DB.inscriptions||[]).filter(i=>!i.statut||i.statut==='pending').length:0);
 };
 
@@ -10370,6 +10385,208 @@ window.deleteClass = (cid) => {
 };
 
 // ── APPROBATIONS ──
+// ══════════════════════════════════════════════════════════════════════════
+//  DEMANDES DE PRÉINSCRIPTION — Direction 1 seule
+//
+//  Le parent remplit la fiche sur cslesage.com ; la demande arrive ici ;
+//  Direction 1 vérifie, puis valide ou refuse. Décisions de Loms, 4 août 2026 :
+//
+//    · la validation appartient à DIRECTION 1 ;
+//    · les PHOTOS se prennent à l'école, jamais depuis le site ;
+//    · une demande EXPIRE — une préinscription de septembre encore ouverte en
+//      janvier ne veut plus rien dire.
+//
+//  Ce que la validation crée n'est PAS créé ici. Une RPC serveur le fait en
+//  UNE transaction : élève + parent + tutelle + personnes autorisées +
+//  matricule + obligations. Un élève sans parent, ou un parent sans élève,
+//  serait pire que rien — et le navigateur ne sait pas garantir l'ensemble.
+//
+//  Les personnes autorisées naissent en « pending ». Le parent ne doit jamais
+//  pouvoir approuver sa propre liste : sinon n'importe qui se déclare « oncle »
+//  et repart avec un enfant.
+// ══════════════════════════════════════════════════════════════════════════
+
+// Une demande est-elle périmée ? On calcule à la LECTURE plutôt que de se fier
+// à un statut que personne ne met à jour quand l'école dort.
+window._preinscExpiree = (d) => {
+  if (!d || !d.expire_le) return false;
+  return String(d.expire_le) < today();
+};
+window._preinscStatut = (d) => {
+  const st = (d && d.statut) || 'nouvelle';
+  if (st === 'nouvelle' && window._preinscExpiree(d)) return 'expiree';
+  return st;
+};
+
+// Ce qui fera mal en septembre : le même enfant préinscrit par le père puis
+// par la mère, ou un enfant DÉJÀ élève réinscrit en ligne. On le dit AVANT le
+// bouton, pas après. Sur le jeu de 350, 62 élèves partagent un parent : créer
+// un parent par enfant casserait les fratries.
+window._preinscDoublons = (d) => {
+  const av = [];
+  const nom = (d.nom || '').trim().toLowerCase();
+  if (nom) {
+    const memeNom = (DB.students || []).filter(x =>
+      (x.name || '').trim().toLowerCase() === nom &&
+      (!d.dob || !x.dob || String(x.dob) === String(d.dob)));
+    if (memeNom.length) av.push({ t: 'eleve',
+      m: `Un élève portant ce nom${d.dob ? ' et cette date de naissance' : ''} existe déjà — ${memeNom.map(x => esc(x.mat || x.name)).join(', ')}` });
+  }
+  const tel = (d.telephone || '').replace(/\D/g, '');
+  if (tel.length >= 8) {
+    const memeTel = (DB.users || []).filter(u =>
+      u.role === 'parent' && String(u.phone || '').replace(/\D/g, '').endsWith(tel.slice(-8)));
+    if (memeTel.length) av.push({ t: 'parent',
+      m: `Ce numéro est déjà celui d'un parent — ${memeTel.map(u => esc(u.name)).join(', ')}. Rattachez l'enfant à ce compte plutôt que d'en créer un second.` });
+  }
+  return av;
+};
+
+R.preinscriptions = () => {
+  // Direction 1 SEULE. Ce n'est pas une préférence d'écran : valider, c'est
+  // autoriser des adultes à venir chercher un enfant.
+  const _g = _requireRole('direction'); if (_g) return _g;
+
+  const tout = (DB.preinscriptions || []).slice();
+  const par = (st) => tout.filter(d => window._preinscStatut(d) === st);
+  const nouvelles = par('nouvelle'), expirees = par('expiree');
+  const validees = par('validee'), refusees = par('refusee');
+  const filtre = window._preinscFiltre || 'nouvelle';
+  const liste = filtre === 'nouvelle' ? nouvelles
+              : filtre === 'expiree'  ? expirees
+              : filtre === 'validee'  ? validees : refusees;
+
+  const etat = (window._readState || {}).preinscriptions;
+  if (etat && etat !== 'loaded' && etat !== 'empty' && !tout.length)
+    return _ecranNonRaccorde('Demandes de préinscription',
+      'La réception des demandes du site');
+
+  const onglet = (id, lib, n, couleur) =>
+    `<button class="btn btn-sm" style="background:${filtre===id?'var(--ground,#556777)':'transparent'};` +
+    `color:${filtre===id?'#fff':'var(--text-secondary)'};border:1px solid #dadee2;font-size:12px;font-weight:700" ` +
+    `onclick="window._preinscFiltre='${id}';render()">${lib}${n?` <span style="opacity:.8">(${n})</span>`:''}</button>`;
+
+  const carte = (d) => {
+    const av = window._preinscDoublons(d);
+    const st = window._preinscStatut(d);
+    const aut = Array.isArray(d.autorisees) ? d.autorisees : [];
+    const ligne = (l, v) => v ? `<div style="display:flex;gap:8px;font-size:13px;padding:3px 0"><span style="color:var(--text-secondary);min-width:132px">${l}</span><strong>${esc(v)}</strong></div>` : '';
+    return `
+    <div class="premium-section" style="margin-bottom:12px;border-left:4px solid ${st==='nouvelle'?'#c09018':st==='expiree'?'#8896a2':st==='validee'?'#1f9d6b':'#dc2626'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:17px;font-weight:800">${esc(d.nom || '—')}</div>
+          <div style="font-size:12.5px;color:var(--text-secondary)">${esc(d.classe || 'classe non précisée')} · demandée le ${esc(d.created_at || '—')}</div>
+        </div>
+        <span style="background:${st==='nouvelle'?'#fdeccd':st==='expiree'?'#f0f1f2':st==='validee'?'#d8f3e6':'#fee2e2'};color:${st==='nouvelle'?'#92400e':st==='expiree'?'#5e6c78':st==='validee'?'#065f46':'#991b1b'};border-radius:20px;padding:4px 14px;font-size:11.5px;font-weight:800">
+          ${st==='nouvelle'?'À TRAITER':st==='expiree'?'EXPIRÉE':st==='validee'?'VALIDÉE':'REFUSÉE'}
+        </span>
+      </div>
+
+      ${av.length ? `<div style="background:#fdeccd;border-left:3px solid #d98a2b;border-radius:6px;padding:10px 13px;margin:12px 0;font-size:13px;color:#92400e">
+        ${av.map(x => `<div>⚠️ ${x.m}</div>`).join('')}
+      </div>` : ''}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-top:12px">
+        <div>
+          ${ligne('Sexe', d.sexe)}${ligne('Né(e) le', d.dob)}${ligne('À', d.lieu_naissance)}
+          ${ligne('École de provenance', d.ecole_provenance)}${ligne('Adresse', d.adresse)}
+        </div>
+        <div>
+          ${ligne('Père', d.nom_papa)}${ligne('Mère', d.nom_maman)}
+          ${ligne('Téléphone', d.telephone)}${ligne('Second téléphone', d.telephone2)}
+          ${ligne('E-mail', d.email)}
+        </div>
+      </div>
+
+      ${(d.blood_group || d.medical_notes || d.urgence) ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #dadee2">
+        ${ligne('Groupe sanguin', d.blood_group)}${ligne('À prévenir', d.urgence)}${ligne('Santé', d.medical_notes)}
+      </div>` : ''}
+
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #dadee2">
+        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#7a5a0d;font-weight:800;margin-bottom:6px">Tutelle et personnes autorisées</div>
+        ${ligne('Tuteur principal', d.tutelle)}
+        ${aut.length ? aut.map((a, i) => ligne(`Personne ${i + 1}`,
+            [a.nom, a.relation, a.telephone].filter(Boolean).join(' · '))).join('')
+          : `<div style="font-size:13px;color:var(--text-secondary)">Aucune personne autorisée déclarée — à saisir à l'accueil.</div>`}
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:8px">
+          📷 Les photographies de l'élève et des personnes autorisées se prennent
+          <strong>ici, à la validation</strong>. Elles ne viennent jamais du site.
+        </div>
+      </div>
+
+      ${st === 'nouvelle' ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <button class="btn btn-primary btn-sm" onclick="validerPreinscription('${esc(d.id)}')">✅ Valider et créer le dossier</button>
+        <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b" onclick="refuserPreinscription('${esc(d.id)}')">Refuser</button>
+      </div>` : ''}
+      ${d.motif_refus ? `<div style="margin-top:10px;font-size:13px;color:#991b1b">Motif du refus : ${esc(d.motif_refus)}</div>` : ''}
+      ${d.traite_par_nom ? `<div style="margin-top:8px;font-size:12px;color:var(--text-secondary)">Traitée par ${esc(d.traite_par_nom)}${d.traite_le ? ' le ' + esc(d.traite_le) : ''}</div>` : ''}
+    </div>`;
+  };
+
+  return `
+  <div class="hbento" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+    <div class="htile" style="background:linear-gradient(135deg,#c09018,#e2b84f);color:#1a2228;padding:13px 10px">
+      <div style="font-size:19px">📨</div><div class="hbig" style="font-size:24px">${nouvelles.length}</div><div class="hsub">à traiter</div></div>
+    <div class="htile" style="background:linear-gradient(135deg,#1f9d6b,#2fbf8f);color:#fff;padding:13px 10px">
+      <div style="font-size:19px">✅</div><div class="hbig" style="font-size:24px">${validees.length}</div><div class="hsub">validées</div></div>
+    <div class="htile" style="background:linear-gradient(135deg,#657786,#8896a2);color:#fff;padding:13px 10px">
+      <div style="font-size:19px">⏳</div><div class="hbig" style="font-size:24px">${expirees.length}</div><div class="hsub">expirées</div></div>
+    <div class="htile" style="background:linear-gradient(135deg,#556777,#657786);color:#fff;padding:13px 10px">
+      <div style="font-size:19px">🚫</div><div class="hbig" style="font-size:24px">${refusees.length}</div><div class="hsub">refusées</div></div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    ${onglet('nouvelle','À traiter',nouvelles.length)}${onglet('expiree','Expirées',expirees.length)}
+    ${onglet('validee','Validées',validees.length)}${onglet('refusee','Refusées',refusees.length)}
+  </div>
+  ${liste.length ? liste.map(carte).join('')
+    : `<div style="text-align:center;padding:50px;color:var(--text-muted)">Aucune demande dans cette liste.</div>`}`;
+};
+
+// La validation ne crée RIEN dans le navigateur. Elle demande au serveur de
+// tout créer d'un coup. Si le contrat n'existe pas encore, on le dit — on ne
+// crée pas la moitié du dossier.
+window.validerPreinscription = async (id) => {
+  if (_denyRole('direction')) return;
+  const d = (DB.preinscriptions || []).find(x => x.id === id); if (!d) return;
+  const av = window._preinscDoublons(d);
+  const alerte = av.length ? '\n\n⚠️ ' + av.map(x => x.m).join('\n⚠️ ') + '\n' : '';
+  if (!confirm(`Valider la préinscription de ${d.nom} ?${alerte}\n\nL'élève, son parent, sa tutelle et les personnes autorisées seront créés.\nLes photographies restent à prendre ici même.`)) return;
+
+  const fin = _btnBusy(`[onclick*="validerPreinscription('${id}')"]`, '⏳ Création…');
+  try {
+    const r = await _rpc('validate_preinscription', { p_id: id });
+    if (!r.ok) {
+      toast(r.code === '404' || r.code === 'contract_missing'
+        ? "La validation côté serveur n'est pas encore en place. Rien n'a été créé."
+        : _codeMsg(r.code), 'error');
+      return;
+    }
+    d.statut = 'validee'; d.traite_par = S.user.id;
+    d.traite_par_nom = S.user.name; d.traite_le = today();
+    toast('✅ Dossier créé. Prenez maintenant les photographies.', 'success');
+    logAudit('preinscription_validee', 'Préinscription validée : ' + d.nom);
+    await loadFromSupabase();
+    render();
+  } finally { fin(); }
+};
+
+window.refuserPreinscription = async (id) => {
+  if (_denyRole('direction')) return;
+  const d = (DB.preinscriptions || []).find(x => x.id === id); if (!d) return;
+  const motif = (prompt(`Refuser la préinscription de ${d.nom}.\n\nMotif — il sera conservé :`) || '').trim();
+  if (!motif) return;
+  const r = await _rpc('refuse_preinscription', { p_id: id, p_motif: motif.slice(0, 300) });
+  if (!r.ok) { toast(_codeMsg(r.code), 'error'); return; }
+  // Un refus se GARDE : une famille qui revient trois semaines plus tard ne
+  // doit pas repartir de zéro, et l'école doit pouvoir dire ce qu'elle a refusé.
+  d.statut = 'refusee'; d.motif_refus = motif;
+  d.traite_par = S.user.id; d.traite_par_nom = S.user.name; d.traite_le = today();
+  toast('Demande refusée — le motif est conservé.', 'info');
+  logAudit('preinscription_refusee', 'Préinscription refusée : ' + d.nom + ' — ' + motif);
+  render();
+};
+
 R.approbations = () => {
   const _g=_requireRole('direction','direction2'); if(_g) return _g;
   const isD2 = S.user.role==='direction2';

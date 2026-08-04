@@ -284,3 +284,91 @@ de la PR nº6.
 **Trois réponses courtes suffisent pour débloquer le plus gros : P0-1 (le champ
 ou la bascule vers `payment_transactions`), P0-4 (l'enveloppe du scanner) et
 P0-5 (`orient`).**
+
+---
+
+# P0-6 · Les préinscriptions — Loms a tranché, l'interface est prête
+
+**Décisions de Loms, 4 août 2026 :**
+
+| | |
+|---|---|
+| **Les photos** | prises **à l'école**, à la validation. **Jamais depuis le site.** |
+| **Qui valide** | **Direction 1**, seule |
+| **Expiration** | une préinscription **expire** |
+
+## Ce qui est déjà construit et attend ta porte
+
+Écran `R.preinscriptions` — Direction 1 seule, entrée de navigation avec badge,
+quatre onglets (à traiter · expirées · validées · refusées). Il affiche la
+fiche entière, la tutelle, les trois personnes autorisées, et **annonce les
+doublons AVANT le bouton**.
+
+Le site collecte déjà : tuteur principal (obligatoire) + trois personnes
+autorisées (nom, lien, téléphone). Sans photo.
+
+**La validation ne crée rien dans le navigateur.** Elle appelle ta RPC. Si
+l'appel échoue, elle le dit et ne crée rien — plutôt qu'un demi-dossier.
+
+## Les quatre choses qu'il me faut
+
+### 1 · Une table de demandes
+
+Colonnes que je lis déjà (`_COLS_PREINSC`) :
+
+```
+id · statut · created_at · expire_le
+nom · sexe · dob · lieu_naissance · classe · ecole_provenance
+nom_papa · nom_maman · telephone · telephone2 · adresse · email
+blood_group · urgence · medical_notes
+tutelle · autorisees          ← autorisees : [{nom, relation, telephone}]
+motif_refus · traite_par · traite_par_nom · traite_le
+```
+
+`statut` : `nouvelle` · `validee` · `refusee`. **L'expiration, je la calcule à
+la lecture** depuis `expire_le` — je ne me fie pas à un statut que personne ne
+met à jour quand l'école dort. Mets `expire_le` à la création ; le délai
+t'appartient.
+
+**Écriture publique sans authentification, lecture réservée à `direction`.**
+Un parent qui préinscrit n'a pas de compte — mais s'il pouvait lire, il lirait
+les fiches des autres familles. Et il faut un frein contre le remplissage
+automatique, sinon la table se remplit en une nuit.
+
+### 2 · `validate_preinscription(p_id)` — en UNE transaction
+
+Elle crée ensemble : l'élève · le parent · la tutelle · **les personnes
+autorisées** · le matricule · les obligations financières.
+
+**Une seule transaction.** Un élève sans parent, ou un parent sans élève,
+serait pire que rien — et le navigateur ne sait pas garantir l'ensemble.
+
+**Le matricule s'attribue ici**, pas à la préinscription : numéroter une
+demande qui sera peut-être refusée troue la numérotation de l'école.
+
+### 3 · Les personnes autorisées naissent en `pending`
+
+`aps.approval_status` existe déjà. **Une personne venue du site ne doit jamais
+pouvoir arriver en `approved`.** Le parent ne doit pas pouvoir approuver sa
+propre liste : sinon n'importe qui se déclare « oncle » et repart avec un
+enfant. **C'est la garantie qui protège les enfants** — c'est pour elle que je
+te le signale plutôt que de le supposer.
+
+### 4 · `refuse_preinscription(p_id, p_motif)`
+
+Un refus **se garde**, avec son motif et sa date. Une famille qui revient trois
+semaines plus tard ne repart pas de zéro, et l'école doit pouvoir dire ce
+qu'elle a refusé.
+
+## Le contrôle de doublon — je le fais déjà côté écran, refais-le côté serveur
+
+L'écran signale : *« un élève portant ce nom et cette date de naissance existe
+déjà »* et *« ce numéro est déjà celui d'un parent — rattachez l'enfant à ce
+compte »*.
+
+C'est un garde-fou d'affichage, pas une garantie. **Sur le jeu de 350, 62
+élèves partagent un parent.** Si la validation crée un parent par enfant, on
+casse les fratries — et le sélecteur multi-enfants avec.
+
+Refuse côté serveur, ou renvoie l'identifiant du parent existant pour que je
+rattache au lieu de créer.
