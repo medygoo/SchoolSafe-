@@ -16642,6 +16642,29 @@ const _ACCES_TTL = 5 * 60 * 1000;
 // quand il ne répond pas. Un gardien au portail doit pouvoir travailler hors
 // ligne — mais l'écran ne dit jamais « enregistré » pour une opération qui
 // n'est encore que dans la file.
+// LA PRÉSENCE SUIT LE SERVEUR — elle ne le précède pas.
+//
+// `record_entry_scan` crée la présence côté serveur : les tests de rôles de
+// ChatGPT le montrent noir sur blanc — sur un refus, « présences créées 0 ».
+// Or le navigateur en écrivait une AUSSI, et AVANT d'appeler la RPC. Deux
+// conséquences, et la seconde est grave :
+//
+//   · sur un passage accepté, DEUX lignes de présence pour une seule arrivée ;
+//   · sur un passage REFUSÉ, l'écran affichait « Entrée refusée » et la
+//     présence restait. L'enfant était marqué présent au portail qui venait
+//     de le refuser — et son parent pouvait recevoir « il est arrivé ».
+//
+// Désormais : on appelle, puis on inscrit. Si le serveur a enregistré, on
+// reflète SA décision sans réécrire. S'il n'a pas répondu et qu'on est
+// retombé sur la file d'attente, on écrit la nôtre — un gardien devant un
+// portail ne peut pas attendre le réseau. S'il a refusé, on n'écrit rien.
+window._presenceApresScan = (r, att) => {
+  if (!r || !r.ok) return false;
+  (DB.attendance = DB.attendance || []).push(att);
+  if (!r.serveur) pushSync('attendance', 'post', att);   // hors ligne : la file s'en charge
+  return true;
+};
+
 window._enregistrerPassage = async (rpc, params, logLocal) => {
   // Exposée globalement et elle écrit : elle vérifie donc le rôle elle-même.
   // Les mêmes que private.can_scan() côté serveur — le parent en est exclu.
@@ -16846,10 +16869,10 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
   if(res.level===1){
     // Enter + notify parent
     const att={id:_uid('a_'),sid:student.id,date:today(),arr_time:time,status:'ontime'};
-    (DB.attendance=DB.attendance||[]).push(att); pushSync('attendance','post',att);
     const log={id:_uid('sl_'),sid:student.id,date:today(),time,name:student.name,status:'ontime',label:'À l\'heure',type:'entry',by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role};
     const _r = await _enregistrerPassage('record_entry_scan',
       { p_sid:student.id, p_status:'ontime', p_arr_time:time, p_manual:false }, log);
+    window._presenceApresScan(_r, att);
     if (!_r.ok) { showScanResult('red','✕','Entrée refusée',student.name,
       _r.raison==='duplicate' ? 'Déjà enregistré aujourd\'hui' :
       _r.raison==='unknown_student' ? 'Élève inconnu du serveur' : 'Refusé par le serveur', time); return; }
@@ -16866,10 +16889,10 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
   // ── NIVEAU 2 : RETARD LÉGER ──
   if(res.level===2){
     const att={id:_uid('a_'),sid:student.id,date:today(),arr_time:time,status:'late'};
-    (DB.attendance=DB.attendance||[]).push(att); pushSync('attendance','post',att);
     const log={id:_uid('sl_'),sid:student.id,date:today(),time,name:student.name,status:'late',label:'Retard léger ⚠️',type:'entry',by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role};
     const _r = await _enregistrerPassage('record_entry_scan',
       { p_sid:student.id, p_status:'late', p_arr_time:time, p_manual:false }, log);
+    window._presenceApresScan(_r, att);
     if (!_r.ok) { showScanResult('red','✕','Entrée refusée',student.name,
       _r.raison==='duplicate' ? 'Déjà enregistré aujourd\'hui' : 'Refusé par le serveur', time); return; }
     if(student.pid) await pushNotif(student.pid,`⚠️ ${student.name} est arrivé(e) en retard à ${time}`);
