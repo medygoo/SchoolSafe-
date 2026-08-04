@@ -127,6 +127,33 @@ sur blanc. Sur le fond gris clair, aucun or ne se lit — d'où `--gold-pale`
 **Une couleur se montre, elle ne se devine pas.** Demander une image dès le
 premier doute aurait épargné trois passes complètes.
 
+**Vérifié une seconde fois le 4 août 2026**, sur une photographie du mur
+envoyée par Loms, en échantillonnant les pixels au lieu de les regarder :
+
+| zone | valeur | teinte · saturation · luminosité |
+|---|---|---|
+| le mur, au point le mieux éclairé | `#6e7984` | **210° · 9 % · 47 %** |
+| le mur, en pénombre | `#5c6670` | 210° · 10 % · 40 % |
+| la bande ocre du bas | `#9e855f` | 37° · 27 % · 46 % |
+
+C'est le même gris que celui noté ici — 207°, 14 %, 46 %. **La charte tient.**
+L'écart de saturation est celui d'un mur éclairé au tungstène, pas celui d'une
+autre couleur. L'ocre photographié est terne parce qu'il est dans l'ombre : la
+référence de l'or reste **l'étoile de l'emblème**, pas une boiserie.
+
+Deux conséquences mesurées, valables partout où le gris sert de fond :
+
+> **`--ground-deep` ne porte que du BLANC** (4,63:1). `--surface` y tombe à
+> 4,09 et `--gold-light` à 2,47 — même en grands caractères.
+> Sur ce fond, **l'or ne s'écrit pas : il se remplit.** Un aplat d'or à texte
+> d'encre donne 5,56:1.
+>
+> Le petit texte en gris va sur **`--ground`** (`#556777`) : blanc 5,85:1,
+> `--surface` 5,17:1, `--gold-pale` 4,75:1.
+
+`tools/audit-contraste-site.mjs` mesure les 17 couples du site et sait dire
+non : `--preuve` lui fait refuser l'or sur blanc (2,90:1).
+
 ### L'emblème porte déjà les deux noms
 
 Le logo de l'école grave « COMPLEXE SCOLAIRE LE SAGE » en haut et « THE WISE
@@ -374,6 +401,7 @@ npm run audit        # tout d'un coup
 | `audit-mort.mjs` | les fonctions exposées sans appelant |
 | `audit-logo.mjs` | l'emblème sur les documents · et son ABSENCE de l'interface |
 | `audit-charte.mjs` | gris · blanc · or sur les documents (`--detail`) |
+| `audit-contraste-site.mjs` | les 17 couples texte/fond du site, **mesurés** (`--preuve`) |
 | `verif-coherence.mjs` | la chaîne de calcul, **exécutée** |
 | `audit-writes.mjs` | les écritures dont l'échec est invisible |
 | `audit-schema.mjs` | code ↔ SQL — **ne s'applique que s'il y a une base** |
