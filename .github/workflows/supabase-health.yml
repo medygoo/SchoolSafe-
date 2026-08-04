@@ -1,0 +1,68 @@
+name: Supabase Health Check
+
+on:
+  schedule:
+    # Quatre appels légers par jour, décalés du début de l'heure.
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/supabase-health.yml'
+      - 'supabase/migrations/*health_check*.sql'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-health-check
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Verify Supabase database availability
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Call the minimal health RPC
+        env:
+          SUPABASE_URL: https://lcnronymkccgyltttqry.supabase.co
+          # Publishable client key: it is intentionally safe for public clients.
+          # Never replace this value with a service_role or secret key.
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_riSfIF1hT5-imh4uq4bUmQ_b5poe7hG
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          response_file="$(mktemp)"
+          status="$({
+            curl \
+              --silent \
+              --show-error \
+              --retry 3 \
+              --retry-all-errors \
+              --connect-timeout 15 \
+              --max-time 30 \
+              --output "$response_file" \
+              --write-out '%{http_code}' \
+              --request POST \
+              "${SUPABASE_URL}/rest/v1/rpc/schoolsafe_health_check" \
+              --header "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+              --header 'Content-Type: application/json' \
+              --data '{}'
+          })"
+
+          cat "$response_file"
+          echo
+
+          if [[ "$status" != "200" ]]; then
+            echo "Supabase health check failed with HTTP ${status}." >&2
+            exit 1
+          fi
+
+          if ! grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "$response_file"; then
+            echo 'Supabase response did not contain ok=true.' >&2
+            exit 1
+          fi
