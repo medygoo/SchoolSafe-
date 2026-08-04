@@ -27,6 +27,15 @@
   var form = document.getElementById('fiche-preinscription');
   if (!form) return;
 
+  // ── LE SERVEUR ──────────────────────────────────────────────────────────
+  // La clé publique (« anon ») n'est pas un secret : elle ne donne accès qu'à
+  // ce que les politiques RLS autorisent. ChatGPT l'a confirmé par écrit le
+  // 4 août 2026, après vérification : le rôle anon peut appeler
+  // submit_preinscription, mais ne peut ni lire la table des demandes, ni lire
+  // public.users. Un parent ne verra donc jamais la fiche d'une autre famille.
+  var SUPA_URL = 'https://lcnronymkccgyltttqry.supabase.co';
+  var SUPA_KEY = 'sb_publishable_riSfIF1hT5-imh4uq4bUmQ_b5poe7hG';
+
   var TEL_DIRECTION = '243978444167';
   var ECOLE  = 'COMPLEXE SCOLAIRE LE SAGE';
   var ECOLE2 = 'The Wise School International';
@@ -47,7 +56,22 @@
     ['email',            'E-mail'],
     ['blood_group',      'Groupe sanguin'],
     ['urgence',          'À prévenir en urgence'],
-    ['medical_notes',    'Santé']
+    ['medical_notes',    'Santé'],
+    // La tutelle et les trois personnes autorisées. Sans photo : elles se
+    // prennent à l'école, à la validation. Un gardien doit reconnaître un
+    // visage en trois secondes au portail — une photo de WhatsApp n'y suffit
+    // pas, et un formulaire public n'est pas un endroit où déposer la photo
+    // d'un enfant.
+    ['tutelle',          'Tuteur principal'],
+    ['a1_nom',           'Autorisée 1 — nom'],
+    ['a1_relation',      'Autorisée 1 — lien'],
+    ['a1_telephone',     'Autorisée 1 — téléphone'],
+    ['a2_nom',           'Autorisée 2 — nom'],
+    ['a2_relation',      'Autorisée 2 — lien'],
+    ['a2_telephone',     'Autorisée 2 — téléphone'],
+    ['a3_nom',           'Autorisée 3 — nom'],
+    ['a3_relation',      'Autorisée 3 — lien'],
+    ['a3_telephone',     'Autorisée 3 — téléphone']
   ];
 
   function valeurs() {
@@ -73,7 +97,8 @@
   function manquant(d) {
     var requis = [['nom', "le nom de l'élève"], ['sexe', 'le sexe'],
                   ['dob', 'la date de naissance'], ['classe', 'la classe demandée'],
-                  ['telephone', 'le téléphone du parent']];
+                  ['telephone', 'le téléphone du parent'],
+                  ['tutelle', 'le tuteur principal']];
     for (var i = 0; i < requis.length; i++) {
       if (!d[requis[i][0]]) {
         var el = form.elements[requis[i][0]];
@@ -174,6 +199,64 @@
     w.document.close();
     dire('La fiche s\'ouvre dans un nouvel onglet. Imprimez-la ou enregistrez-la en PDF, ' +
          'puis apportez-la à l\'école.', true);
+  });
+
+  // ── ENVOI À L'ÉCOLE ─────────────────────────────────────────────────────
+  // La demande part vers submit_preinscription. Le RPC accepte les champs
+  // plats a1_nom, a1_relation… tels qu'ils sont dans le formulaire : aucune
+  // transformation, donc aucune occasion de se tromper.
+  //
+  // WhatsApp et l'impression RESTENT. Une famille sans réseau, ou un envoi
+  // qui échoue, ne doit pas perdre cinq minutes de saisie.
+  var TRADUC = {
+    ALREADY_SUBMITTED : "Cette demande a déjà été envoyée. L'école l'a bien reçue — inutile de recommencer.",
+    INVALID_SUBMISSION: "La demande n'a pas pu être envoyée. Vérifiez les champs et réessayez.",
+    RATE_LIMITED      : "Trop de demandes envoyées depuis ce numéro aujourd'hui. Réessayez demain, ou appelez l'école.",
+    FORBIDDEN         : "L'envoi en ligne n'est pas autorisé pour le moment. Utilisez WhatsApp ou imprimez la fiche."
+  };
+
+  document.getElementById('f_envoyer').addEventListener('click', async function () {
+    var d = valeurs();
+    var quoi = manquant(d);
+    if (quoi) { dire('Il manque ' + quoi + '.', false); return; }
+
+    // Le piège anti-robot : trois champs invisibles. Un humain ne les voit
+    // pas, un robot les remplit. S'ils portent quoi que ce soit, le serveur
+    // refuse — c'est lui qui décide, pas nous.
+    ['website', 'company', 'url'].forEach(function (k) {
+      var el = form.elements[k]; d[k] = el ? el.value : '';
+    });
+
+    var b = document.getElementById('f_envoyer');
+    var libelle = b.textContent;
+    b.disabled = true; b.textContent = '⏳ Envoi…';
+    try {
+      var r = await fetch(SUPA_URL + '/rest/v1/rpc/submit_preinscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY,
+                   Authorization: 'Bearer ' + SUPA_KEY },
+        body: JSON.stringify({ p_request: d })
+      });
+      var j = null; try { j = await r.json(); } catch (e) {}
+
+      if (r.ok && j && j.ok) {
+        dire("✅ Votre demande est arrivée à l'école. La Direction va l'examiner. "
+           + "Passez ensuite à l'école pour la confirmation et le paiement de la "
+           + "première tranche — apportez la fiche imprimée.", true);
+        form.querySelectorAll('button').forEach(function (x) { if (x.id === 'f_envoyer') x.disabled = true; });
+        return;
+      }
+      var code = (j && (j.code || j.message)) || ('HTTP ' + r.status);
+      // On ne prétend pas avoir envoyé ce qui n'est pas parti. On dit ce qui
+      // s'est passé, et on rappelle les deux autres chemins.
+      dire((TRADUC[code] || "L'envoi n'a pas abouti (" + code + ").")
+         + " Vous pouvez envoyer la fiche par WhatsApp ou l'imprimer — vos "
+         + "renseignements sont toujours là.", false);
+    } catch (e) {
+      dire("L'envoi n'a pas abouti : pas de connexion. Envoyez la fiche par "
+         + "WhatsApp, ou imprimez-la et apportez-la à l'école. Vos "
+         + "renseignements sont toujours là.", false);
+    } finally { b.disabled = false; b.textContent = libelle; }
   });
 
   function esc(s) {
