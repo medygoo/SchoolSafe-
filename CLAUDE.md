@@ -246,6 +246,19 @@ et pré-imprimer celle de la Direction la donnerait à quiconque produit un reç
 
 Trois colonnes, donc : **bénéficiaire · acteur · autorité**.
 
+**Posées le 4 août 2026** dans `_officialFooter`, appelé par quinze documents.
+La colonne du milieu se remplit avec la personne connectée. Si l'autorité *est*
+cette personne, elle ne signe pas deux fois : l'autorité redevient la Direction
+Générale — et si l'école n'en déclare aucune, aucun nom ne s'imprime.
+
+**Et un piège trouvé en le faisant :** `dist/index.html` porte en dur une vraie
+signature manuscrite (`window.SCHOOL_SIGNATURE`, ~40 Ko). Elle n'est pas un
+exemple : c'est le **repli**. Une installation qui n'a rien téléversé imprime
+celle-là, sur les bulletins, dans la case « Direction ». C'est exactement ce que
+le paragraphe ci-dessus interdit, et c'est aussi une image de sceau dans un
+dépôt. **Signalé à Loms, pas retiré** — on ne supprime pas seul la signature de
+quelqu'un. Voir `docs/CHARTE_SITE.md` §8.3.
+
 ### Un assistant partagé échappe aux reprises
 
 Le pied de page officiel n'appartient à aucun document : il est *appelé* par

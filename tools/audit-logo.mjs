@@ -11,7 +11,13 @@
 //  paiement. Aucun n'était signalé : rien ne le vérifiait.
 //
 //  L'outil repère chaque appel à `dlPDF`, remonte à la fonction qui le
-//  contient, et y cherche `_logoImg` ou `SCHOOL_LOGO`.
+//  contient, et y cherche l'assistant d'emblème — `_logoDoc`, `_logoImg` —
+//  ou une lecture directe de `SCHOOL_LOGO`.
+//
+//  Le 4 août 2026, les DIX derniers documents ont reçu l'emblème via un
+//  assistant unique, `_logoDoc(px)`. Sans repli : si la Direction n'a pas
+//  téléversé l'emblème, rien ne paraît. Lui donner une valeur par défaut le
+//  ferait porter par une école qui ne l'a pas choisi.
 //
 //  Usage : node tools/audit-logo.mjs
 // ══════════════════════════════════════════════════════════════════════════
@@ -75,14 +81,14 @@ for (const s of sorties) {
   const d = debutFonction(s.ligne - 1);
   const fn = nomFonction(lignes[d]);
   if (ASSISTANTS.has(fn)) continue;
-  const aLogo = /_logoImg|SCHOOL_LOGO|logo_url/.test(lignes.slice(d, s.ligne).join('\n'));
+  const aLogo = /_logoDoc|_logoImg|SCHOOL_LOGO|logo_url/.test(lignes.slice(d, s.ligne).join('\n'));
   if (!aLogo) { sans++; console.log(`   ✗ ${fn.padEnd(30)} ${s.doc}   (ligne ${s.ligne})`); }
 }
 
 const total = sorties.filter(s => !ASSISTANTS.has(nomFonction(lignes[debutFonction(s.ligne - 1)]))).length;
 
 console.log(sans
-  ? `\n✗ ${sans} document(s) sur ${total} sans emblème — ajouter \`\${_logoImg(60)}\` à l'en-tête`
+  ? `\n✗ ${sans} document(s) sur ${total} sans emblème — ajouter \`\${_logoDoc(56)}\` à l'en-tête`
   : `\n✓ Les ${total} documents officiels portent l'emblème de l'école`);
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -101,7 +107,7 @@ const debutsDoc = new Set(sorties.map(s => debutFonction(s.ligne - 1)));
 const INTERFACE_OK = new Set([
   'ssBuildBadge', 'ssBuildCarte',   // la carte d'élève EST un document
   'applyCrop',                      // téléversement du logo dans Paramètres
-  '_logoImg',                       // l'assistant lui-même
+  '_logoImg', '_logoDoc',           // les assistants eux-mêmes
 ]);
 let fuites = 0;
 console.log('');

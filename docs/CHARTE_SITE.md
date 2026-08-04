@@ -241,3 +241,104 @@ Le pied de page officiel compte **deux colonnes** : *Signature & cachet* et
 Aujourd'hui la ligne de **celui qui accomplit l'acte** manque. Ce n'est pas un
 défaut de couleur — c'est une règle métier, elle touche quatorze documents, et
 elle appartient à Loms. **Signalée, pas décidée.**
+
+---
+
+# 8. L'emblème et les signatures · 4 août 2026
+
+Demande de Loms : **« ajouter le logo de l'école et la signature »**.
+
+## 8.1 L'emblème — les dix derniers documents
+
+```
+audit-logo.mjs  avant  →  ✗ 10 documents sur 38 sans emblème
+audit-logo.mjs  après  →  ✓ les 38 documents officiels portent l'emblème
+```
+
+Il manquait sur : le **reçu de paiement**, le rapport mensuel, le palmarès
+annuel, les listes **ENAFEP** et **EXETAT**, la fiche de santé, le kit
+d'urgence médicale, les **deux fiches de paie** et le rapport **SECOPE**.
+
+Ce n'est pas cosmétique. *« Un document qui engage l'école porte son emblème ;
+sans lui, un bulletin ou une fiche de paie n'est qu'une feuille imprimée, et
+une administration peut la refuser. »* Le reçu de paiement et les listes
+d'examen d'État sont précisément ceux qu'une administration examine.
+
+Un assistant unique le pose : `window._logoDoc(px)`.
+
+> **Sans repli.** Si la Direction n'a pas téléversé l'emblème, **rien ne
+> paraît**. Lui donner une valeur par défaut le ferait porter par une école
+> qui ne l'a pas choisi — c'est l'erreur déjà commise, et corrigée, du côté de
+> l'interface.
+
+L'emblème est cerclé de l'**or de l'emblème**, `#c09018`.
+
+`tools/audit-logo.mjs` a été mis à jour pour connaître ce nouvel assistant.
+
+## 8.2 Les signatures — la colonne qui manquait
+
+Le pied de page officiel, appelé par **quinze documents**, comptait deux
+colonnes. Il en compte trois, dans l'ordre administratif francophone :
+
+```
+   Lu et approuvé          Établi par              Visa & cachet
+   ─────────────────       ─────────────────       ─────────────────
+   Bénéficiaire            l'agent connecté        l'autorité
+   / Destinataire          nom + rôle              nom + rôle
+```
+
+La colonne du milieu manquait, et ce n'est pas une décoration :
+
+> Sur un reçu, **le caissier signe de sa main devant la famille qui paie**,
+> à côté du visa. Sans cette ligne, un document ne dit pas qui l'a établi, et
+> le visa de la Direction couvre un acte auquel elle n'a pas assisté.
+
+Elle se remplit toute seule avec la personne connectée — nom et rôle officiel
+(`_roleOfficiel`), pas le libellé de la barre de navigation.
+
+**Si l'autorité est la personne connectée**, elle ne signe pas deux fois :
+l'autorité redevient la Direction Générale de l'école. Et si l'école n'en
+déclare aucune, **aucun nom ne s'imprime** — ne rien afficher vaut mieux
+qu'afficher faux.
+
+**Aucune signature ne s'imprime toute seule dans ce pied de page.** Les trois
+lignes sont vierges. Une signature pré-imprimée ne signe plus rien.
+
+Vérifié en **exécutant la vraie fonction** du fichier dans Node, pas une
+copie — les deux cas rendent ce qu'ils doivent rendre.
+
+## 8.3 ⚠️ Une décision qui appartient à Loms
+
+`dist/index.html` contient, en dur, **une vraie signature manuscrite** :
+
+```js
+window.SCHOOL_SIGNATURE = 'data:image/png;base64,…'   // ~40 Ko
+```
+
+Elle n'a pas été touchée. Mais il faut savoir ce qu'elle fait :
+
+- elle est le **repli** — `DB.settings.school.signature` ne fait que la
+  remplacer. Une installation qui n'a rien téléversé imprime **celle-ci** ;
+- elle s'imprime aujourd'hui sur les **bulletins** et sur d'autres documents,
+  dans la case « Direction » ;
+- elle est **dans le dépôt**, donc lisible par quiconque y a accès.
+
+`CLAUDE.md` dit deux choses qui s'appliquent :
+
+> *« Une signature qui s'imprime toute seule ne signe plus rien — et
+> pré-imprimer celle de la Direction la donnerait à quiconque produit un
+> reçu. »*
+>
+> *« Aucun secret dans le dépôt. »* Une signature manuscrite scannée fonctionne
+> comme un sceau.
+
+**Trois voies possibles, c'est à Loms de trancher :**
+
+| | ce qu'on fait | conséquence |
+|---|---|---|
+| **A** *(recommandé)* | `SCHOOL_SIGNATURE = null` par défaut ; la Direction téléverse son visa dans les réglages | rien ne s'imprime tant que la Direction ne l'a pas voulu ; l'image sort du dépôt |
+| **B** | on la garde telle quelle | tout document produit par n'importe qui porte ce visa |
+| **C** | on la retire complètement | les cases « Direction » restent vierges, à signer à la main |
+
+**Une ligne de code sépare A de B.** Tant que Loms n'a pas répondu, rien ne
+change : je ne retire pas seul la signature de quelqu'un.
