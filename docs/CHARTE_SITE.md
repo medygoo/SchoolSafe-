@@ -342,3 +342,104 @@ Elle n'a pas été touchée. Mais il faut savoir ce qu'elle fait :
 
 **Une ligne de code sépare A de B.** Tant que Loms n'a pas répondu, rien ne
 change : je ne retire pas seul la signature de quelqu'un.
+
+---
+
+# 9. Quel document se signe · 4 août 2026
+
+Demande de Loms : *« savoir quel document mérite la signature ou pas — comme
+le reçu doit avoir la signature, le cahier de préparation pas de signature,
+juste le logo. »*
+
+## 9.1 La règle
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  Un document se signe pour DEUX raisons, et deux seulement :       │
+│                                                                    │
+│    · DÉLIVRANCE   — il engage l'école envers un tiers : une        │
+│                     famille, un employé, une administration.       │
+│    · CERTIFICATION — il reste dans l'école, mais quelqu'un         │
+│                     répond de son exactitude.                      │
+│                                                                    │
+│  Tout le reste est un document de TRAVAIL : emblème, pas de        │
+│  signature.                                                        │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+Pourquoi la deuxième raison existe : **la règle a buté sur un cas.** Le *kit
+d'urgence médicale* ne quitte pas l'école — il est affiché à l'infirmerie —
+mais il porte des groupes sanguins et des allergies, et il est signé par la
+Direction et l'infirmier(ère). Ce n'est pas une délivrance, c'est quelqu'un
+qui répond d'une donnée dont dépend une vie.
+
+**On n'a pas forcé le cas dans la règle : c'est la règle qui était trop
+étroite.**
+
+Et le motif de fond, qui vaut d'être dit : **une signature qui n'a pas de
+raison d'être dévalue toutes les autres.** Si l'enseignant signe son cahier de
+préparation, la signature du caissier au bas d'un reçu ne veut plus rien dire
+de particulier.
+
+## 9.2 Le classement des 46 documents
+
+| | documents |
+|---|---|
+| **Se signent** (31) | les 7 reçus · attestation · 3 certificats · convocation · communiqué · fiche d'inscription · lettre de sanction · bulletins · PV de délibération · listes ENAFEP et EXETAT · rapport SECOPE · 2 fiches de paie · fiche santé · kit d'urgence · devoir · rapport aux familles · les 5 états comptables SYSCOHADA |
+| **Ne se signent pas** (6) | **cahier de préparation** · rapport mensuel · palmarès annuel · relevé de présences · état financier de suivi · archive de fin d'année |
+| **Ne sont pas des documents** (8) | CSV, JSON, image de carte, et les 4 impressions de cartes — la carte porte déjà l'emblème |
+
+## 9.3 Ce qui a changé dans le code
+
+- **Le cahier de préparation** portait `_officialFooter` — trois colonnes de
+  signature — sur un document que l'enseignant écrit pour lui-même. Il porte
+  maintenant une simple mention : *« Préparé par … — Document de travail
+  pédagogique, ne fait pas foi de délivrance »*, sous un filet d'or.
+- **`_pdfSignatureBlock`** — le bloc de signature SYSCOHADA des cinq états
+  comptables — **était encore au bleu du logiciel**. C'est le *deuxième*
+  assistant partagé qui échappe à un balayage par plages, après
+  `_officialFooter`. Passé à la charte, filet d'or, et protégé contre une
+  coupure de page.
+- **Neuf emblèmes en ligne** ont été unifiés sur `_logoDoc` : même taille
+  demandée, même cercle d'or. Ils divergeaient en 64 px et 56 px avec une
+  bordure grise.
+
+## 9.4 Deux outils, et un filet qui était troué
+
+**`tools/audit-signature.mjs`** — la règle cesse d'être une opinion. Il
+connaît les 46 documents, ce que chacun doit porter, et il refuse **dans les
+deux sens** : `--preuve` lui présente un cahier de préparation qui se signe et
+un reçu qui ne se signe pas ; il refuse les deux.
+
+**`tools/audits.mjs`** — et voici ce qui était le plus grave de ce lot :
+
+> `npm run audit` enchaînait les outils avec `&&`. Le troisième,
+> `verif-coherence`, est en panne. **Donc les audits de l'emblème, de la
+> charte, des signatures et des contrastes ne tournaient plus du tout** — sans
+> que rien ne le dise.
+
+Le filet était troué à l'endroit exact où on croyait l'avoir tendu. C'est la
+même faute que celles que ces outils cherchent : un échec silencieux.
+Maintenant chaque outil tourne, et le tableau final dit lequel passe.
+
+## 9.5 Un audit qui posait la mauvaise question
+
+Le contrôle inverse de `audit-logo.mjs` — *« l'emblème de l'école ne doit pas
+paraître dans l'interface »* — listait **neuf fuites**. Vérifiées une par une :
+**aucune n'était un défaut.** La ligne au-dessus affectait la valeur depuis
+les réglages, ou la lecture servait à construire une carte, qui *est* un
+document. Poser neuf gardes n'aurait rien protégé.
+
+`CLAUDE.md` avait déjà appris exactement cela :
+
+> *« La bonne question n'est pas "chaque accès porte-t-il sa garde ?" mais
+> "la valeur peut-elle seulement être autre chose ?" »*
+
+Le contrôle a été réécrit autour de la seule condition dont l'invariant
+dépend : **toute affectation de `SCHOOL_LOGO` vient-elle des réglages, d'un
+téléversement, ou de `null` ?** Si oui, le global ne peut pas contenir
+d'emblème intégré, et le lire est sans risque n'importe où.
+
+Trois lignes au lieu de neuf reproches — et il attrape la vraie faute.
+Éprouvé : on lui a glissé `window.SCHOOL_LOGO = 'data:image/png;base64,…'`,
+il l'a refusé ; le fichier a été restauré.

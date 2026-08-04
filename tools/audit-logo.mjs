@@ -103,27 +103,41 @@ console.log(sans
 //  L'emblème n'est légitime dans l'interface QUE si la Direction l'a
 //  elle-même téléversé — donc lu depuis `DB.settings.school.logo`, jamais
 //  depuis le repli intégré au fichier.
-const debutsDoc = new Set(sorties.map(s => debutFonction(s.ligne - 1)));
-const INTERFACE_OK = new Set([
-  'ssBuildBadge', 'ssBuildCarte',   // la carte d'élève EST un document
-  'applyCrop',                      // téléversement du logo dans Paramètres
-  '_logoImg', '_logoDoc',           // les assistants eux-mêmes
-]);
-let fuites = 0;
+// La bonne question n'est PAS « chaque lecture porte-t-elle sa garde ? ».
+// Une première version de ce contrôle listait neuf « fuites » — des lectures
+// de `window.SCHOOL_LOGO` hors des documents — et aucune n'était un défaut :
+// la ligne juste au-dessus affectait la valeur depuis les réglages, ou la
+// lecture servait à construire une carte, qui EST un document. Poser neuf
+// gardes n'aurait rien protégé.
+//
+// La bonne question est : **la valeur peut-elle seulement être autre chose
+// que ce que la Direction a téléversé ?** Si toute affectation vient des
+// réglages, d'un téléversement, ou de `null`, alors le global ne peut PAS
+// contenir un emblème intégré — et le lire, où que ce soit, est sans risque.
+//
+// C'est ce seul point qu'on vérifie. Il tient en trois lignes de code au
+// lieu de neuf reproches, et il attrape la vraie faute : le jour où
+// quelqu'un écrira `window.SCHOOL_LOGO = 'data:image/…'`, l'emblème de
+// l'école reparaîtra dans la barre latérale dès le premier lancement — et
+// l'application se remettra à porter l'école.
+const SOURCES_LEGITIMES = [
+  /window\.SCHOOL_LOGO\s*=\s*null\s*;/,                        // aucun repli
+  /window\.SCHOOL_LOGO\s*=\s*DB\.settings[?.]*\.school[?.]*\.logo/, // les réglages
+  /window\.SCHOOL_LOGO\s*=\s*data\s*;/,                        // le téléversement
+];
+let repli = 0;
 console.log('');
 lignes.forEach((l, i) => {
-  if (!/window\.SCHOOL_LOGO/.test(l)) return;
-  if (/^\s*(\/\/|\*|<!--)/.test(l)) return;          // commentaire
-  if (/window\.SCHOOL_LOGO\s*=/.test(l)) return;      // affectation
-  const d = debutFonction(i);
-  if (debutsDoc.has(d)) return;                      // dans un document
-  const fn = nomFonction(lignes[d]);
-  if (INTERFACE_OK.has(fn)) return;
-  fuites++;
-  console.log(`   ✗ ${fn.padEnd(28)} ligne ${i + 1} — l'emblème de l'école dans l'interface`);
+  if (!/window\.SCHOOL_LOGO\s*=/.test(l)) return;
+  if (/^\s*(\/\/|\*|<!--)/.test(l)) return;
+  if (SOURCES_LEGITIMES.some(re => re.test(l))) return;
+  repli++;
+  console.log(`   \u2717 ligne ${i + 1} — l'emblème reçoit une valeur qui ne vient pas de la Direction`);
+  console.log(`     ${l.trim().slice(0, 120)}`);
 });
-console.log(fuites
-  ? `\n✗ ${fuites} fuite(s) : lire DB.settings.school.logo, jamais le repli intégré`
-  : `✓ L'interface reste SchoolSafe — l'emblème de l'école n'y paraît pas`);
+console.log(repli
+  ? `\n\u2717 ${repli} affectation(s) hors réglages : l'emblème de l'école reparaîtra dans l'interface`
+  : `\u2713 L'emblème ne peut venir que de la Direction — aucun repli intégré, donc aucune fuite possible`);
 
-process.exit(sans + fuites ? 1 : 0);
+
+process.exit(sans + repli ? 1 : 0);

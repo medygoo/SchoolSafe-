@@ -246,6 +246,30 @@ et pré-imprimer celle de la Direction la donnerait à quiconque produit un reç
 
 Trois colonnes, donc : **bénéficiaire · acteur · autorité**.
 
+### Quel document se signe — et lequel ne se signe pas
+
+Règle donnée par Loms le 4 août 2026, à partir d'un couple : *« le reçu doit
+avoir la signature ; le cahier de préparation, pas de signature, juste le
+logo »*.
+
+> **Un document se signe pour DEUX raisons, et deux seulement.**
+> **DÉLIVRANCE** — il engage l'école envers un tiers. **CERTIFICATION** — il
+> reste dans l'école, mais quelqu'un répond de son exactitude.
+> Tout le reste est un document de **travail** : emblème, pas de signature.
+
+La deuxième raison n'était pas dans la première rédaction. **La règle a buté
+sur le kit d'urgence médicale** : il ne quitte pas l'école, mais il porte des
+groupes sanguins et il est signé. Ce n'est pas une délivrance, c'est quelqu'un
+qui répond d'une donnée dont dépend une vie. *On n'a pas forcé le cas dans la
+règle : c'est la règle qui était trop étroite.*
+
+Le motif de fond : **une signature sans raison d'être dévalue toutes les
+autres.** Si l'enseignant signe son cahier de préparation, celle du caissier au
+bas d'un reçu ne veut plus rien dire de particulier.
+
+`tools/audit-signature.mjs` tient le classement des 46 documents et refuse dans
+les deux sens — la signature manquante **et** la signature de trop.
+
 **Posées le 4 août 2026** dans `_officialFooter`, appelé par quinze documents.
 La colonne du milieu se remplit avec la personne connectée. Si l'autorité *est*
 cette personne, elle ne signe pas deux fois : l'autorité redevient la Direction
@@ -439,6 +463,8 @@ npm run audit        # tout d'un coup
 | `audit-logo.mjs` | l'emblème sur les documents · et son ABSENCE de l'interface |
 | `audit-charte.mjs` | gris · blanc · or sur les documents (`--detail`) |
 | `audit-contraste-site.mjs` | les 17 couples texte/fond du site, **mesurés** (`--preuve`) |
+| `audit-signature.mjs` | quel document se signe, et lequel ne se signe pas (`--preuve`) |
+| `audits.mjs` | **les lance tous**, même quand l'un échoue — `npm run audit` |
 | `verif-coherence.mjs` | la chaîne de calcul, **exécutée** |
 | `audit-writes.mjs` | les écritures dont l'échec est invisible |
 | `audit-schema.mjs` | code ↔ SQL — **ne s'applique que s'il y a une base** |
@@ -460,6 +486,21 @@ Trois principes appris en les écrivant :
    accès « non gardés » ; aucun n'était un défaut, et poser 498 gardes n'aurait
    rien protégé. Il a été supprimé et remplacé par un outil qui vérifie les
    trois conditions dont l'invariant dépend vraiment.
+
+   **La même faute s'est reproduite le 4 août 2026**, en plus petit : le
+   contrôle inverse de `audit-logo` listait neuf « fuites » de l'emblème vers
+   l'interface. Vérifiées une par une, **aucune n'était un défaut**. Réécrit
+   autour de la seule condition qui compte — *toute affectation de
+   `SCHOOL_LOGO` vient-elle des réglages, d'un téléversement, ou de `null` ?*
+   Trois lignes au lieu de neuf reproches. Une leçon écrite ne se retient pas
+   toute seule : il faut la relire quand on écrit un outil.
+
+4. **Un enchaînement `&&` d'audits est un filet troué.** `npm run audit`
+   s'arrêtait au troisième outil, en panne depuis une reprise du harnais —
+   **donc l'emblème, la charte, les signatures et les contrastes n'étaient plus
+   vérifiés du tout**, sans que rien ne le dise. C'est la faute que ces outils
+   cherchent, commise par les outils eux-mêmes : un échec silencieux.
+   `tools/audits.mjs` les lance tous et dit lequel passe.
 
 `verif-coherence` mérite un mot. Il charge les vraies fonctions du fichier dans
 Node avec un navigateur en carton, leur donne un jeu d'essai dont on connaît la

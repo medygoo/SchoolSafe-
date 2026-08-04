@@ -12658,7 +12658,7 @@ window.downloadRecuFrais = (sid) => {
   const labels={T1:'1er Trimestre',T2:'2e Trimestre',T3:'3e Trimestre',inscription:'Inscription'};
   const rows=pays.map(p=>`<tr><td style="padding:8px 12px;border-bottom:1px solid #dadee2">${labels[p.t]||p.t}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;text-align:right;font-weight:700">${_cur()}${fees[p.t]||0}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;color:#5e6c78">${p.date||'—'}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;color:#5e6c78">${p.by?esc(DB.users.find(u=>u.id===p.by)?.name||p.by):'—'}</td></tr>`).join('');
   const total=pays.reduce((a,p)=>a+(fees[p.t]||0),0);
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(56);
   const html=`<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:32px;max-width:700px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #556777;padding-bottom:16px;margin-bottom:20px">
       ${logo}<div style="flex:1"><div style="font-size:20px;font-weight:900;color:#556777">Reçu de Paiement — Frais Scolaires</div><div style="font-size:12px;color:#5e6c78">${window._schoolLine()}${window._schoolMotto()}</div></div>
@@ -12696,7 +12696,7 @@ window.downloadRecuRattrapage = (sid) => {
     return `<tr><td style="padding:8px 12px;border-bottom:1px solid #dadee2">${esc(r.matiere||'—')}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;text-align:right;font-weight:700">${_cur()}${r.amount||0}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;color:#5e6c78">${r.date||'—'}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;color:#5e6c78">${prof?esc(prof.name):'—'}</td></tr>`;
   }).join('');
   const total=rats.reduce((a,r)=>a+(r.amount||0),0);
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(56);
   const html=`<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:32px;max-width:700px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #556777;padding-bottom:16px;margin-bottom:20px">
       ${logo}<div style="flex:1"><div style="font-size:20px;font-weight:900;color:#556777">Reçu — Cours de Rattrapage</div><div style="font-size:12px;color:#5e6c78">${window._schoolLine()}${window._schoolMotto()}</div></div>
@@ -12731,7 +12731,7 @@ window.downloadRecuCantine = (sid) => {
   const dir=DB.users.find(u=>u.role==='direction');
   const encaisseur=ins.by?DB.users.find(u=>u.id===ins.by):null;
   const typeLabel={jour:'Journalier',mois:'Mensuel',annee:'Annuel'};
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(56);
   const html=`<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:32px;max-width:700px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #556777;padding-bottom:16px;margin-bottom:20px">
       ${logo}<div style="flex:1"><div style="font-size:20px;font-weight:900;color:#556777">Reçu d'Inscription — Cantine Scolaire</div><div style="font-size:12px;color:#5e6c78">${window._schoolLine()}${window._schoolMotto()}</div></div>
@@ -12772,7 +12772,7 @@ window.downloadRecuActivites = (sid) => {
     return `<tr><td style="padding:8px 12px;border-bottom:1px solid #dadee2">${act.emoji||'·'} ${esc(act.name)}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;color:#5e6c78">${act.jour||'—'} ${act.heure||''}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;color:#5e6c78">${act.lieu||'—'}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;text-align:right;font-weight:700">${_cur()}${act.frais||0}/mois</td></tr>`;
   }).join('');
   const totalMensuel=insActs.reduce((a,i)=>{const act=(DB.activites||[]).find(x=>x.id===i.act_id);return a+(act?.frais||0);},0);
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(56);
   const html=`<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:32px;max-width:700px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #556777;padding-bottom:16px;margin-bottom:20px">
       ${logo}<div style="flex:1"><div style="font-size:20px;font-weight:900;color:#556777">Reçu d'Inscription — Activités Extrascolaires</div><div style="font-size:12px;color:#5e6c78">${window._schoolLine()}${window._schoolMotto()}</div></div>
@@ -12813,7 +12813,7 @@ window.downloadAttestationPaiement = (sid) => {
   if(totalPaye<totalDu){toast('Solde non nul — attestation impossible','error');return;}
   const sc=DB.settings?.school||{};
   const dir=DB.users.find(u=>u.role==='direction');
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(64);
   const labels={T1:'1er Trimestre',T2:'2e Trimestre',T3:'3e Trimestre'};
   const lignes=pays.map(p=>`<tr><td style="padding:8px 12px;border-bottom:1px solid #dadee2">${labels[p.t]||p.t}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;text-align:right;font-weight:700;color:#1f9d6b">${_cur()}${fees[p.t]||0}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;color:#5e6c78">${p.date||'—'}</td></tr>`).join('');
   const html=`<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:40px;max-width:700px;margin:0 auto">
@@ -12861,7 +12861,7 @@ window.downloadCertificatScolarite = (sid) => {
   const sc=DB.settings?.school||{};
   const dir=DB.users.find(u=>u.role==='direction');
   const parent=s.pid?DB.users.find(u=>u.id===s.pid):null;
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(64);
   const refNo='CS-'+today().replace(/-/g,'')+'-'+sid.slice(-4).toUpperCase();
   const html=`<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:40px;max-width:700px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:16px;border-bottom:4px solid #556777;padding-bottom:18px;margin-bottom:24px">
@@ -12903,7 +12903,7 @@ window.downloadCertificatPassage = (sid) => {
   const moyPct=studentAvgPct(s.id,matieres,trim);
   const moy=moyPct!==null?Math.round(moyPct):null;
   const mention=moy===null?null:moy>=80?{l:'Distinction',c:'#1f9d6b'}:moy>=70?{l:'Grande Satisfaction',c:'#657786'}:moy>=60?{l:'Satisfaction',c:'#556777'}:moy>=50?{l:'Passable',c:'#d98a2b'}:{l:'Insuffisant',c:'#dc2626'};
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(64);
   const refNo='CP-'+today().replace(/-/g,'')+'-'+sid.slice(-4).toUpperCase();
   const html=`<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:40px;max-width:700px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:16px;border-bottom:4px solid #556777;padding-bottom:18px;margin-bottom:24px">
@@ -12943,7 +12943,7 @@ window.downloadCertificatBonneConduite = (sid) => {
   const scoreClr=colorMap[score]||'#556777';
   const sanctions=(DB.sanctions||[]).filter(x=>x.sid===sid&&!x.lifted);
   if(sanctions.length){toast('Impossible — sanctions actives non levées','error');return;}
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(64);
   const refNo='CBC-'+today().replace(/-/g,'')+'-'+sid.slice(-4).toUpperCase();
   const html=`<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:40px;max-width:700px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:16px;border-bottom:4px solid #556777;padding-bottom:18px;margin-bottom:24px">
@@ -12981,7 +12981,7 @@ window.printFicheInscription = (sid) => {
   const sc=DB.settings?.school||{};
   const parent=s.pid?DB.users.find(u=>u.id===s.pid):null;
   const aps=(DB.aps||[]).filter(a=>a.sid===sid&&a.active!==false);
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(64);
   const refNo='FI-'+today().replace(/-/g,'')+'-'+sid.slice(-4).toUpperCase();
   const row=(lbl,val)=>`<tr><td style="padding:8px 12px;border-bottom:1px solid #dadee2;font-weight:700;color:#5e6c78;white-space:nowrap;width:42%">${lbl}</td><td style="padding:8px 12px;border-bottom:1px solid #dadee2;font-weight:600">${val||'—'}</td></tr>`;
   const html=`<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:36px;max-width:700px;margin:0 auto">
@@ -19555,27 +19555,27 @@ function _pdfSignatureBlock(devise) {
   const d = new Date().toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'});
   const lieu = (DB.settings?.school?.country || 'RDC').replace(/R(.épublique D.émocratique du Congo|DC)/i, 'Kinshasa').trim();
   return `
-  <table style="width:100%;border-top:2px solid #243a6b;margin-top:22px;font-size:10px">
+  <table style="width:100%;border-top:2px dashed #c09018;margin-top:22px;page-break-inside:avoid;break-inside:avoid;font-size:10px">
     <tr>
       <td style="width:33%;padding:14px 8px 6px;vertical-align:top">
         <div style="font-weight:700;margin-bottom:18px">Etabli par le Responsable Comptable</div>
-        <div style="border-bottom:1px solid #9ca3af;height:30px;margin-bottom:4px"></div>
-        <div style="color:#6b7280">Nom &amp; signature</div>
+        <div style="border-bottom:1px solid #8896a2;height:30px;margin-bottom:4px"></div>
+        <div style="color:#5e6c78">Nom &amp; signature</div>
       </td>
       <td style="width:33%;padding:14px 8px 6px;vertical-align:top;text-align:center">
         <div style="font-weight:700;margin-bottom:4px">Arrêté le présent document</div>
-        <div style="margin-bottom:18px;color:#374151">${lieu}, le ${d}</div>
-        <div style="border-bottom:1px solid #9ca3af;height:30px;margin-bottom:4px"></div>
-        <div style="color:#6b7280">Cachet de l’établissement</div>
+        <div style="margin-bottom:18px;color:#1a2228">${lieu}, le ${d}</div>
+        <div style="border-bottom:1px solid #8896a2;height:30px;margin-bottom:4px"></div>
+        <div style="color:#5e6c78">Cachet de l’établissement</div>
       </td>
       <td style="width:33%;padding:14px 8px 6px;vertical-align:top;text-align:right">
         <div style="font-weight:700;margin-bottom:18px">Lu et approuvé par la Direction</div>
-        <div style="border-bottom:1px solid #9ca3af;height:30px;margin-bottom:4px"></div>
-        <div style="color:#6b7280">Nom &amp; signature</div>
+        <div style="border-bottom:1px solid #8896a2;height:30px;margin-bottom:4px"></div>
+        <div style="color:#5e6c78">Nom &amp; signature</div>
       </td>
     </tr>
   </table>
-  <div style="font-size:9px;color:#9ca3af;text-align:center;margin-top:8px">
+  <div style="font-size:9px;color:#8896a2;text-align:center;margin-top:8px">
     Document établi conformément aux dispositions du Système Comptable OHADA (SYSCOHADA) — Acte uniforme révisé du 26 janvier 2017
   </div>`;
 }
@@ -24553,7 +24553,7 @@ window.downloadPrepPDF = (prepId) => {
   const cl=gc(p.cid);
   const dir=DB.users.find(u=>u.role==='direction');
   const teacher=DB.users.find(u=>u.id===p.teacher_id);
-  const logo=window.SCHOOL_LOGO?`<img src="${window.SCHOOL_LOGO}" style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:2px solid #556777">`:'';
+  const logo=_logoDoc(60);
   const EDAY_L=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
   const EDAYS=['lun','mar','mer','jeu','ven','sam'];
   const EPER=['07h30–08h30','08h30–09h30','09h30–10h30','10h30–11h30','11h30–12h30','14h00–15h00','15h00–16h00'];
@@ -24595,7 +24595,10 @@ window.downloadPrepPDF = (prepId) => {
     ${sect('Matériel didactique',p.materiel,'#556777')}
     ${sect("Mode d'évaluation",p.evaluation,'#dc2626')}
     ${sect('Devoir à donner',p.devoir_note,'#1f9d6b')}
-    ${_officialFooter(teacher?.name||S.user.name,'Enseignant(e)')}
+    <div style="margin-top:26px;padding-top:12px;border-top:2px dashed #c09018;page-break-inside:avoid;break-inside:avoid;display:flex;justify-content:space-between;align-items:flex-end;gap:16px;font-size:11px;color:#5e6c78">
+      <div>Préparé par <strong style="color:#1a2228">${esc(teacher?.name||S.user.name||'')}</strong><br><span style="font-size:10px">Enseignant(e)</span></div>
+      <div style="text-align:right;font-size:10px">Document de travail pédagogique — ne fait pas foi de délivrance<br>${esc(DB.settings?.school?.name||'')} · ${today()}</div>
+    </div>
   </div>`;
   dlPDF(html,('prep_'+p.titre.replace(/\s+/g,'_').slice(0,40)+'.pdf'));
 };
