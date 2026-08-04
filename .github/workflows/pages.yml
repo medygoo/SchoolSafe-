@@ -22,13 +22,36 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Verify public artifact
+      # Ce contrôle exigeait EXACTEMENT 144 fichiers dans `dist`. Le jour où
+      # l'application en a compté 164 — des images du site, rien de plus — la
+      # publication s'est mise à échouer, et elle a échoué à CHAQUE fusion
+      # pendant des heures : l'écran de connexion corrigé, les préinscriptions,
+      # tout restait dans `main` sans jamais atteindre l'école. Personne ne
+      # regardait la croix rouge.
+      #
+      # Un nombre exact n'exprimait pas ce qu'on voulait vérifier. Ce qu'on
+      # veut, c'est : l'artefact n'est pas vide, et il ne contient RIEN qui
+      # doive rester privé.
+      - name: Vérifier ce qui va être publié
         run: |
-          test "$(find dist -type f | wc -l)" -eq 144
-          test -f dist/auth.html
-          test ! -e dist/admin.html
-          test ! -e dist/diagnostic.html
-          test ! -d dist/supabase
+          set -e
+          nb=$(find dist -type f | wc -l)
+          echo "dist contient $nb fichiers."
+          if [ "$nb" -lt 100 ]; then
+            echo "✗ Artefact incomplet — moins de 100 fichiers. Rien n'est publié."
+            exit 1
+          fi
+          test -f dist/index.html || { echo "✗ dist/index.html manque"; exit 1; }
+          test -f dist/auth.html  || { echo "✗ dist/auth.html manque";  exit 1; }
+          test -s dist/index.html || { echo "✗ dist/index.html est vide"; exit 1; }
+          # Ce qui ne doit JAMAIS partir en public.
+          interdit=0
+          for f in dist/admin.html dist/diagnostic.html dist/supabase; do
+            if [ -e "$f" ]; then echo "✗ $f ne doit pas être publié"; interdit=1; fi
+          done
+          [ "$interdit" = "1" ] && exit 1
+          echo "✓ Prêt à publier."
+          exit 0
       - uses: actions/configure-pages@v4
         with:
           enablement: true
