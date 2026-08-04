@@ -24,8 +24,6 @@ effacée, pour qu'on sache ce qui a déjà été tranché.
 
 ---
 
----
-
 # L'ordre de marche — arrêté par Loms le 4 août 2026
 
 Loms a demandé qu'on **finisse de brancher toutes les fonctionnalités de toutes
