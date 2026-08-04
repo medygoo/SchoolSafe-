@@ -429,6 +429,52 @@ onglets disparaissaient d'un coup.
 Corollaire : **mesurer les contrastes, ne pas les estimer.** Un rapport se
 calcule en quatre lignes ; l'œil se trompe, surtout sur les demi-transparences.
 
+**Et mesurer contre le VRAI fond, pas contre le fond déclaré.** L'écran de
+connexion a coûté cette leçon le 4 août 2026. Sa règle CSS annonce un dégradé
+sombre : mesurés contre lui, les sept textes donnaient de 4,95 à 12,7:1, tous
+au-dessus du seuil. Mais ce dégradé est **recouvert d'une photographie**, et le
+voile qui l'assombrit ne descendait qu'à **5 % en haut de l'écran** — là où se
+trouvent justement les champs. Sur un visage en plein soleil, « Adresse
+e-mail » ne se lisait plus. Les chiffres étaient bons et l'écran illisible.
+
+> **Quand un texte repose sur une image, on ne mesure pas contre une couleur :
+> on compose les couches — photographie, voile, carte — et on prend le pire cas
+> possible, une photographie entièrement BLANCHE.**
+
+Ainsi mesuré, le pire cas donnait 3,70:1 pour le sous-titre et 4,07:1 pour le
+nom du champ. La carte de connexion a donc reçu son propre fond (68 % en haut,
+78 % en bas) : dix couples, quatre situations, **tous au-dessus du seuil même
+sur une photographie blanche**. Une carte qui ne pose pas son fond dépend d'une
+image que personne ne contrôle.
+
+### Le secondaire ne pèse pas quatre fois le principal
+
+Le même écran empilait **quatre boutons pleine largeur identiques** sous
+l'action principale : 232 px de secondaire contre 54 px pour « Se connecter ».
+Rien ne se distinguait — et « Première connexion », l'action de tout nouvel
+enseignant en septembre, se noyait au milieu.
+
+Trois défauts, tous de hiérarchie et non de style :
+
+1. **Une forme unique pour cinq intentions** ne hiérarchise rien. Le remède
+   n'est pas de colorer différemment, c'est de **changer de forme** : un bouton
+   plein, des liens de texte, un pied de page.
+2. **Un bouton qui apparaît selon le navigateur change la hauteur de la page.**
+   « Installer l'application » n'existe pas sur iOS : la composition n'était
+   jamais celle qu'on avait dessinée. Rangé dans une rangée à contenu variable,
+   il ne déplace plus rien.
+3. **Deux vocabulaires d'icônes** — trois émojis et deux dessins vectoriels
+   côte à côte — donnent l'impression d'assemblé, jamais de conçu.
+
+Résultat mesuré : le secondaire passe de **4,3× à 1,4×** l'action principale, et
+la carte tient sans défiler sur un téléphone de 390 px.
+
+**Trouvé au passage, et c'est la vraie leçon :** l'écran portait encore un
+avertissement « ouvre l'application depuis le lien contenant `?school=…` » —
+le modèle multi-écoles retiré le 3 août. Il était en `display:none` et **aucun
+code ne le montrait jamais** : du texte mort qu'aucun audit ne cherche, parce
+qu'un audit vérifie ce qui s'affiche, pas ce qui ne s'affiche plus.
+
 ### Un document s'imprime — il ne se photographie pas
 
 Rastériser une page (html2canvas et compagnie) dépend du navigateur, de la
@@ -533,6 +579,7 @@ npm run audit        # tout d'un coup
 | `audit-logo.mjs` | l'emblème sur les documents · et son ABSENCE de l'interface |
 | `audit-charte.mjs` | gris · blanc · or sur les documents (`--detail`) |
 | `audit-contraste-site.mjs` | les 17 couples texte/fond du site, **mesurés** (`--preuve`) |
+| `audit-contraste-connexion.mjs` | l'écran de connexion — texte sur **photographie**, pire cas (`--preuve`) |
 | `audit-signature.mjs` | quel document se signe, et lequel ne se signe pas (`--preuve`) |
 | `audits.mjs` | **les lance tous**, même quand l'un échoue — `npm run audit` |
 | `verif-coherence.mjs` | la chaîne de calcul, **exécutée** |

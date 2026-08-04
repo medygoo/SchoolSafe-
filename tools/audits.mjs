@@ -29,6 +29,7 @@ const OUTILS = [
   ['charte',      'audit-charte.mjs',          'gris · blanc · or sur les documents'],
   ['signature',   'audit-signature.mjs',       'quel document se signe'],
   ['contraste',   'audit-contraste-site.mjs',  'les contrastes du site, mesurés'],
+  ['connexion',   'audit-contraste-connexion.mjs', "l'écran de connexion, sur photographie"],
 ];
 
 const detail = process.argv.includes('--detail');
