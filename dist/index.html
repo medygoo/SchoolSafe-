@@ -13106,9 +13106,11 @@ window.printFicheInscription = (sid) => {
 //  une famille ayant versé 80 % EXACTEMENT comme une famille n'ayant rien
 //  versé : sur le jeu de 350, cela fait 141 familles sur 350.
 //
-//  Et `access_status` prime sur `status` : un solde `overdue` peut très bien
-//  s'accompagner d'un accès `orient`, quand l'école n'a pas activé le blocage.
-//  On n'en déduit donc jamais l'accès à partir du solde.
+//  Et `access_status` prime sur `status` : on ne déduit jamais l'accès à
+//  partir du solde. `orient` comme `blocked` valent REFUS — contrat scanner
+//  v2 : « l'accès n'est pas encore validé, l'élève doit être orienté vers la
+//  Caisse ». Un outil qui laisserait passer un enfant à orienter serait pire
+//  qu'un outil absent : le Gardien croirait le contrôle fait.
 // ════════════════════════════════════════════════════════════════════════════
 
 window._fraisCache = {};        // sid → réponse serveur
@@ -16277,6 +16279,27 @@ window._enregistrerPassage = async (rpc, params, logLocal) => {
   return { ok:true, serveur:false, rec: logLocal };
 };
 
+// `orient` N'ADMET PAS. Contrat scanner v2 de ChatGPT, 4 août 2026 :
+//
+//   « orient signifie : l'accès n'est pas encore validé ; allowed = false ;
+//     l'élève doit être orienté vers la Caisse ; aucune présence et aucune
+//     entrée ne sont enregistrées tant que la situation n'est pas validée. »
+//
+// J'avais codé l'inverse — l'entrée se poursuivait, l'instruction ne servant
+// que de rappel. Un enfant qu'il fallait orienter vers la Caisse entrait, et
+// sa présence était enregistrée. La question était posée depuis deux jours
+// (P0-5) : elle valait d'être posée.
+//
+// On force ici plutôt que de faire confiance au champ `allowed`. Un cache de
+// cinq minutes rempli avant la migration, ou un serveur resté en v1, rendrait
+// `allowed:true` avec `access_status:'orient'` — et l'enfant passerait. Le
+// statut prime, toujours.
+window._normAcces = (d) => {
+  if (!d) return d;
+  if (d.access_status === 'orient' || d.access_status === 'blocked') d.allowed = false;
+  return d;
+};
+
 window._statutPortail = async (sid) => {
   const c = window._cacheAcces[sid];
   if (c && (Date.now() - c.at) < _ACCES_TTL) return c.r;
@@ -16284,8 +16307,9 @@ window._statutPortail = async (sid) => {
   if (window.DB_ONLINE) {
     const r = await _rpc('check_gate_access_status', { p_sid: sid, p_source: 'qr' });
     if (r.ok && r.data) {
-      window._cacheAcces[sid] = { r: r.data, at: Date.now() };
-      return r.data;
+      const d = window._normAcces(r.data);
+      window._cacheAcces[sid] = { r: d, at: Date.now() };
+      return d;
     }
   }
   // Hors ligne, serveur muet, ou décision expirée : on ne devine pas.
@@ -16395,9 +16419,8 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
       saveToCrypt();
       return;
     }
-    if (acces.access_status === 'orient') {
-      _qrWarn = acces.instruction;      // l'entrée se poursuit, avec le rappel
-    }
+    // `orient` est déjà traité au-dessus par `allowed === false` : le
+    // normaliseur le force. Rien ne se poursuit ici.
   }
 
   // ── SANCTION DISCIPLINAIRE EN COURS ───────────────────────────────────────
