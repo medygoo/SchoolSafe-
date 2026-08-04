@@ -87,6 +87,25 @@ lancement — l'application se mettait à porter l'école. Le logo de l'école e
 le repli **des documents**. L'interface porte celui du logiciel, et n'affiche
 l'emblème de l'école que si la Direction l'a elle-même téléversé.
 
+**Cette règle a DEUX côtés, et on n'en retient qu'un.** Le 4 août 2026, en
+corrigeant les dix documents qui n'avaient pas d'emblème, je leur ai appliqué
+la règle de l'interface : aucun repli, donc **rien ne paraissait** tant que la
+Direction n'avait pas téléversé. C'était l'erreur symétrique de celle notée
+ci-dessus. Loms a tranché en une phrase : *« obligatoire, le logo sur tous les
+documents »*.
+
+Depuis, deux constantes, et la frontière est tout :
+
+```
+window.SCHOOL_LOGO      ce que la Direction a TÉLÉVERSÉ — null sinon.
+                        Seule constante que l'INTERFACE peut lire.
+window.SCHOOL_LOGO_DOC  l'emblème intégré. UNIQUEMENT les DOCUMENTS.
+```
+
+`audit-logo.mjs` refuse une lecture du second hors d'un document — éprouvé en
+la lui glissant dans `buildUI`. **C'est l'outil qui tient la frontière, pas la
+discipline** : la discipline avait déjà lâché une fois.
+
 Symétriquement : **les documents imprimés représentent l'école**, donc ils en
 portent les couleurs — jamais celles de l'interface.
 

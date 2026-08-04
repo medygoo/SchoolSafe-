@@ -120,6 +120,40 @@ console.log(sans
 // quelqu'un écrira `window.SCHOOL_LOGO = 'data:image/…'`, l'emblème de
 // l'école reparaîtra dans la barre latérale dès le premier lancement — et
 // l'application se remettra à porter l'école.
+let repliHorsDoc = 0;
+const debutsDocuments = new Set(sorties.map(x => debutFonction(x.ligne - 1)));
+
+// ── LE REPLI DES DOCUMENTS, ET SA FRONTIÈRE ──────────────────────────────
+// Depuis le 4 août 2026, l'emblème du Complexe Scolaire Le Sage est intégré
+// au fichier sous `window.SCHOOL_LOGO_DOC` : un document en porte un
+// TOUJOURS, c'est une obligation, pas une préférence.
+//
+// Toute la sécurité tient à une seule frontière : cette constante appartient
+// aux DOCUMENTS. Si l'interface la lit, l'application se remet à porter
+// l'école dès le premier lancement — l'erreur déjà commise, et corrigée, avec
+// le repli de `SCHOOL_LOGO`.
+//
+// C'est ce qu'on vérifie ici, et rien d'autre. Éprouvé dans les deux sens.
+{
+  const OK_DOC = new Set(['_logoDoc', 'ssBuildBadge', 'ssBuildCarte']);
+  let hors = 0;
+  lignes.forEach((l, i) => {
+    if (!/SCHOOL_LOGO_DOC/.test(l)) return;
+    if (/^\s*(\/\/|\*|<!--)/.test(l)) return;
+    if (/window\.SCHOOL_LOGO_DOC\s*=/.test(l)) return;     // la déclaration
+    const d = debutFonction(i);
+    const fn = nomFonction(lignes[d]);
+    if (OK_DOC.has(fn)) return;
+    if (debutsDocuments.has(d)) return;                   // dans un document
+    hors++;
+    console.log(`   \u2717 ${fn.padEnd(28)} ligne ${i + 1} — le repli des DOCUMENTS lu hors d'un document`);
+  });
+  console.log(hors
+    ? `\u2717 ${hors} lecture(s) de SCHOOL_LOGO_DOC hors document : l'emblème va reparaître dans l'interface`
+    : `\u2713 Le repli des documents ne sort pas des documents`);
+  repliHorsDoc = hors;
+}
+
 const SOURCES_LEGITIMES = [
   /window\.SCHOOL_LOGO\s*=\s*null\s*;/,                        // aucun repli
   /window\.SCHOOL_LOGO\s*=\s*DB\.settings[?.]*\.school[?.]*\.logo/, // les réglages
@@ -140,4 +174,4 @@ console.log(repli
   : `\u2713 L'emblème ne peut venir que de la Direction — aucun repli intégré, donc aucune fuite possible`);
 
 
-process.exit(sans + repli ? 1 : 0);
+process.exit(sans + repli + repliHorsDoc ? 1 : 0);

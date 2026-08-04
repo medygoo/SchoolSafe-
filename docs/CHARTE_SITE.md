@@ -581,3 +581,72 @@ Le pied officiel accepte pour cela un quatrième paramètre, `beneficiaire`.
 question, deux réponses opposées selon la table.** C'est exactement la demande
 P0-1 adressée à ChatGPT dans `coordination/DEMANDES_A_CHATGPT.md` : la fiche de
 paie sait dire qui a versé, le reçu de frais ne le sait pas.
+
+---
+
+# 12. L'emblème est obligatoire sur tout document · 4 août 2026
+
+Consigne de Loms : *« obligatoire, le logo sur tous les documents »*.
+
+## 12.1 Ce qui n'allait pas
+
+Au §8, j'avais posé l'emblème sur les dix documents qui n'en portaient pas —
+mais **sans repli** : si la Direction n'avait rien téléversé, rien ne
+paraissait. J'avais appliqué la règle de l'interface à des documents.
+
+`CLAUDE.md` dit exactement le contraire, et le disait déjà :
+
+> *« Le logo de l'école est le repli **des documents**. L'interface porte celui
+> du logiciel, et n'affiche l'emblème de l'école que si la Direction l'a
+> elle-même téléversé. »*
+
+La règle a **deux côtés**, et je n'en avais retenu qu'un. Un document sans
+emblème n'est qu'une feuille imprimée : une administration peut la refuser.
+
+## 12.2 Deux constantes, une frontière
+
+```js
+window.SCHOOL_LOGO      // ce que la Direction a TÉLÉVERSÉ — reste null sinon.
+                        // Seule constante que l'INTERFACE a le droit de lire.
+window.SCHOOL_LOGO_DOC  // l'emblème du Complexe Scolaire Le Sage, intégré.
+                        // UNIQUEMENT pour les DOCUMENTS.
+```
+
+L'emblème vient de `logo.jpg` du dépôt du site — celui qui grave « COMPLEXE
+SCOLAIRE LE SAGE » en haut et « THE WISE SCHOOL INTERNATIONAL » en bas, autour
+de l'étoile d'or dont l'or de la charte est relevé.
+
+**320 px, JPEG, 37 Ko en base64.** Un document l'affiche entre 46 et 64 px —
+donc environ cinq fois la taille écran, assez pour l'impression sans alourdir
+le fichier. `dist/index.html` passe de 2,08 à 2,11 Mo.
+
+`_logoDoc` lit **le téléversé d'abord, l'intégré à défaut**. Douze autres
+documents qui lisaient `SCHOOL_LOGO` en direct — reçus de versement,
+bordereau, les six états comptables, le devoir, la lettre de sanction — font
+de même, ainsi que les deux constructeurs de cartes d'élève.
+
+## 12.3 La frontière est gardée par l'outil, pas par la discipline
+
+Tout tient à une chose : **l'interface ne doit jamais lire `SCHOOL_LOGO_DOC`.**
+Le jour où elle le fait, l'application se remet à porter l'école dès le premier
+lancement — l'erreur déjà commise, et corrigée, avec le repli de `SCHOOL_LOGO`.
+
+`tools/audit-logo.mjs` le vérifie et **refuse dans les deux sens**. Éprouvé :
+on lui a glissé la lecture du repli dans `buildUI`, il a répondu
+
+```
+✗ buildUI  ligne 4831 — le repli des DOCUMENTS lu hors d'un document
+✗ 1 lecture(s) de SCHOOL_LOGO_DOC hors document :
+  l'emblème va reparaître dans l'interface
+```
+
+puis le fichier a été restauré.
+
+## 12.4 Vérifié en exécutant, pas en lisant
+
+`_logoDoc` a été chargée dans Node avec `SCHOOL_LOGO = null` — le cas d'une
+école qui n'a rien téléversé — et **elle rend bien l'emblème**. Le reçu
+complet a été rendu et regardé.
+
+Si la Direction téléverse son propre fichier, il prend la place : la constante
+intégrée est un repli, pas une contrainte.
