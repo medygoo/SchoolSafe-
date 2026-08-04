@@ -51,6 +51,34 @@ Requests, `docs/`. Rien ne passe d'une plateforme à l'autre automatiquement.
    PWA, le service worker ou les permissions.
 8. Le solde ne se calcule jamais uniquement dans le navigateur.
 9. Documenter tests, risques, fichiers modifiés et procédure de retour arrière.
+10. **Fusionner n'est pas publier.** Après chaque fusion dans `main` — la
+    sienne ou celle de l'autre agent — on vérifie que la publication a réussi,
+    et on le dit. Voir la leçon ci-dessous : elle a coûté une journée entière
+    de corrections qui n'atteignaient personne.
+
+### La publication est une étape, pas une conséquence
+
+**4 août 2026.** Pendant des heures, chaque fusion dans `main` a été suivie d'un
+échec de publication : le contrôle exigeait *exactement* 144 fichiers dans
+`dist`, il y en avait 164 — des images, rien d'autre. L'écran de connexion
+corrigé, les préinscriptions, le schéma de la base, les codes d'erreur : **tout
+était dans `main` et rien n'atteignait l'école.** Loms a demandé pourquoi ses
+corrections n'étaient pas en ligne. Elles l'étaient dans le dépôt, jamais chez
+lui.
+
+Trois choses à en retenir, et elles se répètent ailleurs :
+
+1. **Une croix rouge que personne n'ouvre est un échec silencieux** — celui-là
+   même que tous nos audits traquent. La chaîne de publication le commettait.
+   Elle ouvre désormais une **issue** quand elle échoue, et la referme seule
+   quand tout revient : l'échec vient à nous au lieu d'attendre.
+2. **Un contrôle qui compte les fichiers un par un finira toujours par mentir.**
+   Il exprimait un nombre au lieu d'exprimer son intention — *l'artefact n'est
+   pas vide, et rien de privé n'en sort*. Un seuil et deux interdits disent la
+   même chose sans se périmer.
+3. **La responsabilité était écrite depuis le 3 août** — « Claude contrôle le
+   déploiement GitHub Pages » — et elle n'a pas été exercée. Une règle qu'on
+   lit et qu'on n'exécute pas ne protège de rien.
 
 **Conséquence directe pour ce fichier :** les leçons de base de données qu'il
 contient ne sont pas là pour qu'on y touche. Elles sont là pour **reconnaître
