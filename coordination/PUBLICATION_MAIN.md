@@ -50,6 +50,52 @@ Quand un bug touche plusieurs domaines :
    publication finale.
 4. Loms autorise la mise en production.
 5. Claude fusionne et publie `main`.
+6. **Claude vérifie que la publication a RÉUSSI, et le dit.**
+
+---
+
+## 2 bis. Fusionner n'est pas publier — la leçon du 4 août 2026
+
+**Ce qui s'est passé.** Pendant plusieurs heures, chaque fusion dans `main` a
+été suivie d'un échec de publication. Le contrôle avant publication exigeait
+*exactement* 144 fichiers dans `dist` ; il y en avait 164 — des images, rien
+d'autre.
+
+```
+17h30  ✗  P0-2, le visa de la Direction
+17h27  ✗  P0-3, les codes d'erreur des paiements
+17h22  ✗  P0-7, le schéma de la base
+16h41  ✗  l'écran de connexion corrigé
+16h09  ✗  les préinscriptions
+15h54  ✗  …et toutes les précédentes
+```
+
+**Tout était dans `main`, et rien n'atteignait l'école.** Loms a demandé
+pourquoi ses corrections n'étaient pas en ligne : elles l'étaient dans le
+dépôt, jamais chez lui.
+
+**Trois conclusions, et elles sont pour Claude.**
+
+1. **« Contrôler le déploiement » est une étape, pas une intention.** Elle est
+   au §1 depuis le 3 août. Elle n'a pas été faite après chaque fusion, et c'est
+   le seul manquement qui explique tout le reste.
+2. **Une croix rouge que personne n'ouvre est un échec silencieux.** C'est
+   exactement ce que nos audits traquent partout ailleurs. La chaîne de
+   publication le commettait elle-même. Un échec de publication **ouvre
+   désormais une issue** dans le canal que les deux agents lisent avant chaque
+   intervention, et cette issue se referme seule au retour à la normale.
+3. **Un contrôle qui compte les fichiers un par un finit toujours par mentir.**
+   Il exprimait un nombre au lieu d'exprimer une intention : *l'artefact n'est
+   pas vide, et il ne contient rien qui doive rester privé.* C'est ce qu'il
+   vérifie maintenant.
+
+**Et un point de fait, sans reproche :** les branches `agent/schema-reference-p07`,
+`agent/payment-error-codes-p03` et `agent/settings-signature-rls-p02` sont
+entrées dans `main` sans passer par l'intégration de Claude. Leur contenu est
+bon — il est déjà exploité, et il a permis de trouver 25 écarts entre le code et
+la base le jour même. Ce n'est donc pas le travail qui est en cause : c'est que
+**personne n'a regardé si la publication avait suivi**, et c'est précisément la
+raison pour laquelle le §1 confie cette étape à une seule personne.
 
 ---
 
