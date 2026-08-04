@@ -8365,19 +8365,9 @@ R.cards = () => {
   // Student options
   const studOpts=allStudents.map(s=>{const cl=(DB.classes||[]).find(c=>c.id===s.cid);return `<option value="${esc(s.id)}"${window._ssPreviewSid===s.id?' selected':''}>${esc(s.name)}${cl?' — '+esc(cl.name):''}${!s.photo?' ⚠️':''}</option>`;}).join('');
 
-  // APKart orders
-  const ordersHtml=(window._myCardOrders||[]).length
-    ?(window._myCardOrders||[]).slice(0,8).map(o=>{
-      const st={pending:'⏳ En attente',printing:'🖨️ En impression',delivered:'✅ Livré'}[o.status]||o.status;
-      const stCol={pending:'#f59e0b',printing:'#2563eb',delivered:'#059669'}[o.status]||'var(--text-muted)';
-      const thumb=(o.card_image_url&&!o.card_image_url.startsWith('data:'))?`<img src="${esc(o.card_image_url)}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1.5px solid var(--border)">`:`<div style="width:52px;height:70px;border-radius:6px;background:#f0f4ff;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🪪</div>`;
-      return `<div style="display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">${thumb}<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.student_name||'—')}</div><div style="font-size:11px;color:var(--text-muted)">${esc(o.student_mat||'—')} · ${esc(o.student_class||'—')}</div><div style="font-size:11px;color:var(--text-muted)">${(o.ordered_at||'').slice(0,10)||'—'}</div></div><span style="font-size:11px;font-weight:700;color:${stCol};white-space:nowrap">${esc(st)}</span></div>`;
-    }).join('')
-    :'<div style="color:var(--text-secondary);font-size:13px;text-align:center;padding:12px 0">Aucune commande précédente</div>';
-  setTimeout(()=>{if(typeof window.loadMyCardOrders==='function')window.loadMyCardOrders();},200);
   setTimeout(()=>{if(window._ssPreviewSid)ssRenderPreview();},150);
 
-  // APKart student list
+  // La liste des élèves de l'atelier
   const classFilter=window._cardClassFilter||'';
   const nameSearch=(window._cardNameSearch||'').toLowerCase();
   let students=allStudents;
@@ -8403,7 +8393,7 @@ R.cards = () => {
     ${!isComplete?`<div style="background:#fff3cd;border-radius:8px;padding:6px 8px;font-size:10px;color:#92400e">⚠️ Dossier incomplet</div>`:''}
     <div style="display:flex;gap:6px">
       <button class="btn btn-outline btn-sm" style="flex:1" onclick="window._ssPreviewSid=${JSON.stringify(s.id)};document.getElementById('ss-student-sel')&&(document.getElementById('ss-student-sel').value=${JSON.stringify(s.id)});ssRenderPreview();document.getElementById('ss-preview-outer')?.scrollIntoView({behavior:'smooth'})">👁 Aperçu</button>
-      <button class="btn btn-primary btn-sm" style="flex:1" onclick="submitCardOrder(${JSON.stringify(s.id)})" ${!isComplete?'disabled':''}>🪪 Commander</button>
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="creerCarte(${JSON.stringify(s.id)})" ${!isComplete?'disabled':''}>🪪 Créer la carte</button>
     </div>
     <div style="display:flex;gap:6px">
       <button class="btn btn-sm" style="flex:1;background:${s.card_printed?'#f0fdf4':'var(--bg-secondary,#f8fafc)'};border:1.5px solid ${s.card_printed?'#6ee7b7':'var(--border-light,#e2e8f0)'};color:${s.card_printed?'#065f46':'var(--text-secondary)'};font-weight:700" onclick="markCardPrinted(${JSON.stringify(s.id)})">${s.card_printed?'✅ Imprimé':'⬜ Imprimé'}</button>
@@ -8478,8 +8468,8 @@ R.cards = () => {
 </div>
 
 <div class="premium-section" style="margin-bottom:14px;border-left:4px solid #2f7bd6">
-  <div class="premium-section-title">🪪 Commander via APKart</div>
-  <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Envoyez les données vers APKart pour impression professionnelle des cartes.</div>
+  <div class="premium-section-title">🪪 Créer les cartes de l'année</div>
+  <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">L'école fabrique et imprime ses cartes elle-même. Une carte par élève et par année scolaire ; une carte perdue se réimprime en duplicata.</div>
   <div class="ww-toolbar" style="margin-bottom:10px">
     <input class="ww-search" placeholder="Rechercher élève ou matricule…" oninput="window._cardNameSearch=this.value;clearTimeout(window._crdT);window._crdT=setTimeout(render,300)" value="${esc(window._cardNameSearch||'')}">
     <select class="form-select" style="flex-shrink:0;width:auto;min-width:120px;font-size:13px" onchange="window._cardClassFilter=this.value;render()">
@@ -8489,11 +8479,7 @@ R.cards = () => {
   </div>
   ${students.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">${cardHtml}</div>`:'<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Aucun élève trouvé</div>'}
 </div>
-
-<div class="premium-section" style="border-left:4px solid #6b7280">
-  <div class="premium-section-title">📋 Historique des commandes APKart</div>
-  <div id="card-orders-history">${ordersHtml}</div>
-</div>`;
+`;
 };
 
 // Dériver variantes soft/dark d'une couleur hex libre (pour color picker classe)
@@ -8850,135 +8836,46 @@ window.migratePhotosToStorage = async (opts) => {
   return { total: jobs.length, done, restant: jobs.length - slice.length };
 };
 
-window.loadMyCardOrders = async () => {
-  if(!SCHOOL_KEY||!LOGIN_FN_URL) return;
-  try {
-    const d = await window._callCentral('card_orders');
-    window._myCardOrders = d.orders || [];
-    const el = document.getElementById('card-orders-history');
-    if(!el) return;
-    if(!(window._myCardOrders||[]).length) { el.innerHTML='<div style="color:var(--text-secondary);font-size:13px;text-align:center;padding:12px 0">Aucune commande précédente</div>'; return; }
-    el.innerHTML = (window._myCardOrders||[]).slice(0,8).map(o=>{
-      const st = {pending:'⏳ En attente',printing:'🖨️ En impression',delivered:'✅ Livré'}[o.status]||o.status;
-      const stCol = {pending:'#f59e0b',printing:'#2563eb',delivered:'#059669'}[o.status]||'var(--text-muted)';
-      const thumb = (o.card_image_url&&!o.card_image_url.startsWith('data:')) ? `<img src="${esc(o.card_image_url)}" style="width:52px;height:70px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1.5px solid var(--border)">` : `<div style="width:52px;height:70px;border-radius:6px;background:#f0f4ff;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🪪</div>`;
-      return `<div style="display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">${thumb}<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.student_name||'—')}</div><div style="font-size:11px;color:var(--text-muted)">${esc(o.student_mat||'—')} · ${esc(o.student_class||'—')}</div><div style="font-size:11px;color:var(--text-muted)">${(o.ordered_at||'').slice(0,10)||'—'}</div></div><span style="font-size:11px;font-weight:700;color:${stCol};white-space:nowrap">${esc(st)}</span></div>`;
-    }).join('');
-  } catch(e) { /* offline */ }
+// ════════════════════════════════════════════════════════════════════════════
+//  LA CARTE SE CRÉE À L'ÉCOLE — Loms, 4 août 2026
+//
+//  « On enlève le système de commande des cartes. L'application va créer les
+//  cartes elle-même, au profil Direction 1. C'est la Direction qui imprime.
+//  Les cartes se renouvellent par année. Une carte perdue se réimprime. »
+//
+//  Ce qui existait envoyait à un prestataire extérieur, par la clé de licence
+//  du modèle multi-écoles retiré le 3 août : nom de l'enfant, matricule, date
+//  et lieu de naissance, adresse, nom et téléphone du parent, nom du
+//  directeur, et l'image finie de la carte. La clé n'existant plus, le bouton
+//  échouait — mais le chemin restait ouvert dans le code.
+//
+//  UNE SEULE ÉCOLE, AUCUN TIERS : plus rien ne sort.
+// ════════════════════════════════════════════════════════════════════════════
+window.creerCarte = async (sid) => {
+  // Direction 1 seule : la carte est une pièce d'identité scolaire. La créer,
+  // c'est décider qu'un enfant est bien élève de cette école cette année-là.
+  if (!S.user || (window._normRole ? window._normRole(S.user.role) : S.user.role) !== 'direction') {
+    toast("Seule la Direction crée les cartes", 'error'); return;
+  }
+  const s = (DB.students||[]).find(x => x.id === sid);
+  if (!s) { toast('Élève introuvable','error'); return; }
+  const manque = [];
+  if (!s.photo) manque.push('la photo');
+  if (!s.mat)   manque.push('le matricule');
+  if (!s.dob)   manque.push('la date de naissance');
+  if (!s.cid)   manque.push('la classe');
+  if (manque.length) {
+    // Ne rien produire vaut mieux que produire faux : une carte sans photo ne
+    // sert à rien au portail, et une carte sans matricule ne se scanne pas.
+    toast(`Dossier incomplet — il manque ${manque.join(', ')}`, 'error');
+    return;
+  }
+  window._ssPreviewSid = sid;
+  ssRenderPreview();
+  document.getElementById('ss-preview-outer')?.scrollIntoView({behavior:'smooth'});
+  logAudit('card_create', `${s.name} — ${(DB.classes||[]).find(c=>c.id===s.cid)?.name||''} — année ${DB.settings?.year||''} — par ${window._acteur()}`, sid);
+  toast('Carte prête — imprimez-la, puis marquez-la « imprimée »', 'success');
 };
-
-window.submitCardOrder = async (sid) => {
-  if(!S.user||!['direction','direction2'].includes(S.user.role)) return;
-  const s = (DB.students||[]).find(x=>x.id===sid);
-  if(!s){ toast('Élève introuvable','error'); return; }
-  const cl = (DB.classes||[]).find(c=>c.id===s.cid);
-  const parent = (DB.users||[]).find(u=>u.id===s.pid);
-  const teacher = cl ? (DB.users||[]).find(u=>u.id===(cl.titulaire_id||cl.teacher_id)) : null;
-  const schoolName = DB.settings?.school?.name||'École';
-  const licenseKey = (DB.settings?.license_key||'').trim();
-  const cycleLabel = cl ? (cl.cycle==='humanites'?'Humanités'+(cl.option?' '+cl.option:''):(cl.cycle||'')) : '';
-  const dirUser = (DB.users||[]).find(u=>u.role==='direction');
-
-  // ── Étape 1 : générer le PNG de la carte finie ──
-  let card_image_url = null;
-  let cardPreviewHtml = '';
-  try {
-    toast('🎨 Génération de la carte...','info');
-    const prevSid = window._ssPreviewSid;
-    window._ssPreviewSid = sid;
-    ssRenderPreview();
-    // Attendre le rendu des QR codes : poll jusqu'à pixels foncés ou 500ms max
-    await new Promise(resolve => {
-      const t0 = Date.now();
-      (function tick() {
-        const qrEl = document.querySelector('#ss-card-studio canvas');
-        if(qrEl) {
-          try {
-            const pd = qrEl.getContext('2d').getImageData(0,0,4,4).data;
-            if(Array.from(pd).some((v,i)=>i%4!==3&&v<200)) return resolve();
-          } catch(_) {}
-        }
-        if(Date.now()-t0 >= 500) return resolve();
-        setTimeout(tick, 30);
-      })();
-    });
-    const studio = document.getElementById('ss-card-studio');
-    const arts = studio ? Array.from(studio.querySelectorAll('.art')) : [];
-    if(arts.length && typeof html2canvas === 'function') {
-      // Capturer recto
-      const rectoCV = await html2canvas(arts[0], {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#ffffff'});
-      let finalCV = rectoCV;
-      if(arts.length > 1) {
-        // Capturer verso et combiner verticalement
-        const versoCV = await html2canvas(arts[1], {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#ffffff'});
-        const gap = 16;
-        const combo = document.createElement('canvas');
-        combo.width = Math.max(rectoCV.width, versoCV.width);
-        combo.height = rectoCV.height + versoCV.height + gap;
-        const ctx = combo.getContext('2d');
-        ctx.fillStyle = '#e8eef8';
-        ctx.fillRect(0, 0, combo.width, combo.height);
-        ctx.drawImage(rectoCV, Math.round((combo.width-rectoCV.width)/2), 0);
-        ctx.drawImage(versoCV, Math.round((combo.width-versoCV.width)/2), rectoCV.height+gap);
-        finalCV = combo;
-        rectoCV.width = rectoCV.height = 0; // libérer buffer recto
-        versoCV.width = versoCV.height = 0; // libérer buffer verso
-      }
-      // Sanitiser la clé de licence et le sid avant de les utiliser dans l'URL de stockage
-      const safeKey = licenseKey.replace(/[^a-zA-Z0-9_-]/g,'').slice(0,64);
-      const safeSid = (sid+'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,64);
-      // La carte finie part dans le stockage R2 mutualisé, rangée sous
-      // <license_key>/cards/. Si R2 n'est pas configuré, elle voyage en
-      // base64 dans la commande — l'opérateur la reçoit dans les deux cas.
-      const orderRef = safeKey+'_'+safeSid+'_'+Date.now();
-      const blob = await new Promise(res => finalCV.toBlob(res,'image/png',0.92));
-      card_image_url = await window._uploadFile(blob, 'cards', orderRef+'.png');
-      // Dernier recours : la carte voyage en base64 dans la commande. L'opérateur
-      // la reçoit dans tous les cas, au prix d'une base plus lourde.
-      // Repli : la carte voyage dans la commande. Plafond large — elle doit
-      // rester imprimable — mais borné, car elle transite en base64 dans la base.
-      if(!card_image_url) card_image_url = window._encodeBudget(finalCV, 0.82, 220);
-      finalCV.width = finalCV.height = 0; // libérer dernier buffer canvas
-      // N'afficher l'aperçu que si c'est une URL distante (pas de data: URI dans le DOM)
-      cardPreviewHtml = (card_image_url&&!card_image_url.startsWith('data:')) ? `<img src="${esc(card_image_url)}" style="max-width:180px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.18);margin:12px auto;display:block">` : '';
-    }
-    // Restaurer l'aperçu précédent si besoin
-    if(prevSid && prevSid !== sid){ window._ssPreviewSid = prevSid; ssRenderPreview(); }
-  } catch(imgErr) { console.warn('[APKart] capture PNG échouée:',imgErr.message); }
-
-  // ── Étape 2 : envoyer la commande avec la carte ──
-  if(!SCHOOL_KEY||!LOGIN_FN_URL){ toast('Configuration centrale manquante','error'); return; }
-  try {
-    toast('⏳ Envoi vers APKart...','info');
-    const payload = {
-      student_name: s.name||'', student_mat: s.mat||'', student_dob: s.dob||'',
-      student_lieu_naissance: s.lieu_naissance||'', student_num_inscription: s.num_inscription||'',
-      student_adresse: s.adresse||DB.settings?.school?.address||'',
-      student_class: cl?cl.name:'', student_cycle: cycleLabel,
-      teacher_name: teacher?teacher.name:'',
-      parent_name: parent?parent.name:(s.nom_papa||s.nom_maman||''),
-      parent_phone: parent?(parent.phone||null):null,
-      school_phone: DB.settings?.school?.phone||null, school_address: DB.settings?.school?.address||null,
-      school_dgep: DB.settings?.school?.dgep||null, school_year: DB.settings?.year||null,
-      director_name: dirUser?dirUser.name:'',
-      card_image_url: card_image_url||null,
-    };
-    // Le statut, l'école et la date sont fixés par le serveur, pas par le client.
-    await window._callCentral('card_order', { order: payload });
-    window._myCardOrders = null;
-    const _hist=document.getElementById('card-orders-history');
-    if(_hist) _hist.innerHTML='<div style="color:var(--text-secondary);font-size:13px;text-align:center;padding:12px 0">✅ Commande envoyée — actualisation de l\'historique...</div>';
-    setTimeout(()=>{ if(typeof window.loadMyCardOrders==='function') window.loadMyCardOrders(); }, 1500);
-    logAudit('card_order','Commande APKart: '+s.name+' — '+(cl?cl.name:''));
-    openM('✅ Carte envoyée à APKart',`<div style="text-align:center;padding:8px 0">
-      ${cardPreviewHtml||'<div style="font-size:48px;margin-bottom:12px">🪪</div>'}
-      <div style="font-weight:800;font-size:16px;margin-bottom:4px">${esc(s.name)}</div>
-      <div style="font-size:13px;color:#2f7bd6;font-weight:600;margin-bottom:4px">${esc(cl?cl.name:'—')} · ${esc(cycleLabel)}</div>
-      <div style="color:var(--text-secondary);font-size:12px;margin-bottom:16px">${card_image_url?'Carte finie envoyée — APKart imprime directement':'Données envoyées (sans image)'}</div>
-    </div>`,`<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`);
-  } catch(e) { toast('Erreur: '+e.message,'error'); }
-};
-
 
 // ── LOCKDOWN ──
 R.lockdown = () => { const _g=_requireRole('direction','direction2'); if(_g) return _g; return `
@@ -23771,12 +23668,11 @@ R.settings = () => {
     <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="forceSyncNow()">🔄 Forcer la synchronisation complète</button>
   </div>
 
-  <!-- ══ APKart ══ -->
   <div class="premium-section">
-    <div class="premium-section-title">🪪 Cartes élèves — APKart</div>
+    <div class="premium-section-title">🪪 Cartes d'élèves</div>
     <div class="premium-item" onclick="go('cards')" style="cursor:pointer">
       <div class="pi-icon" style="background:#dbeafe">🪪</div>
-      <div style="flex:1"><div class="pi-title">Commander des cartes</div><div class="pi-sub">Les commandes sont traitées par APKart</div></div>
+      <div style="flex:1"><div class="pi-title">Créer et imprimer les cartes</div><div class="pi-sub">L'école fabrique ses cartes — une par élève et par année</div></div>
       <span class="premium-badge" style="background:#dbeafe;color:#205fae">Ouvrir →</span>
     </div>
   </div>
