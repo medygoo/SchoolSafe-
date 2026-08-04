@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+<!-- ══════════════════════════════════════════════════════════════════════
+     Les activités parascolaires — Complexe Scolaire Le Sage
+
+     DES DESSINS, PAS DES PHOTOGRAPHIES INVENTÉES.
+     Mettre sur le site d'une vraie école des enfants fabriqués, présentés
+     comme ses élèves, tromperait les familles qui les regardent. Les vraies
+     photographies de l'école sont ailleurs sur le site ; ici, ce sont des
+     dessins, et ils se voient comme tels.
+
+     Chaque enfant porte la tenue de l'école — GRIS et BLANC, la charte — et
+     l'insigne : l'étoile d'or de l'emblème, sur la poitrine.
+
+     Un fichier, huit dessins, environ 9 Ko. Une photographie en pèserait
+     deux cents à elle seule.
+     ══════════════════════════════════════════════════════════════════════ -->
+<defs>
+  <style>
+    .peau{fill:#6b4a2f}.peau2{fill:#5a3d26}
+    .chev{fill:#2b1d12}
+    .haut{fill:#ffffff}          /* chemise blanche  */
+    .bas{fill:#556777}           /* bas gris — la charte */
+    .bas2{fill:#657786}
+    .or{fill:#c09018}.or2{fill:#e2b84f}
+    .encre{fill:#1a2228}
+    .trait{fill:none;stroke:#1a2228;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+    .traitg{fill:none;stroke:#556777;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+    .surf{fill:#f0f1f2}.surf2{fill:#dadee2}
+  </style>
+  <!-- l'insigne de l'école, posé sur chaque tenue -->
+  <g id="insigne">
+    <circle r="5.2" class="or"/>
+    <path d="M0,-3.4 1,-1 3.3,-1 1.4,.4 2.1,2.8 0,1.4 -2.1,2.8 -1.4,.4 -3.3,-1 -1,-1Z" fill="#fff"/>
+  </g>
+</defs>
+
+<!-- ── INFORMATIQUE ────────────────────────────────────────────────── -->
+<symbol id="act-informatique" viewBox="0 0 160 160">
+  <rect x="6" y="6" width="148" height="148" rx="16" class="surf"/>
+  <!-- bureau -->
+  <rect x="26" y="104" width="108" height="7" rx="3" class="bas2"/>
+  <!-- écran -->
+  <rect x="78" y="60" width="52" height="36" rx="4" class="encre"/>
+  <rect x="82" y="64" width="44" height="28" rx="2" class="or2"/>
+  <rect x="96" y="96" width="16" height="8" class="bas2"/>
+  <!-- enfant -->
+  <circle cx="52" cy="56" r="15" class="peau"/>
+  <path d="M37,50a15,15 0 0 1 30,0q-4-7-15-7t-15,7Z" class="chev"/><path d="M38,49a14,13 0 0 1 28,0Z" class="chev"/>
+  <circle cx="47" cy="57" r="1.9" class="encre"/><circle cx="58" cy="57" r="1.9" class="encre"/>
+  <path d="M48,63q4,3.5 8,0" class="trait"/>
+  <path d="M38,104V84a14,14 0 0 1 28,0v20Z" class="haut"/>
+  <path d="M38,104h28v10H38Z" class="bas"/>
+  <use href="#insigne" x="52" y="88"/>
+  <path d="M66,90q10,6 14,10" class="traitg" stroke="#6b4a2f"/>
+  <circle cx="82" cy="101" r="4.4" class="peau2"/>
+</symbol>
+
+<!-- ── DANSE ──────────────────────────────────────────────────────── -->
+<symbol id="act-danse" viewBox="0 0 160 160">
+  <rect x="6" y="6" width="148" height="148" rx="16" class="surf"/>
+  <circle cx="122" cy="40" r="13" class="or2" opacity=".55"/>
+  <circle cx="34" cy="122" r="9" class="or2" opacity=".4"/>
+  <!-- enfant en mouvement -->
+  <circle cx="78" cy="48" r="15" class="peau"/>
+  <path d="M63,42a15,15 0 0 1 30,0q-4-7-15-7t-15,7Z" class="chev"/><path d="M64,41a14,13 0 0 1 28,0Z" class="chev"/>
+  <circle cx="73" cy="49" r="1.9" class="encre"/><circle cx="84" cy="49" r="1.9" class="encre"/>
+  <path d="M74,55q4,4 8,0" class="trait"/>
+  <path d="M65,98V76a13,13 0 0 1 26,0v22Z" class="haut"/>
+  <use href="#insigne" x="78" y="80"/>
+  <!-- bras levés -->
+  <path d="M66,80 46,62M90,80 112,66" class="traitg" stroke="#6b4a2f" stroke-width="7"/>
+  <!-- jupe grise -->
+  <path d="M62,98h32l10,20H52Z" class="bas"/>
+  <!-- jambes -->
+  <path d="M70,118 62,140M88,118 100,138" class="traitg" stroke="#6b4a2f" stroke-width="7"/>
+</symbol>
+
+<!-- ── MUSIQUE ────────────────────────────────────────────────────── -->
+<symbol id="act-musique" viewBox="0 0 160 160">
+  <rect x="6" y="6" width="148" height="148" rx="16" class="surf"/>
+  <path d="M112,34v34a9,9 0 1 1-6-8.4V40l-22,5v34a9,9 0 1 1-6-8.4V38Z" class="or"/>
+  <circle cx="62" cy="58" r="15" class="peau"/>
+  <path d="M47,52a15,15 0 0 1 30,0q-4-7-15-7t-15,7Z" class="chev"/><path d="M48,51a14,13 0 0 1 28,0Z" class="chev"/>
+  <circle cx="57" cy="59" r="1.9" class="encre"/><circle cx="68" cy="59" r="1.9" class="encre"/>
+  <path d="M57,65q5,4.5 10,0" class="trait"/>
+  <path d="M48,108V86a14,14 0 0 1 28,0v22Z" class="haut"/>
+  <path d="M48,108h28v12H48Z" class="bas"/>
+  <use href="#insigne" x="62" y="90"/>
+  <!-- tambour -->
+  <rect x="86" y="96" width="34" height="26" rx="4" class="bas2"/>
+  <ellipse cx="103" cy="96" rx="17" ry="6" class="surf2"/>
+  <path d="M76,92 88,90" class="traitg" stroke="#6b4a2f" stroke-width="7"/>
+</symbol>
+
+<!-- ── POTERIE ────────────────────────────────────────────────────── -->
+<symbol id="act-poterie" viewBox="0 0 160 160">
+  <rect x="6" y="6" width="148" height="148" rx="16" class="surf"/>
+  <!-- tour -->
+  <ellipse cx="98" cy="118" rx="34" ry="9" class="bas2"/>
+  <rect x="94" y="98" width="8" height="20" class="bas"/>
+  <path d="M84,98q-6-22 14-24 20,2 14,24Z" class="or"/>
+  <ellipse cx="98" cy="98" rx="14" ry="4" class="or2"/>
+  <circle cx="52" cy="56" r="15" class="peau"/>
+  <path d="M37,50a15,15 0 0 1 30,0q-4-7-15-7t-15,7Z" class="chev"/><path d="M38,49a14,13 0 0 1 28,0Z" class="chev"/>
+  <circle cx="47" cy="57" r="1.9" class="encre"/><circle cx="58" cy="57" r="1.9" class="encre"/>
+  <path d="M48,63q4,3.5 8,0" class="trait"/>
+  <path d="M38,110V84a14,14 0 0 1 28,0v26Z" class="haut"/>
+  <path d="M38,110h28v10H38Z" class="bas"/>
+  <use href="#insigne" x="52" y="88"/>
+  <path d="M66,88 84,92" class="traitg" stroke="#6b4a2f" stroke-width="7"/>
+</symbol>
+
+<!-- ── TAEKWONDO ──────────────────────────────────────────────────── -->
+<symbol id="act-taekwondo" viewBox="0 0 160 160">
+  <rect x="6" y="6" width="148" height="148" rx="16" class="surf"/>
+  <circle cx="72" cy="46" r="15" class="peau"/>
+  <path d="M57,40a15,15 0 0 1 30,0q-4-7-15-7t-15,7Z" class="chev"/><path d="M58,39a14,13 0 0 1 28,0Z" class="chev"/>
+  <circle cx="67" cy="47" r="1.9" class="encre"/><circle cx="78" cy="47" r="1.9" class="encre"/>
+  <path d="M67,53h10" class="trait"/>
+  <!-- dobok blanc -->
+  <path d="M56,104V74a16,16 0 0 1 32,0v30Z" class="haut"/>
+  <path d="M72,60 60,104M72,60 84,104" class="trait" stroke-width="2"/>
+  <!-- ceinture — l'or de l'école -->
+  <rect x="54" y="92" width="36" height="8" rx="2" class="or"/>
+  <path d="M88,96l14,4-4,4" class="trait" stroke="#c09018" stroke-width="3"/>
+  <use href="#insigne" x="72" y="78"/>
+  <!-- bras et jambe en garde -->
+  <path d="M58,80 42,92" class="traitg" stroke="#6b4a2f" stroke-width="7"/>
+  <path d="M88,80 112,74" class="traitg" stroke="#6b4a2f" stroke-width="7"/>
+  <path d="M66,104 62,134" class="traitg" stroke="#6b4a2f" stroke-width="8"/>
+  <path d="M82,104 108,112" class="traitg" stroke="#6b4a2f" stroke-width="8"/>
+</symbol>
+
+<!-- ── CANTINE ────────────────────────────────────────────────────── -->
+<symbol id="act-cantine" viewBox="0 0 160 160">
+  <rect x="6" y="6" width="148" height="148" rx="16" class="surf"/>
+  <rect x="20" y="112" width="120" height="8" rx="4" class="bas2"/>
+  <ellipse cx="102" cy="106" rx="26" ry="8" class="surf2"/>
+  <ellipse cx="102" cy="103" rx="20" ry="6" class="or2"/>
+  <circle cx="58" cy="58" r="15" class="peau"/>
+  <path d="M43,52a15,15 0 0 1 30,0q-4-7-15-7t-15,7Z" class="chev"/><path d="M44,51a14,13 0 0 1 28,0Z" class="chev"/>
+  <circle cx="53" cy="59" r="1.9" class="encre"/><circle cx="64" cy="59" r="1.9" class="encre"/>
+  <path d="M52,65q6,5.5 12,0" class="trait"/>
+  <path d="M44,112V86a14,14 0 0 1 28,0v26Z" class="haut"/>
+  <path d="M44,112h28v8H44Z" class="bas"/>
+  <use href="#insigne" x="58" y="90"/>
+  <path d="M72,94 88,100" class="traitg" stroke="#6b4a2f" stroke-width="7"/>
+</symbol>
+
+<!-- ── LECTURE / BILINGUE ─────────────────────────────────────────── -->
+<symbol id="act-lecture" viewBox="0 0 160 160">
+  <rect x="6" y="6" width="148" height="148" rx="16" class="surf"/>
+  <circle cx="76" cy="48" r="15" class="peau"/>
+  <path d="M61,42a15,15 0 0 1 30,0q-4-7-15-7t-15,7Z" class="chev"/><path d="M62,41a14,13 0 0 1 28,0Z" class="chev"/>
+  <circle cx="71" cy="49" r="1.9" class="encre"/><circle cx="82" cy="49" r="1.9" class="encre"/>
+  <path d="M72,55q4,3.5 8,0" class="trait"/>
+  <path d="M62,102V76a14,14 0 0 1 28,0v26Z" class="haut"/>
+  <path d="M58,102h36v12H58Z" class="bas"/>
+  <use href="#insigne" x="76" y="80"/>
+  <!-- livre ouvert -->
+  <path d="M44,92q16-8 32,0 16-8 32,0v22q-16-8-32,0-16-8-32,0Z" class="haut" stroke="#556777" stroke-width="2.4"/>
+  <path d="M76,92v22" stroke="#556777" stroke-width="2.4" fill="none"/>
+  <path d="M52,98h16M52,104h14M84,98h16M84,104h14" stroke="#8896a2" stroke-width="2" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<!-- ── ATELIERS / ARTS ────────────────────────────────────────────── -->
+<symbol id="act-ateliers" viewBox="0 0 160 160">
+  <rect x="6" y="6" width="148" height="148" rx="16" class="surf"/>
+  <!-- palette -->
+  <path d="M104,118a30,26 0 1 0-2-52c-16,0-16,10-8,14s6,12-2,14-14,8-6,18a30,26 0 0 0 18,6Z" class="surf2" stroke="#556777" stroke-width="2.2"/>
+  <circle cx="100" cy="76" r="4.6" class="or"/><circle cx="116" cy="88" r="4.6" class="bas"/>
+  <circle cx="112" cy="106" r="4.6" class="or2"/><circle cx="94" cy="110" r="4.6" class="bas2"/>
+  <circle cx="52" cy="56" r="15" class="peau"/>
+  <path d="M37,50a15,15 0 0 1 30,0q-4-7-15-7t-15,7Z" class="chev"/><path d="M38,49a14,13 0 0 1 28,0Z" class="chev"/>
+  <circle cx="47" cy="57" r="1.9" class="encre"/><circle cx="58" cy="57" r="1.9" class="encre"/>
+  <path d="M47,63q5,4.5 10,0" class="trait"/>
+  <path d="M38,110V84a14,14 0 0 1 28,0v26Z" class="haut"/>
+  <path d="M38,110h28v10H38Z" class="bas"/>
+  <use href="#insigne" x="52" y="88"/>
+  <!-- pinceau -->
+  <path d="M66,88 82,80" class="traitg" stroke="#6b4a2f" stroke-width="7"/>
+  <path d="M80,80 96,72" stroke="#8896a2" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <circle cx="98" cy="71" r="3.4" class="or"/>
+</symbol>
+</svg>
