@@ -60,6 +60,89 @@ qu'on ne saurait pas résoudre.
 
 # P0 — bloquant
 
+## P0-8 · Le registre des cartes d'élèves, par année
+
+**Décision de Loms, 4 août 2026.** La commande de cartes chez un prestataire
+extérieur est retirée : l'application crée les cartes, Direction 1 les imprime.
+Il demande en revanche **un registre de toutes les cartes de l'année** — une
+carte perdue se réimprime, et l'année suivante on repart sur de nouvelles
+photos.
+
+**Ce qui existe ne peut pas le porter.** `students` n'a que trois colonnes, et
+aucune ne connaît l'année :
+
+```
+card_printed  boolean · card_print_date  text · card_print_count  numeric
+```
+
+Une carte de `2025-2026` et sa remplaçante de `2026-2027` **s'écrasent**. On ne
+peut ni dire ce qui a été émis l'an dernier, ni retrouver la photo utilisée, ni
+distinguer un duplicata pour perte d'un renouvellement d'année.
+
+**Ce dont j'ai besoin** — la forme t'appartient :
+
+| | |
+|---|---|
+| une ligne **par élève et par année scolaire** | élève · année · classe au moment de l'émission |
+| ce qui a servi | la photo utilisée · le gabarit choisi |
+| la trace | créée par qui et quand · imprimée quand · nombre de tirages |
+| le motif d'un tirage | **perte** ou **renouvellement** — ce n'est pas la même chose |
+| l'écriture | **Direction 1 seule**, comme `settings` |
+
+Une carte ouvre le portail : elle mérite la même traçabilité qu'un certificat.
+
+**Question de Loms restée ouverte, je te la passe :** une carte de l'an dernier
+doit-elle être **refusée au portail** ? Si oui, le portail devra lire ce
+registre, et cela te concerne.
+
+---
+
+## P0-9 · La détection mensuelle des rattrapages doit tourner sur le serveur
+
+**Règle arrêtée par Loms le 4 août 2026 :** la détection devient **mensuelle**.
+L'application étudie le mois écoulé ; si un élève est sous le seuil dans une
+matière, elle crée le dossier de rattrapage, **envoie une convocation à la
+famille** et avertit Direction 1 et Direction 2.
+
+**C'est fait côté interface**, avec six garde-fous : par matière et non sur la
+moyenne générale · sur le mois écoulé uniquement · deux notes minimum · une
+seule convocation par enfant et par mois · pas de doublon si un cours est déjà
+ouvert · une seule passe par mois et par classe.
+
+**Deux choses que le navigateur ne peut pas garantir, et elles comptent :**
+
+1. **La détection ne se déclenche que si quelqu'un ouvre l'application.** Si
+   personne ne saisit de notes en début de mois, aucune famille n'est
+   convoquée — et personne ne s'en aperçoit.
+2. **Deux appareils peuvent créer le même dossier deux fois.** Ma passe unique
+   par mois et par classe est mémorisée **dans le navigateur** : elle ne
+   protège pas d'un second appareil. Deux convocations pour le même enfant,
+   deux montants à payer.
+
+**Ce que je te demande :** une RPC qui fait la détection **du côté serveur, en
+une transaction** — et, si c'est possible chez toi, déclenchée une fois par
+mois sans qu'on ait à ouvrir l'application.
+
+Elle a besoin de : le seuil (`settings.rattrapage_threshold`, défaut 50), le
+minimum de notes (`settings.rattrapage_min_notes`, défaut 2), le mois écoulé,
+et l'unicité **(élève · matière · mois)**.
+
+**Je garde la version navigateur en attendant** : mieux vaut une détection
+imparfaite que pas de détection. Elle disparaîtra le jour où la tienne existe.
+
+### Et le partage 60 / 40 — pour information, pas une demande
+
+Loms a tranché : **l'enseignant prend 60 %, l'école 40 %**, et l'enseignant
+n'est payé **que lorsque la famille a payé**. La part est réglable par
+Direction 1 (`settings.rattrapage_share_teacher`).
+
+Le calcul se fait aujourd'hui dans le navigateur, à partir de `rattrapages.amount`
+et `paid`. **Si tu juges que cette part doit se calculer côté serveur** — c'est
+de l'argent versé à un employé — dis-le-moi et je branche : je ne veux pas
+avancer seul sur une règle de paie.
+
+---
+
 ## P0-7 · Le schéma des tables n'est pas dans le dépôt
 
 **C'est la demande la plus importante de ce document.** Elle ne débloque pas un

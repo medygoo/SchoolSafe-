@@ -3660,7 +3660,7 @@ window.getPendingCount = () => {
     const unreadMsgs=(DB.messages||[]).filter(m=>(m.to===uid||(m.to_role==='parent'))&&!m.read&&m.status==='sent'&&m.from!==uid).length;
     const pendingRat=(DB.rattrapages||[]).filter(r=>{
       const s=DB.students.find(x=>x.id===r.sid);
-      return s&&s.pid===uid&&r.status==='pending'&&r.validated_by&&r.amount>0&&!r.payment_signaled;
+      return s&&s.pid===uid&&r.status==='pending'&&r.validated_by&&r.amount>0&&!r.paid;
     }).length;
     return unreadNotifs+unreadMsgs+pendingRat;
   }
@@ -10615,8 +10615,8 @@ R.approbations = () => {
   </div>`:''}
   ${(()=>{
     if(isD2) return '';
-    const signaled=(DB.rattrapages||[]).filter(r=>r.status==='pending'&&r.validated_by&&r.payment_signaled);
-    const waiting=(DB.rattrapages||[]).filter(r=>r.status==='pending'&&r.validated_by&&!r.payment_signaled);
+    const signaled=[];
+    const waiting=(DB.rattrapages||[]).filter(r=>r.status==='pending'&&r.validated_by&&!r.paid&&!r.archived);
     if(!signaled.length&&!waiting.length) return '';
     const renderRat=(r,priority)=>{
       const s=DB.students.find(x=>x.id===r.sid);
@@ -11777,8 +11777,8 @@ R.children = () => {
                 <span style="font-weight:700;color:${paid?'#1f9d6b':'#d98a2b'}">${paid?'Payé ('+_cur()+r.amount+')':r.amount?_cur()+r.amount+' à régler':'Montant à fixer'}</span>
                 ${r.status==='pending'&&r.amount?`<span class="pill" style="background:#fdeccd;color:#92400e">À régler</span>`:paid?`<span class="pill" style="background:#d8f3e6;color:#065f46">Payé</span>`:`<span class="pill" style="background:#fee2e2;color:#dc2626">En attente</span>`}
               </div>
-              ${r.status==='pending'&&r.amount>0&&r.validated_by&&!r.payment_signaled?`<button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px" onclick="signalerPaiementRattrapage('${r.id}')">Signaler mon paiement à la Direction</button>`:''}
-              ${r.payment_signaled&&r.status!=='paid'?`<div style="font-size:11px;color:#1f9d6b;margin-top:6px;text-align:center">Paiement signalé — en attente de confirmation</div>`:''}
+              ${r.status==='pending'&&r.amount>0&&r.validated_by?`<div style="margin-top:8px;background:#fdeccd;border-radius:8px;padding:8px 10px;font-size:12px;color:#92400e">Présentez-vous à l'école pour régler ce cours. <strong>Votre reçu vous sera remis au moment du paiement.</strong></div>`:''}
+              ${paid?`<div style="margin-top:6px;text-align:center"><button class="btn btn-outline btn-sm" style="width:100%" onclick="downloadRecuRattrapage('${r.sid}')">🧾 Mon reçu</button></div>`:''}
               ${r.session_date?`<div style="margin-top:8px;background:#dbeafe;border-radius:8px;padding:8px 10px;font-size:12px;color:#205fae;font-weight:600">Séance : ${new Date(r.session_date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}${r.session_time?' à '+r.session_time:''}${r.session_place?' — '+esc(r.session_place):''}</div>`:''}
               ${r.done?`<div style="margin-top:6px;background:#d8f3e6;border-radius:8px;padding:8px 10px;font-size:12px;color:#065f46;font-weight:600">Cours effectué le ${r.done_date||''}${r.done_note?' · '+esc(r.done_note.slice(0,80)):''}</div>`:''}
             </div>`;}).join('')}
@@ -12395,8 +12395,12 @@ window.marquerRattrapage = async (rid, paid) => {
 };
 
 // Direction: planifier la séance après paiement
+// Direction 2 n'organise pas le cours — Loms, 4 août 2026 : « Direction 1 est
+// le roi, il peut tout faire sans Direction 2. Mais Direction 2 ne peut pas
+// organiser le cours, et les paiements doivent passer par Direction 1. »
+// Direction 2 garde son avis pédagogique (validerRattrapage sans montant).
 window.planifierRattrapage = (rid) => {
-  if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
+  if(!S.user||(window._normRole?window._normRole(S.user.role):S.user.role)!=='direction'){toast("Seule la Direction 1 organise le cours",'error');return;}
   const r=(DB.rattrapages||[]).find(x=>x.id===rid); if(!r) return;
   const s=(DB.students||[]).find(x=>x.id===r.sid);
   openM(`📅 Planifier la séance — ${s?esc(s.name):''} · ${esc(r.matiere)}`,`
@@ -12414,7 +12418,7 @@ window.planifierRattrapage = (rid) => {
 };
 
 window.savePlanRattrapage = (rid) => {
-  if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
+  if(!S.user||(window._normRole?window._normRole(S.user.role):S.user.role)!=='direction'){toast("Seule la Direction 1 organise le cours",'error');return;}
   const r=(DB.rattrapages||[]).find(x=>x.id===rid); if(!r) return;
   const d=($('sessDate')?.value||'').trim();
   if(!d){toast('Date obligatoire','error');return;}
@@ -12476,7 +12480,7 @@ window.checkRattrapageReminders = () => {
   if(!S.user||(S.user.role!=='direction'&&S.user.role!=='direction2')) return;
   const limit=new Date(); limit.setDate(limit.getDate()-7);
   (DB.rattrapages||[]).filter(r=>
-    r.status==='pending'&&r.validated_by&&r.amount>0&&!r.payment_signaled&&!r.paid&&!r.archived&&
+    r.status==='pending'&&r.validated_by&&r.amount>0&&!r.paid&&!r.archived&&
     r.validated_date&&new Date(r.validated_date)<limit&&!r.reminder_sent
   ).forEach(r=>{
     const s=DB.students.find(x=>x.id===r.sid); if(!s?.pid) return;
@@ -12490,69 +12494,153 @@ window.checkRattrapageReminders = () => {
 };
 
 // Détection automatique : déclenché après saveGradePanel, vérifie chaque élève/matière vs seuil
-window.checkRattrapageAuto = (cid) => {
-  const threshold = DB.settings.rattrapage_threshold != null ? DB.settings.rattrapage_threshold : 50;
-  const cl = gc(cid); if(!cl) return;
-  const trim = window._gradeTrim || DB.settings.currentTrimestre || 'T1';
-  const teacherId = S.user.id;
-  const students = (DB.students||[]).filter(s => s.cid === cid && !s.access_blocked);
+// ════════════════════════════════════════════════════════════════════════════
+//  RATTRAPAGE — LA DÉTECTION EST MENSUELLE
+//
+//  Règle arrêtée par Loms le 4 août 2026 : « on va commencer à les faire
+//  mensuellement, c'est mieux. L'application étudie comment l'enfant a
+//  travaillé pendant un mois, et s'il n'atteint pas la moyenne mensuelle,
+//  elle propose automatiquement le cours. »
+//
+//  Six garde-fous, et chacun protège quelqu'un :
+//
+//  1 · PAR MATIÈRE, pas sur la moyenne générale. Le cours se donne dans une
+//      matière, par un enseignant. Un enfant à 45 % de moyenne mais bon
+//      partout sauf en mathématiques a besoin d'UN cours, pas de six.
+//  2 · SUR LE MOIS ÉCOULÉ, jamais sur le mois en cours : juger un mois à
+//      moitié fait, c'est convoquer une famille sur la moitié d'un résultat.
+//  3 · DEUX NOTES MINIMUM dans le mois. Une seule mauvaise interrogation
+//      n'est pas une tendance — et au bout il y a une convocation et une
+//      facture. Avec une seule note, on ferait payer un accident.
+//  4 · UNE SEULE CONVOCATION par enfant et par mois, listant les matières.
+//      Sous la barre dans quatre matières, la famille recevait quatre
+//      convocations et quatre factures le même jour.
+//  5 · PAS DE DOUBLON : un rattrapage déjà ouvert dans la même matière ne se
+//      redéclenche pas tant qu'il n'est ni fait ni archivé.
+//  6 · UNE SEULE PASSE PAR MOIS ET PAR CLASSE, mémorisée : la détection se
+//      déclenche à la saisie de notes, et deux enseignants qui enregistrent
+//      coup sur coup ne doivent pas créer deux fois le même dossier.
+//
+//  ⚠️ CE QUE CE CODE NE PEUT PAS GARANTIR — voir P0-9 pour ChatGPT.
+//  Il tourne dans le navigateur : il ne se déclenche donc que si quelqu'un
+//  ouvre l'application, et deux appareils qui l'ouvrent en même temps peuvent
+//  encore créer le même dossier deux fois. Le garde-fou 6 réduit la fenêtre,
+//  il ne la ferme pas. La détection a sa place sur le serveur.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Le mois écoulé, au format AAAA-MM. On ne juge jamais le mois en cours.
+window._moisEcoule = () => {
+  const d = new Date(today() + 'T00:00:00Z');
+  d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1);
+  return d.toISOString().slice(0, 7);
+};
+window._libMois = (m) => {
+  const [a, mo] = String(m||'').split('-');
+  return (['','janvier','février','mars','avril','mai','juin','juillet','août',
+           'septembre','octobre','novembre','décembre'][Number(mo)] || m) + ' ' + a;
+};
+
+// La moyenne d'un élève dans une matière, sur un mois — pondérée comme
+// ailleurs. Rend null s'il n'y a pas de quoi juger.
+window._moyMatMois = (sid, matiere, mois) => {
+  const gs = (DB.grades||[]).filter(g =>
+    g.sid === sid && g.matiere === matiere && String(g.date||'').startsWith(mois));
+  if (gs.length < (Number(DB.settings?.rattrapage_min_notes) || 2)) return null;
+  let sumWN = 0, sumW = 0;
+  gs.forEach(g => { const w = Number(g.weight||1); sumWN += gradePct(g)*w; sumW += w; });
+  return sumW ? { pct: Math.round(sumWN/sumW), notes: gs.length } : null;
+};
+
+window.checkRattrapageAuto = async (cid) => {
+  const seuil = DB.settings.rattrapage_threshold != null ? DB.settings.rattrapage_threshold : 50;
+  const cl = gc(cid); if (!cl) return;
+  const mois = window._moisEcoule();
+
+  // Garde-fou 6 : une passe par mois et par classe.
+  const marque = 'rat_' + cid + '_' + mois;
+  try { if (localStorage.getItem(marque)) return; } catch(_) {}
+
+  const eleves = (DB.students||[]).filter(s => s.cid === cid && !s.archived);
   const matieres = getClassMatieres(cid);
-  let newRats = [];
-  students.forEach(s => {
-    matieres.forEach(m => {
-      const avg = matAvgPct(s.id, m.name, trim);
-      if(avg === null || avg >= threshold) return;
-      // Ne pas déclencher sur une seule épreuve — attendre au moins 2 évaluations
-      const evalCount = (DB.grades||[]).filter(g=>g.sid===s.id&&g.matiere===m.name&&gTrim(g)===trim).length;
-      if(evalCount < 2) return;
-      const existing = (DB.rattrapages||[]).find(r =>
-        r.sid === s.id && r.matiere === m.name && r.trimestre === trim && !r.archived
-      );
-      if(existing) return;
+  const parEleve = new Map();   // sid → [{matiere, pct, notes}]
+
+  for (const s of eleves) {
+    for (const m of matieres) {
+      const r = window._moyMatMois(s.id, m.name, mois);
+      if (!r || r.pct >= seuil) continue;
+      const ouvert = (DB.rattrapages||[]).find(x =>
+        x.sid === s.id && x.matiere === m.name && !x.archived && !x.done);
+      if (ouvert) continue;
+      if (!parEleve.has(s.id)) parEleve.set(s.id, []);
+      parEleve.get(s.id).push({ matiere: m.name, pct: r.pct, notes: r.notes });
+    }
+  }
+  try { localStorage.setItem(marque, today()); } catch(_) {}
+  if (!parEleve.size) return;
+
+  const crees = [];
+  for (const [sid, faibles] of parEleve) {
+    const s = eleves.find(x => x.id === sid);
+    // Un dossier de rattrapage par matière : c'est un cours, un enseignant,
+    // un montant. Mais UNE SEULE convocation pour la famille.
+    for (const f of faibles) {
       const rat = {
         id: _uid('rat_'),
-        sid: s.id, teacher_id: teacherId,
-        matiere: m.name,
-        motif: `Détection auto — Moyenne ${avg}% · Seuil: ${threshold}%`,
+        sid, teacher_id: (cl.titulaire_id || cl.teacher_id || null),
+        matiere: f.matiere,
+        motif: `Moyenne de ${window._libMois(mois)} : ${f.pct}% sur ${f.notes} note${f.notes>1?'s':''} — seuil ${seuil}%`,
         date: today(), status: 'pending', amount: 0, paid: false,
-        score: avg, auto_triggered: true, trimestre: trim
+        score: f.pct, auto_triggered: true,
+        trimestre: DB.settings.currentTrimestre || null,
       };
-      (DB.rattrapages=DB.rattrapages||[]).push(rat);
-      pushSync('rattrapages', 'post', rat);
-      newRats.push({rat, s, matName: m.name});
-    });
-  });
-  if(!newRats.length) return;
-  // Notifier Direction 1 + Direction 2
-  const dirs = (DB.users||[]).filter(u => u.role==='direction' || u.role==='direction2');
-  const byMat = {};
-  newRats.forEach(({s, matName, rat}) => { if(!byMat[matName]) byMat[matName]=[]; byMat[matName].push({s, rat}); });
-  Object.entries(byMat).forEach(([matName, items]) => {
-    const names = items.map(i => `${i.s.name} (${i.rat.score}%)`).join(', ');
-    const msg = `🔴 Rattrapage auto — ${cl.name} · ${matName} · ${items.length} élève${items.length>1?'s':''} sous ${threshold}% : ${names.slice(0,120)}`;
-    dirs.forEach(u => {
-      const n = {id:'n'+Date.now()+Math.random().toString(36).slice(2,6), uid:u.id, msg, time:nowTime(), date:today(), read:false, type:'alert'};
-      DB.notifs.unshift(n); pushSync('notifs','post',n);
-    });
-    // Notifier l'enseignant aussi (s'il n'est pas direction)
-    if(S.user.role !== 'direction' && S.user.role !== 'direction2') {
-      const nt = {id:'n'+Date.now()+Math.random().toString(36).slice(2,6), uid:S.user.id,
-        msg:`⚠️ Rattrapage auto signalé — ${cl.name} · ${matName} · ${items.length} élève${items.length>1?'s':''} sous ${threshold}% (Direction notifiée)`,
-        time:nowTime(), date:today(), read:false, type:'alert'};
-      DB.notifs.unshift(nt); pushSync('notifs','post',nt);
+      const ok = await pushSync('rattrapages', 'post', rat);
+      if (!ok) continue;                     // rien créé côté serveur : rien ici non plus
+      (DB.rattrapages = DB.rattrapages||[]).push(rat);
+      crees.push({ rat, s });
     }
-  });
-  // Notifier les parents
-  newRats.forEach(({s, rat}) => {
-    if(s.pid) {
-      const np = {id:'n'+Date.now()+Math.random().toString(36).slice(2,6), uid:s.pid,
-        msg:`📚 ${s.name} — Résultats insuffisants en ${rat.matiere} (${rat.score}%). Un cours de rattrapage a été proposé par l'école.`,
-        time:nowTime(), date:today(), read:false, type:'alert'};
-      DB.notifs.unshift(np); pushSync('notifs','post',np);
+    if (!crees.some(c => c.s.id === sid)) continue;
+
+    // LA CONVOCATION — automatique, dès la détection. Loms : « dès que
+    // l'application détecte l'enfant, elle envoie la convocation aux parents
+    // et avertit Direction 1 et Direction 2. »
+    const mats = faibles.map(f => `${f.matiere} (${f.pct}%)`).join(', ');
+    const convoc = {
+      id: _uid('cv_'), sid, date: today(),
+      reason: 'Cours de rattrapage',
+      body: `Les résultats de ${s.name} pour le mois de ${window._libMois(mois)} sont inférieurs `
+          + `à la moyenne exigée de ${seuil}% dans ${faibles.length} matière${faibles.length>1?'s':''} : ${mats}.\n\n`
+          + `La Direction vous invite à vous présenter à l'école afin d'organiser le cours de `
+          + `rattrapage de votre enfant et d'en convenir les modalités.`,
+      status: 'pending', score: Math.min(...faibles.map(f => f.pct)),
+      trimestre: DB.settings.currentTrimestre || null,
+      auto_generated: true, weak_mats: mats,
+      convoc_type: 'rattrapage', by: null,
+    };
+    const okc = await pushSync('convocations', 'post', convoc);
+    if (okc) {
+      (DB.convocations = DB.convocations||[]).push(convoc);
+      if (s.pid) await pushNotif(s.pid,
+        `📩 Convocation — ${s.name}\nRésultats de ${window._libMois(mois)} insuffisants en ${mats}.\n`
+        + `La Direction vous invite à l'école pour organiser le cours de rattrapage.`);
     }
-  });
+  }
+
+  if (!crees.length) return;
+
+  // Direction 1 ET Direction 2 sont averties — c'est pédagogique avant d'être
+  // financier, et Loms a nommé les deux.
+  const parMat = {};
+  crees.forEach(({rat, s}) => { (parMat[rat.matiere] = parMat[rat.matiere] || []).push(`${s.name} (${rat.score}%)`); });
+  const detail = Object.entries(parMat).map(([m, l]) => `${m} : ${l.join(', ')}`).join('\n');
+  const dirs = (DB.users||[]).filter(u => ['direction','direction2'].includes(u.role));
+  for (const u of dirs) await pushNotif(u.id,
+    `🔴 Rattrapage — ${cl.name} · ${window._libMois(mois)}\n`
+    + `${crees.length} cours proposé${crees.length>1?'s':''} sous ${seuil}% :\n${detail}\n`
+    + `Les familles ont reçu leur convocation.`);
+
+  logAudit('rattrapage_auto', `${cl.name} · ${window._libMois(mois)} — ${crees.length} cours · ${parEleve.size} élève(s) convoqué(s)`);
   saveToCrypt();
-  toast(`⚠️ ${newRats.length} rattrapage${newRats.length>1?'s':''} détecté${newRats.length>1?'s':''} — Direction notifiée`, 'warning');
+  toast(`⚠️ ${crees.length} rattrapage${crees.length>1?'s':''} détecté${crees.length>1?'s':''} sur ${window._libMois(mois)} — familles convoquées`, 'warning');
 };
 
 // Statuts admis. Sans cette liste, un statut inconnu entrait en base et
@@ -12969,7 +13057,7 @@ window.downloadRecuFrais = (sid) => {
 window.downloadRecuRattrapage = (sid) => {
   const s=DB.students.find(x=>x.id===sid); if(!s) return;
   const cl=gc(s.cid);
-  const rats=(DB.rattrapages||[]).filter(r=>r.sid===sid&&r.payment_signaled&&(r.amount||0)>0);
+  const rats=(DB.rattrapages||[]).filter(r=>r.sid===sid&&r.paid&&(r.amount||0)>0);
   if(!rats.length){toast('Aucun rattrapage payé pour cet élève','info');return;}
   const dir=DB.users.find(u=>u.role==='direction');
   const rows=rats.map(r=>{
@@ -13808,7 +13896,7 @@ R._recus_parent_legacy = () => {
     const pays=(DB.payments||[]).filter(p=>p.sid===k.id&&p.paid);
     const totalFrais=pays.reduce((a,p)=>a+(fees[p.t]||0),0);
     // Rattrapages
-    const rats=(DB.rattrapages||[]).filter(r=>r.sid===k.id&&r.payment_signaled&&(r.amount||0)>0);
+    const rats=(DB.rattrapages||[]).filter(r=>r.sid===k.id&&r.paid&&(r.amount||0)>0);
     const totalRat=rats.reduce((a,r)=>a+(r.amount||0),0);
     // Cantine
     const insC=(DB.cantine||[]).find(c=>c.sid===k.id&&c.active);
@@ -17573,26 +17661,17 @@ window.toggleTutelle = (tid, newActive) => {
   toast(`${newActive?'Autorisé':'Désactivé'} — ${t.name}`,'success');
   saveToCrypt(); render();
 };
-window.signalerPaiementRattrapage = (rid) => {
-  if(!S.user||S.user.role!=='parent'){toast('Accès non autorisé','error');return;}
-  const r=(DB.rattrapages||[]).find(x=>x.id===rid); if(!r) return;
-  const s=(DB.students||[]).find(x=>x.id===r.sid); if(!s) return;
-  if(s.pid!==S.user.id){toast('Accès non autorisé','error');return;}
-  if(r.paid){toast('Ce rattrapage est déjà réglé','info');return;}
-  if(r.payment_signaled){toast('Paiement déjà signalé — en attente de confirmation','info');return;}
-  r.payment_signaled=true;
-  pushSync('rattrapages','patch',{payment_signaled:true},'id=eq.'+rid);
-  // Notifier la Direction et la caisse
-  (DB.users||[]).filter(u=>['direction','direction2','direction3'].includes(u.role)).forEach(u=>{
-    const n={id:_uid('n_'),uid:u.id,
-      msg:`💰 Paiement signalé — ${s.name} · Rattrapage ${r.matiere} · ${_cur()}${r.amount} · À confirmer`,
-      time:nowTime(),date:today(),read:false,type:'alert'};
-    (DB.notifs=DB.notifs||[]).unshift(n); pushSync('notifs','post',n);
-  });
-
-  toast('Paiement signalé à la Direction — en attente de confirmation','success');
-  saveToCrypt(); render();
-};
+// LE PARENT NE SIGNALE PLUS RIEN — Loms, 4 août 2026.
+//
+// « Les parents reçoivent les reçus des paiements. Ils ne signalent pas. Il
+//   vient payer ; quand la Caisse ou la Direction 1 enregistre son paiement,
+//   c'est à ce moment-là qu'il reçoit le reçu. »
+//
+// Ce bouton faisait déclarer au parent qu'il avait payé. Deux écrans lisaient
+// ensuite cette déclaration comme si c'était un encaissement : le REÇU de
+// rattrapage et l'état financier de l'élève. L'école pouvait donc imprimer un
+// reçu pour de l'argent qu'elle n'avait jamais reçu. Les deux lisent
+// désormais `paid`, qui n'est écrit que par un vrai encaissement.
 
 window.planifierConvocation = (cid) => {
   if(!S.user||!['direction','direction2'].includes(S.user.role)) return;
@@ -24389,8 +24468,8 @@ R.mes_primes = () => {
           </div>
           ${sessInfo}${doneInfo}
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-            ${st==='validated'&&!r.payment_signaled?`<button class="btn btn-primary btn-sm" onclick="signalerPaiementRattrapage('${r.id}')">📲 Signaler mon paiement</button>`:''}
-            ${r.payment_signaled&&!r.paid?`<div style="font-size:11px;color:#1f9d6b;padding:4px 0">Paiement signalé — en attente Direction</div>`:''}
+            ${st==='validated'&&!r.paid?`<div style="font-size:11.5px;color:#92400e;background:#fdeccd;border-radius:8px;padding:6px 10px">Réglez ce cours à l'école — votre reçu vous sera remis au moment du paiement.</div>`:''}
+            ${r.paid?`<button class="btn btn-outline btn-sm" onclick="downloadRecuRattrapage('${r.sid}')">🧾 Mon reçu</button>`:''}
             ${r.session_date&&!r.done?`<button class="btn btn-sm" style="background:#d8f3e6;border-color:#95ddbb;color:#065f46" onclick="marquerSeanceEffectuee('${r.id}')">✅ Séance effectuée</button>`:''}
             ${(r.done||r.status==='refused')?`<button class="btn btn-outline btn-sm" onclick="archiverRattrapage('${r.id}')">📦 Archiver</button>`:''}
           </div>
@@ -28220,22 +28299,37 @@ window.updateEvalForm = (evalId) => {
 //  FEATURE #13 — SALAIRES & FICHES DE PAIE
 // ═══════════════════════════════════════════
 // ── helpers salaires ──
+// LA PRIME EST UNE PART DE L'ARGENT VERSÉ — Loms, 4 août 2026.
+//
+// « L'enseignant prend 60 % et l'école 40 %. L'enseignant est payé si les
+//   parents paient d'abord le cours, parce que c'est l'argent des parents
+//   qu'on partage. »
+//
+// Avant, la prime était un MONTANT FIXE par rattrapage, indépendant de ce que
+// la famille avait versé : l'école pouvait encaisser 10 $ et devoir 15 $ à
+// l'enseignant. Ce n'est plus un forfait, c'est un partage — et il ne porte
+// que sur ce qui est RÉELLEMENT ENTRÉ.
+window._partEnseignant = () => {
+  const p = Number(DB.settings?.rattrapage_share_teacher);
+  return (isFinite(p) && p >= 0 && p <= 100) ? p : 60;
+};
 window._getRatPrime = (teacherId, month) => {
-  const rate = Number(DB.settings?.rattrapage_rate)||0;
-  if(!rate) return {count:0, prime:0};
-  const count = (DB.rattrapages||[]).filter(r=>
-    r.teacher_id===teacherId && r.paid && ((r.paid_date||r.date||'').startsWith(month))
-  ).length;
-  return {count, prime: count*rate};
+  const part = window._partEnseignant() / 100;
+  const regles = (DB.rattrapages||[]).filter(r =>
+    r.teacher_id === teacherId && r.paid && ((r.paid_date || r.date || '').startsWith(month)));
+  const encaisse = regles.reduce((t, r) => t + (Number(r.amount) || 0), 0);
+  return { count: regles.length, prime: Math.round(encaisse * part * 100) / 100, encaisse };
 };
 
-// Primes de rattrapage acquises par l'enseignement mais pas encore réglées
-// par les familles. Se compte au tarif de l'enseignant — l'écran additionnait
-// les montants facturés aux parents, une tout autre grandeur.
+// Ce que l'école doit encore à ses enseignants : des cours donnés et validés,
+// que les familles n'ont pas payés. Se compte sur le MONTANT FIXÉ, au taux de
+// partage — et reste une dette conditionnelle, puisque la règle est que
+// l'enseignant est payé quand la famille a payé.
 window._primesRatDues = () => {
-  const rate = Number(DB.settings?.rattrapage_rate)||0;
-  if(!rate) return 0;
-  return (DB.rattrapages||[]).filter(r=>r.validated_by && !r.paid && !r.archived).length * rate;
+  const part = window._partEnseignant() / 100;
+  return Math.round((DB.rattrapages||[])
+    .filter(r => r.validated_by && !r.paid && !r.archived)
+    .reduce((t, r) => t + (Number(r.amount) || 0), 0) * part * 100) / 100;
 };
 window._getAdvancesTotal = (teacherId, month) => {
   return (DB.advances||[]).filter(a=>a.teacher_id===teacherId&&a.month===month).reduce((s,a)=>s+a.amount,0);
@@ -28250,7 +28344,7 @@ R.salaires = () => {
   const advs=DB.advances||[];
   const currentMonth=today().slice(0,7);
   const selMonth=window._salMonth||currentMonth;
-  const rate=DB.settings.rattrapage_rate||0;
+  const part=window._partEnseignant();
   const isDir1=S.user&&S.user.role==='direction';
   const totalNet=teachers.reduce((s,u)=>{
     const sal=sals.find(x=>x.teacher_id===u.id&&x.month===selMonth)||{};
@@ -28270,7 +28364,7 @@ R.salaires = () => {
         <div style="font-size:18px;font-weight:800;color:#1f9d6b">${_cur()}${totalNet}</div>
         <div style="font-size:11px;color:#6b7280">Masse salariale nette</div>
       </div>
-      ${isDir1?`<button class="btn btn-outline btn-sm" onclick="openRatRateConfig()">⚙️ Taux rattrapage${rate?` (${_cur()}${rate})`:''}</button>`:''}
+      ${isDir1?`<button class="btn btn-outline btn-sm" onclick="openRatRateConfig()">⚙️ Partage rattrapage (${part}% enseignant)</button>`:''}
     </div>
   </div>
   ${teachers.map((u,i)=>{
@@ -28299,7 +28393,7 @@ R.salaires = () => {
       </div>
       ${hasSal?`<div style="background:#fff5ea;border-radius:10px;padding:10px 12px;font-size:12px">
         <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #efe3d3"><span style="color:#374151">Salaire de base</span><span style="font-weight:700">${_cur()}${sal.amount}</span></div>
-        ${ratPrime?`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #efe3d3"><span style="color:#9b6fd4">🔄 Prime rattrapages (${ratCount}×${_cur()}${rate})</span><span style="font-weight:700;color:#9b6fd4">+${_cur()}${ratPrime}</span></div>`:''}
+        ${ratPrime?`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #efe3d3"><span style="color:#9b6fd4">🔄 Rattrapages réglés (${ratCount} · ${part}% de la part)</span><span style="font-weight:700;color:#9b6fd4">+${_cur()}${ratPrime}</span></div>`:''}
         ${sal.bonus?`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #efe3d3"><span style="color:#1f9d6b">Autres primes</span><span style="font-weight:700;color:#1f9d6b">+${_cur()}${sal.bonus}</span></div>`:''}
         ${dpList.map(p=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #efe3d3"><span style="color:#9b6fd4">💎 Prime directe du ${p.date||''}${p.motif?' ('+esc(p.motif)+')':''}</span><span style="font-weight:700;color:#9b6fd4">+${_cur()}${p.amount}</span></div>`).join('')}
         ${advList.map(a=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #efe3d3"><span style="color:#dc2626">💸 Avance du ${a.date}${a.reason?' ('+esc(a.reason)+')':''}</span><span style="font-weight:700;color:#dc2626">-${_cur()}${a.amount}</span></div>`).join('')}
@@ -28436,7 +28530,7 @@ R.paie = () => {
   const selMonth = window._salMonth || today().slice(0,7);
   const [mo,yr] = [parseInt(selMonth.split('-')[1]), selMonth.split('-')[0]];
   const monthLabel = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'][mo-1]+' '+yr;
-  const rate = DB.settings.rattrapage_rate||0;
+  const part = window._partEnseignant();
   const teachers = (DB.users||[]).filter(u2=>u2.role==='enseignant');
   const sals = DB.salaries||[];
 
@@ -28547,7 +28641,7 @@ R.paie = () => {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <span style="font-size:16px;font-weight:700">💎 Primes Enseignants</span>
       <div style="display:flex;gap:6px">
-        ${isDir1?`<button class="btn btn-outline btn-sm" onclick="openRatRateConfig()">⚙️ Taux rattrap.${rate?` (${_cur()}${rate})`:''}</button>`:''}
+        ${isDir1?`<button class="btn btn-outline btn-sm" onclick="openRatRateConfig()">⚙️ Partage rattrap. (${part}%)</button>`:''}
         ${isDir1?`<button class="btn btn-primary btn-sm" onclick="openPrimeForm()">➕ Prime directe</button>`:''}
       </div>
     </div>
@@ -28648,21 +28742,29 @@ R.paie = () => {
 };
 
 window.openRatRateConfig = () => {
-  openM('Taux prime de rattrapage',`
+  openM('Partage des cours de rattrapage',`
   <div style="background:#f0e9fa;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:#5e3a92">
-    🔄 Ce montant est automatiquement ajouté par cours de rattrapage <strong>validé</strong> par la Direction dans le mois. Mettez 0 pour désactiver.
+    🔄 L'argent versé par la famille se partage entre l'enseignant et l'école.
+    <strong>L'enseignant n'est payé que lorsque la famille a payé</strong> — la part se calcule sur ce qui est réellement entré, jamais sur un montant seulement facturé.
   </div>
-  <div class="form-group"><label class="form-label">Montant par rattrapage validé (${_cur()})</label>
-    <input class="form-input" id="rat_rate" type="number" min="0" step="1" value="${DB.settings.rattrapage_rate||0}" placeholder="Ex: 5">
+  <div class="form-group"><label class="form-label">Part de l'enseignant (%)</label>
+    <input class="form-input" id="rat_share" type="number" min="0" max="100" step="1" value="${window._partEnseignant()}" placeholder="Ex: 60">
+    <div id="rat_share_apercu" style="font-size:12px;color:var(--text-muted);margin-top:6px">Sur ${_cur()}20 encaissés : ${_cur()}${(20*window._partEnseignant()/100).toFixed(2)} pour l'enseignant, ${_cur()}${(20*(100-window._partEnseignant())/100).toFixed(2)} pour l'école.</div>
   </div>`,
   `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
    <button class="btn btn-primary" onclick="saveRatRate()">Enregistrer</button>`);
 };
-window.saveRatRate = () => {
+window.saveRatRate = async () => {
   if(!S.user||S.user.role!=='direction'){toast('Accès non autorisé','error');return;}
-  DB.settings.rattrapage_rate=lireMontant($('rat_rate')?.value)||0;
-  pushSync('settings','upsert',DB.settings);saveToCrypt();
-  toast(`✅ Taux rattrapage : ${_cur()}${DB.settings.rattrapage_rate} / cours`,'success');
+  const v = parseInt(($('rat_share')?.value||'').trim(), 10);
+  if (!isFinite(v) || v < 0 || v > 100) { markFieldError('rat_share','Une part entre 0 et 100'); return; }
+  const avant = DB.settings.rattrapage_share_teacher;
+  DB.settings.rattrapage_share_teacher = v;
+  const ok = await pushSync('settings','upsert',DB.settings);
+  if (!ok) { DB.settings.rattrapage_share_teacher = avant; toast('Enregistrement refusé — le partage n\'a pas changé','error'); return; }
+  logAudit('rattrapage_share', `Part enseignant : ${v}% · école ${100-v}% — par ${window._acteur()}`);
+  saveToCrypt();
+  toast(`✅ Partage : ${v}% enseignant · ${100-v}% école`,'success');
   closeModal();render();
 };
 
@@ -28737,7 +28839,7 @@ window.openSalaireForm = (teacherId, month) => {
     <input class="form-input" id="sal_amount" type="number" min="0" step="1" value="${sal.amount||''}" placeholder="Ex: 250">
   </div>
   ${ratPrime?`<div style="background:#f0e9fa;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;display:flex;justify-content:space-between">
-    <span style="color:#5e3a92">🔄 Prime rattrapages auto (${ratCount} cours validés × ${_cur()}${DB.settings.rattrapage_rate||0})</span>
+    <span style="color:#5e3a92">🔄 Rattrapages réglés par les familles (${ratCount} cours · ${window._partEnseignant()}% de la part enseignant)</span>
     <strong style="color:#9b6fd4">+${_cur()}${ratPrime}</strong>
   </div>`:''}
   ${dpTotal?`<div style="background:#f0e9fa;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;display:flex;justify-content:space-between">
@@ -28954,7 +29056,7 @@ window.printFichePaie = (teacherId, month) => {
   const sal=(DB.salaries||[]).find(s=>s.teacher_id===teacherId&&s.month===month);if(!sal)return;
   const advList=(DB.advances||[]).filter(a=>a.teacher_id===teacherId&&a.month===month);
   const {count:ratCount,prime:ratPrime}=_getRatPrime(teacherId,month);
-  const rate=DB.settings.rattrapage_rate||0;
+  const part=window._partEnseignant();
   const [yr2,mo]=month.split('-');
   const monthLabel=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][parseInt(mo)-1]+' '+yr2;
   const sc=DB.settings.school||{};
@@ -28976,7 +29078,7 @@ window.printFichePaie = (teacherId, month) => {
   </div>
   <table class="tbl">
     <tr><td>Salaire de base</td><td style="text-align:right" class="plus">${_cur()}${sal.amount||0}</td></tr>
-    ${ratPrime?`<tr><td>🔄 Prime rattrapages (${ratCount} cours × ${_cur()}${rate})</td><td style="text-align:right" class="rat">+${_cur()}${ratPrime}</td></tr>`:''}
+    ${ratPrime?`<tr><td>🔄 Rattrapages réglés par les familles (${ratCount} cours · part enseignant ${part}%)</td><td style="text-align:right" class="rat">+${_cur()}${ratPrime}</td></tr>`:''}
     ${sal.bonus?`<tr><td>Autres primes / bonus</td><td style="text-align:right" class="plus">+${_cur()}${sal.bonus}</td></tr>`:''}
     ${advList.map(a=>`<tr><td>💸 Avance du ${a.date}${a.reason?' — '+esc(a.reason):''}</td><td style="text-align:right" class="minus">-${_cur()}${a.amount}</td></tr>`).join('')}
     ${sal.deductions?`<tr><td>Retenues (absences, etc.)</td><td style="text-align:right" class="minus">-${_cur()}${sal.deductions}</td></tr>`:''}
