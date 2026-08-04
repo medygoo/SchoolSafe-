@@ -650,3 +650,80 @@ complet a été rendu et regardé.
 
 Si la Direction téléverse son propre fichier, il prend la place : la constante
 intégrée est un repli, pas une contrainte.
+
+---
+
+# 13. Le devoir — et ce qu'il a fait sortir · 4 août 2026
+
+Consigne de Loms : *« le logo même sur le devoir, la charte même au devoir »*.
+
+## 13.1 Le devoir
+
+Trois corrections :
+
+- l'emblème passe par l'assistant commun `_logoDoc(72)` — il avait un cercle
+  **gris** au lieu du cercle d'or, et son propre repli en émoji « 🏫 » ;
+- les **trois catégories** se distinguaient par une couleur hors charte :
+  l'interrogation était en **ambre**, la couleur de l'alerte. *Une interro
+  n'est pas une alerte.* Elles se distinguent maintenant dans la charte —
+  `--ground-deep` pour le devoir, `--ground` pour l'interrogation, l'**or de
+  l'emblème** pour l'examen — et le libellé écrit dit déjà laquelle c'est ;
+- les gris neutres restants passent à l'encre de l'école.
+
+## 13.2 Ce que le devoir a fait sortir
+
+Son en-tête portait, sous le nom de l'école :
+
+```
+SchoolSafe — Plateforme scolaire numérique
+```
+
+**Le nom du logiciel dans l'en-tête d'un document de l'école.** J'ai cherché si
+c'était isolé.
+
+**Ce ne l'était pas : vingt documents écrivaient le nom du logiciel.**
+
+| document | ce qu'il portait |
+|---|---|
+| **bulletin** · bulletins de classe | `🛡️ SchoolSafe` en filet d'en-tête · « Bulletin généré par SchoolSafe » |
+| **liste ENAFEP** · **liste EXETAT** | « Document officiel généré par SchoolSafe v3.0 » |
+| **PV de délibération** | « Document officiel — SchoolSafe » |
+| **archive de clôture** | « 🛡️ SchoolSafe — Document de clôture officiel » |
+| les deux **fiches de paie** | « Document confidentiel — SchoolSafe v3.0 » |
+| rapport SECOPE, fiche santé, lettre de sanction, rapport mensuel, palmarès, état financier, relevé de présences, rapport aux familles, les deux reçus de versement | mentions en pied de page |
+
+`CLAUDE.md` l'annonçait : *« C'est la distinction la plus souvent perdue, et
+elle se paie cher. »* Elle se paie ici précisément : **une administration
+congolaise qui reçoit une liste EXETAT « générée par SchoolSafe v3.0 » lit que
+c'est le logiciel qui délivre.** Ce n'est pas lui qui engage — c'est l'école.
+
+**24 mentions retirées.** Restent légitimes, et l'outil les admet :
+
+- `sc.name || 'SchoolSafe'` — un **repli** quand l'école n'a pas de nom
+  enregistré. C'est une valeur par défaut, pas une signature ;
+- les **noms de fichier** : ils ne s'impriment pas sur le document.
+
+## 13.3 La règle devient vérifiable
+
+`tools/audit-logo.mjs` porte un troisième contrôle : **aucun document ne
+prononce le nom du logiciel.** Éprouvé dans les deux sens — on a remis
+« Bulletin généré par SchoolSafe » dans le bulletin :
+
+```
+✗ downloadBulletin ligne 22423 — le nom du LOGICIEL dans un document de l'école
+✗ 1 mention(s) : une administration croira que c'est le logiciel qui délivre
+```
+
+puis le fichier a été restauré.
+
+L'outil tient maintenant les **trois côtés** de la même distinction :
+
+| | |
+|---|---|
+| l'emblème de l'école **est** sur les 38 documents | obligatoire |
+| l'emblème de l'école **n'est pas** dans l'interface | jamais |
+| le nom du logiciel **n'est pas** dans les documents | jamais |
+
+Une consigne sur un devoir a fait tomber les vingt autres. C'est la valeur d'un
+exemple précis : *« la charte même au devoir »* était une phrase sur un
+document, elle a désigné un défaut sur vingt.

@@ -15296,7 +15296,7 @@ window.printDevoir = (dvId, kidName, kidMat, kidClass, kidId) => {
 
   const school=DB.settings.school?.name||'SchoolSafe';
   const catLabel={devoir:'DEVOIR À LA MAISON',interro:'INTERROGATION',examen:'EXAMEN'}[d.category]||'DEVOIR';
-  const catColor={devoir:'#657786',interro:'#b45309',examen:'#556777'}[d.category]||'#657786';
+  const catColor={devoir:'#657786',interro:'#556777',examen:'#7a5a0d'}[d.category]||'#657786';
   const dateLabel=d.deadline?new Date(d.deadline).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):'';
   const imgBlock=d.type==='photo'&&d.content?`<div style="text-align:center;margin:20px 0"><img src="${d.content}" style="max-width:100%;max-height:400px;border:1px solid #dadee2;border-radius:8px"></div>`:'';
   const pdfNote=d.type==='pdf'?`<div style="background:#fef9c3;border:1.5px solid #fde047;border-radius:12px;padding:18px 20px;margin:20px 0;font-size:14px;line-height:1.7"><strong>📄 Ce devoir est sous forme de PDF.</strong><br>Le document original est conservé sur l'appareil de l'enseignant.<br>Veuillez contacter l'enseignant ou demander une copie imprimée.</div>`:'';
@@ -15333,11 +15333,11 @@ window.printDevoir = (dvId, kidName, kidMat, kidClass, kidId) => {
   // Per-page header (logo always 72px)
   const mkHdr=(pn)=>`
     <div style="display:flex;align-items:center;gap:16px;padding-bottom:14px;border-bottom:3px solid ${catColor};margin-bottom:14px">
-      ${(window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC)?`<img src="${window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC}" alt="Logo" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #dadee2;background:#fff;flex-shrink:0">`:`<div style="width:72px;height:72px;border-radius:50%;background:#556777;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">🏫</div>`}
+      ${_logoDoc(72)}
       <div style="flex:1">
         <div style="font-size:15px;font-weight:900;color:#556777;letter-spacing:.5px">${school}</div>
         <div style="font-size:11px;color:#5e6c78;margin-top:2px">${schoolAddr}</div>
-        <div style="font-size:11px;color:#5e6c78;margin-top:2px">SchoolSafe — Plateforme scolaire numérique</div>
+        <div style="font-size:11px;color:#5e6c78;margin-top:2px">The Wise School International</div>
       </div>
       <div style="background:${catColor};color:#fff;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:800;white-space:nowrap">${catIconP} ${catLabel}</div>
     </div>
@@ -15362,8 +15362,8 @@ window.printDevoir = (dvId, kidName, kidMat, kidClass, kidId) => {
 
   const secTitle=(t2)=>`<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:${catColor};margin-bottom:10px;margin-top:16px;display:flex;align-items:center;gap:7px"><span style="display:inline-block;width:3px;height:13px;background:${catColor};border-radius:2px;flex-shrink:0"></span>${t2}</div>`;
   const metaC=`<div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px">
-    ${d.matiere?`<span style="background:#f0f1f2;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;color:#374151">📐 ${esc(d.matiere)}</span>`:''}
-    <span style="background:#f0f1f2;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;color:#374151">🗓️ Donné le ${d.date||new Date().toLocaleDateString('fr-FR')}</span>
+    ${d.matiere?`<span style="background:#f0f1f2;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;color:#1a2228">📐 ${esc(d.matiere)}</span>`:''}
+    <span style="background:#f0f1f2;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;color:#1a2228">🗓️ Donné le ${d.date||new Date().toLocaleDateString('fr-FR')}</span>
     ${dateLabel?`<span style="background:${d.deadline&&new Date(d.deadline)<new Date()?'#fee2e2':'#d8f3e6'};border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;color:${d.deadline&&new Date(d.deadline)<new Date()?'#991b1b':'#065f46'}">📅 À remettre : ${dateLabel}</span>`:''}
   </div>`;
   const alines=(n)=>Array(n).fill('<div style="border-bottom:1.5px dotted #5e6c78;height:28px;margin-bottom:2px"></div>').join('');
@@ -15409,7 +15409,7 @@ window.printDevoir = (dvId, kidName, kidMat, kidClass, kidId) => {
         <div class="corr-hdr"><span>RÉSULTATS DE CORRECTION</span><span style="font-size:10px;opacity:.85">Corrigé le ${corrDate}</span></div>
         <div class="corr-body">
           <div style="text-align:center;flex-shrink:0"><div style="font-size:36px;font-weight:900;line-height:1;color:${col}">${myGrade.note}<span style="font-size:16px;color:#5e6c78">/${myGrade.max}</span></div><div style="font-size:11px;color:#5e6c78;margin-top:3px">${pct}%</div></div>
-          <div style="flex:1"><div style="font-size:14px;font-weight:700;color:${col};margin-bottom:6px">${mention}</div>${myGrade.comment?`<div style="font-size:13px;color:#374151;font-style:italic;margin-bottom:4px">"${esc(myGrade.comment)}"</div>`:''}<div style="font-size:10px;color:#5e6c78">Corrigé par ${esc(teacherName||"l'enseignant")}</div></div>
+          <div style="flex:1"><div style="font-size:14px;font-weight:700;color:${col};margin-bottom:6px">${mention}</div>${myGrade.comment?`<div style="font-size:13px;color:#1a2228;font-style:italic;margin-bottom:4px">"${esc(myGrade.comment)}"</div>`:''}<div style="font-size:10px;color:#5e6c78">Corrigé par ${esc(teacherName||"l'enseignant")}</div></div>
         </div>
       </div>
       ${sigFtr}
@@ -18174,7 +18174,7 @@ ${(()=>{
     if(remaining>0) return `<div style="background:#f0f1f2;border:1.5px solid #f59e0b;border-radius:8px;padding:10px 14px;margin:10px 0;font-size:12px"><div style="font-weight:700;color:#92400e;margin-bottom:3px">📋 Suivi — ${esc(ftt.label)}</div><div style="display:flex;justify-content:space-between"><span>Total versé</span><span style="font-weight:700">${_cur()}${totalSoFar}</span></div><div style="display:flex;justify-content:space-between"><span>Total attendu</span><span style="font-weight:700">${_cur()}${target}</span></div><div style="display:flex;justify-content:space-between;border-top:1px solid #fde68a;margin-top:5px;padding-top:5px"><span style="color:#b45309;font-weight:700">Solde restant dû</span><span style="font-weight:800;color:#ef5b5b">${_cur()}${remaining}</span></div></div>`;
     return `<div style="background:#d8f3e6;border:1.5px solid #86efac;border-radius:8px;padding:8px 14px;margin:10px 0;font-size:12px;text-align:center;font-weight:700;color:#065f46">✅ ${esc(ftt.label)} — Entièrement soldé (${_cur()}${target})</div>`;
   })()}
-<div class="stamp"><span class="ic">✅</span><div class="tx">Versement enregistré dans SchoolSafe<br>${esc(school)} — ${DB.settings?.year||''}</div></div>
+<div class="stamp"><span class="ic">✅</span><div class="tx">Versement enregistré<br>${esc(school)} — ${DB.settings?.year||''}</div></div>
 ${_officialFooter((DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',{nom:v.by_name||v.by,role:'Caisse',le:v.date||''})}
 </div>
 <button class="pbtn" onclick="window.print()">🖨 Imprimer le reçu</button>
@@ -18218,7 +18218,7 @@ window.viewReceipt = (nid) => {
   const _dvName2=_dvLbls2[sc.devise||'$']||(sc.devise||'dollars');
   const amtWords=(numToWords(r.amount)||'').charAt(0).toUpperCase()+(numToWords(r.amount)||'').slice(1)+' '+_dvName2;
   const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;display:flex;justify-content:center;align-items:flex-start;padding:20px;min-height:100vh}.page{background:#fff;width:100%;max-width:500px;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.15)}.hdr{background:#556777;padding:20px 24px;display:flex;align-items:center;gap:16px}.logo{width:70px;height:70px;border-radius:50%;object-fit:cover;border:3px solid #fff;flex-shrink:0}.school-name{color:#fff}.school-name h1{font-size:14px;font-weight:800;line-height:1.2}.school-name p{font-size:10px;opacity:.8;margin-top:3px}.badge{margin-top:16px;text-align:center;padding:12px 20px;background:#f8faff;border-bottom:2px dashed #dadee2}.badge .num{font-size:11px;color:#6b7280;letter-spacing:1px;text-transform:uppercase}.badge .title{font-size:18px;font-weight:800;color:#556777;margin-top:4px;text-transform:uppercase;letter-spacing:2px}.body{padding:20px 24px}.row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f1f2}.row:last-child{border-bottom:none}.lbl{font-size:12px;color:#6b7280;font-weight:500}.val{font-size:13px;font-weight:700;color:#1a1a1a;text-align:right}.amount-box{background:#556777;color:#fff;border-radius:10px;padding:16px 20px;text-align:center;margin:16px 0}.amount-box .av{font-size:28px;font-weight:900;letter-spacing:1px}.amount-box .aw{font-size:11px;opacity:.8;margin-top:6px;font-style:italic}.stamp{display:flex;align-items:center;gap:10px;background:#d8f3e6;border-radius:8px;padding:10px 14px;margin-top:14px}.stamp .icon{font-size:24px}.stamp .txt{font-size:11px;color:#065f46;font-weight:600}.footer{background:#f8faff;border-top:1px solid #e5e7eb;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#9ca3af}.pbtn{display:block;margin:16px auto;padding:11px 32px;background:#556777;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600}@media print{.pbtn{display:none}body{background:#fff;padding:0}.page{box-shadow:none;max-width:100%;border-radius:0}@page{margin:10mm}}`;
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bordereau ${esc(r.num)}</title><style>${CSS}</style></head><body><div class="page"><div class="hdr">${(window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC)?`<img src="${window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC}" class="logo" alt="">`:`<div class="logo" style="background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px">🏫</div>`}<div class="school-name"><h1>${school}</h1>${sc.address||sc.sub?`<p>${esc(sc.address||sc.sub)}</p>`:''}<p>${sc.phone?`📞 ${esc(sc.phone)}`:''}</p></div></div><div class="badge"><div class="num">Bordereau officiel de paiement · N° ${esc(r.num)}</div><div class="title">🧾 Reçu de paiement</div></div><div class="body"><div class="row"><span class="lbl">👶 Élève</span><span class="val">${esc(r.student)}</span></div><div class="row"><span class="lbl">Matricule</span><span class="val" style="font-family:monospace">${esc(r.mat||'—')}</span></div><div class="row"><span class="lbl">🎓 Classe</span><span class="val">${esc(r.classe||'—')}</span></div><div class="row"><span class="lbl">📋 Type de paiement</span><span class="val">${esc(r.type_label)}${r.trimestre?' · '+esc(r.trimestre):''}</span></div><div class="row"><span class="lbl">📅 Date</span><span class="val">${printDate}</span></div><div class="row"><span class="lbl">⏰ Heure</span><span class="val">${r.time}</span></div><div class="row"><span class="lbl">💼 Reçu par</span><span class="val" style="color:#556777">${esc(r.by)}</span></div>${r.note?`<div class="row"><span class="lbl">📝 Note</span><span class="val">${esc(r.note)}</span></div>`:''}<div class="amount-box"><div class="av">${_cur()}${r.amount}</div><div class="aw">${amtWords}</div></div><div class="stamp"><span class="icon">✅</span><div class="txt">Paiement reçu et enregistré dans le système SchoolSafe<br>${school} — Année ${DB.settings.year||'2025-2026'}</div></div><div style="padding:0 24px 16px">${_officialFooter((DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',{nom:r.by,role:'Caisse',le:r.date||''})}</div></div></body></html>`;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bordereau ${esc(r.num)}</title><style>${CSS}</style></head><body><div class="page"><div class="hdr">${(window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC)?`<img src="${window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC}" class="logo" alt="">`:`<div class="logo" style="background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px">🏫</div>`}<div class="school-name"><h1>${school}</h1>${sc.address||sc.sub?`<p>${esc(sc.address||sc.sub)}</p>`:''}<p>${sc.phone?`📞 ${esc(sc.phone)}`:''}</p></div></div><div class="badge"><div class="num">Bordereau officiel de paiement · N° ${esc(r.num)}</div><div class="title">🧾 Reçu de paiement</div></div><div class="body"><div class="row"><span class="lbl">👶 Élève</span><span class="val">${esc(r.student)}</span></div><div class="row"><span class="lbl">Matricule</span><span class="val" style="font-family:monospace">${esc(r.mat||'—')}</span></div><div class="row"><span class="lbl">🎓 Classe</span><span class="val">${esc(r.classe||'—')}</span></div><div class="row"><span class="lbl">📋 Type de paiement</span><span class="val">${esc(r.type_label)}${r.trimestre?' · '+esc(r.trimestre):''}</span></div><div class="row"><span class="lbl">📅 Date</span><span class="val">${printDate}</span></div><div class="row"><span class="lbl">⏰ Heure</span><span class="val">${r.time}</span></div><div class="row"><span class="lbl">💼 Reçu par</span><span class="val" style="color:#556777">${esc(r.by)}</span></div>${r.note?`<div class="row"><span class="lbl">📝 Note</span><span class="val">${esc(r.note)}</span></div>`:''}<div class="amount-box"><div class="av">${_cur()}${r.amount}</div><div class="aw">${amtWords}</div></div><div class="stamp"><span class="icon">✅</span><div class="txt">Paiement reçu et enregistré<br>${school} — Année ${DB.settings.year||'2025-2026'}</div></div><div style="padding:0 24px 16px">${_officialFooter((DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',{nom:r.by,role:'Caisse',le:r.date||''})}</div></div></body></html>`;
   dlPDF(html,`Recu-${(r.num||'').replace(/[^a-z0-9]/gi,'_')||today()}.pdf`);
 };
 
@@ -18710,7 +18710,7 @@ window.exportEtatFinancierPDF = () => {
     <div class="sec"><h2>📥 Recettes par catégorie</h2>${Object.values(byCat).map(c=>`<div class="row"><span class="lbl">${esc(c.label)}</span><span class="val" style="color:#1f9d6b">${_cur()}${c.total} (${c.count} versement${c.count>1?'s':''})</span></div>`).join('')}</div>
     <div class="sec"><h2>🏫 Recouvrement par classe</h2>${DB.classes.map(cl=>{const studs=DB.students.filter(s=>s.cid===cl.id);const paid=studs.reduce((s,st)=>s+(_tbm[st.id]?.paid||0),0);const total=studs.reduce((s,st)=>s+(_tbm[st.id]?.total||0),0);const pct=total>0?Math.round(paid/total*100):0;return`<div class="row"><span class="lbl">${esc(cl.name)}</span><span class="val">${pct}% · ${_cur()}${paid}/${_cur()}${total}</span></div>`;}).join('')}</div>
     <div class="sec"><h2>💸 Dépenses</h2>${exps.slice(0,20).map(e=>`<div class="row"><span class="lbl">${esc(e.motif||'?')} · ${e.date||''}</span><span class="val" style="color:#dc2626">${_cur()}${e.amount}</span></div>`).join('') || '<div style="color:#9ca3af;font-size:12px">Aucune dépense</div>'}</div>
-    <div class="footer">${esc(school)} · SchoolSafe · ${printDate}</div>
+    <div class="footer">${esc(school)} · ${printDate}</div>
     <button class="pbtn" onclick="window.print()" style="display:block;margin:16px auto;padding:10px 32px;background:#556777;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ Imprimer</button>
   ${_pdfSignatureBlock(_cur())}
   </div></body></html>`;
@@ -21694,7 +21694,7 @@ window.genererRapportMensuel = (sid, mois) => {
     <div class="row"><span>Conduite générale</span><span class="badge ${condAvg>=3?'green':condAvg>=2?'orange':'red'}">${condLabel}</span></div>
     ${conduites.slice(-3).map(c=>`<div class="row"><span>${c.date} — ${esc(c.remark||c.score)}</span><span class="badge">${esc(c.score)}</span></div>`).join('')}
   </div>
-  <div class="footer">Généré le ${new Date().toLocaleDateString('fr-FR')} par SchoolSafe · ${esc(DB.settings?.school?.name||'')}</div>
+  <div class="footer">${esc(DB.settings?.school?.name||'')} · Généré le ${new Date().toLocaleDateString('fr-FR')}</div>
   </body></html>`;
   dlPDF(htmlStr, `Rapport_${s.name.replace(/\s+/g,'_')}_${mois}.pdf`);
 };
@@ -21765,7 +21765,7 @@ window.genererPalmaresAnnuel = () => {
   <h1>🏆 Palmarès Annuel ${yr}</h1>
   <h2>${DB.settings?.school?.name||'SchoolSafe'}</h2>
   ${classesHtml}
-  <div class="footer">Généré le ${new Date().toLocaleDateString('fr-FR')} par SchoolSafe — ${DB.settings?.school?.name||''}</div>
+  <div class="footer">${DB.settings?.school?.name||''} · Généré le ${new Date().toLocaleDateString('fr-FR')}</div>
   </body></html>`;
 
   dlPDF(htmlStr, `Palmares_Annuel_${yr.replace(/\//g,'-')}.pdf`);
@@ -22052,7 +22052,7 @@ window.printPVDeliberation = () => {
   const totalElevs=DB.students.length;
   const tauxGlobal=totalElevs?Math.round(totalAdmis/totalElevs*100):0;
   const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#1a1a1a;background:#fff;font-size:12px}.print-bar{background:#556777;color:#fff;padding:10px 20px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px;margin:-20px -20px 20px;flex-wrap:wrap}.print-bar button{background:#fff;color:#556777;border:none;padding:6px 16px;border-radius:7px;font-size:13px;font-weight:800;cursor:pointer}.hdr{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #556777;margin-bottom:14px}.hl{display:flex;align-items:center;gap:12px}.logo{width:54px;height:54px;border-radius:50%;border:2px solid #556777;object-fit:cover}.si h1{font-size:15px;font-weight:800;color:#556777}.si .s{font-size:10px;color:#555;margin-top:2px}.hr{text-align:right;font-size:10px;color:#777}.pv-title{text-align:center;border:2px solid #556777;border-radius:8px;padding:12px;margin-bottom:16px}.pv-title h2{font-size:15px;font-weight:800;color:#556777;text-transform:uppercase;letter-spacing:1px}.pv-title .sub{font-size:11px;color:#555;margin-top:4px}.summary-row{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}.sum-box{flex:1;min-width:100px;padding:8px;border:1.5px solid #556777;border-radius:8px;text-align:center}.sum-num{font-size:20px;font-weight:800;color:#556777}.sum-lbl{font-size:10px;color:#555;margin-top:2px}.cl-hdr{font-weight:800;font-size:13px;color:#556777;background:#e8f0fe;padding:6px 10px;border-left:4px solid #556777;border-radius:0 4px 4px 0;margin:16px 0 6px}.cl-stats{font-size:11px;font-weight:400;color:#555;margin-left:8px}table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11.5px}th{background:#556777;color:#fff;padding:6px 5px;text-align:left;font-size:10.5px}td{padding:5px;border-bottom:1px solid #e5e7eb;vertical-align:middle}.fail{background:#fff5f5}.total-row td{font-weight:700;background:#fff7ee;border-top:2px solid #556777}.pass{color:#1f9d6b}.fail-txt{color:#dc2626}.sig-section{margin-top:28px;border-top:2px solid #556777;padding-top:16px}.sig-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-bottom:20px}.sig-box{text-align:center}.sig-line{height:50px;border-bottom:1px solid #aaa;margin-bottom:6px}.sig-lbl{font-size:10px;color:#555}.footer{margin-top:16px;padding-top:8px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10px;color:#999}@media print{.print-bar{display:none}@page{margin:10mm;size:A4 portrait}}`;
-  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:'<div style="width:54px;height:54px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px">🏫</div>'}<div class="si"><h1>${esc(school)}</h1><div class="s">${esc(schoolSub)}</div>${dgep?`<div class="s">N° DGEP : ${esc(dgep)}</div>`:''}</div></div><div class="hr"><div>SchoolSafe · ${printDate}</div></div></div>`;
+  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:'<div style="width:54px;height:54px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px">🏫</div>'}<div class="si"><h1>${esc(school)}</h1><div class="s">${esc(schoolSub)}</div>${dgep?`<div class="s">N° DGEP : ${esc(dgep)}</div>`:''}</div></div><div class="hr"><div>${esc(school)} · ${printDate}</div></div></div>`;
   const body=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>PV Délibération ${yr}</title><style>${CSS}</style></head><body>
   ${hdr}
   <div class="pv-title"><h2>Procès-Verbal de Délibération</h2><div class="sub">Année scolaire ${yr} · Trimestre ${trim} · Établi le ${printDate}</div></div>
@@ -22076,7 +22076,7 @@ window.printPVDeliberation = () => {
       <div style="height:40px;border-bottom:1px dashed #aaa;margin-top:8px"></div>
     </div>
   </div>
-  <div class="footer"><span>© ${new Date().getFullYear()} ${esc(school)}</span><span>Document officiel — SchoolSafe</span><span>Page 1</span></div>
+  <div class="footer"><span>© ${new Date().getFullYear()} ${esc(school)}</span><span>Document officiel</span><span>Page 1</span></div>
   </body></html>`;
   dlPDF(body,`PV-Deliberation-${yr}.pdf`);
   toast('📜 PV de délibération en cours de téléchargement...','info');
@@ -22114,7 +22114,7 @@ window.printMonthlyAttendance = (month, cid) => {
 
   const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;padding:22px;color:#1a1a1a;background:#fff;font-size:12px}.hdr{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #556777;margin-bottom:14px}.hl{display:flex;align-items:center;gap:12px}.logo{width:48px;height:48px;object-fit:contain}.si h1{font-size:14px;font-weight:800;color:#556777}.si .s{font-size:10px;color:#666;margin-top:2px}.hr{text-align:right}.brand{font-size:12px;font-weight:700;color:#556777}.meta{font-size:10px;color:#777;margin-top:2px}.dtitle{text-align:center;margin:12px 0 14px}.dtitle h2{font-size:14px;font-weight:800;color:#556777;text-transform:uppercase;letter-spacing:1px}.dtitle .yr{font-size:11px;color:#888;margin-top:3px}.stats{display:flex;gap:10px;margin:10px 0 14px}.stat{background:#f0f1f2;border-radius:8px;padding:8px 14px;text-align:center;flex:1}.stat .v{font-size:18px;font-weight:800;color:#556777}.stat .l{font-size:9px;color:#666;margin-top:2px}table{width:100%;border-collapse:collapse;margin-bottom:14px}th{background:#556777;color:#fff;padding:7px 6px;font-size:10px;text-align:left;font-weight:600}td{padding:5px 6px;font-size:11px;border-bottom:1px solid #eaecf0;vertical-align:middle}tr:nth-child(even) td{background:#f8faff}.pill{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600}.g{background:#d8f3e6;color:#065f46}.w{background:#fdeccd;color:#92400e}.r{background:#fee2e2;color:#991b1b}.footer{margin-top:20px;padding-top:8px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10px;color:#999}.pbtn{display:block;margin:18px auto 0;padding:10px 28px;background:#556777;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600}@media print{.pbtn{display:none}@page{margin:10mm}}`;
 
-  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" style="border-radius:50%;border:2px solid #556777" alt="">`:'<div style="width:48px;height:48px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px">🏫</div>'}<div class="si"><h1>${school}</h1><div class="s">${sc.address||''}</div></div></div><div class="hr"><div class="brand">🛡️ SchoolSafe</div><div class="meta">Année ${schoolYear}</div><div class="meta">${printDate}</div></div></div>`;
+  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" style="border-radius:50%;border:2px solid #556777" alt="">`:'<div style="width:48px;height:48px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px">🏫</div>'}<div class="si"><h1>${school}</h1><div class="s">${sc.address||''}</div></div></div><div class="hr"><div class="brand">The Wise School International</div><div class="meta">Année ${schoolYear}</div><div class="meta">${printDate}</div></div></div>`;
   const ftr=`<div class="footer"><span>© ${new Date().getFullYear()} ${school}</span><span>${monthLabel} — Rapport d'assiduité</span><span>Document officiel</span></div>`;
   const goodCount=rows.filter(r=>r.rate>=80).length;
   const risqueCount=rows.filter(r=>r.rate<60).length;
@@ -22153,8 +22153,8 @@ window.printReport = (type) => {
 
   const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;padding:22px;color:#1a1a1a;background:#fff;font-size:13px}.hdr{display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:3px solid #556777;margin-bottom:16px}.hl{display:flex;align-items:center;gap:14px}.logo{width:54px;height:54px;object-fit:contain}.si h1{font-size:16px;font-weight:800;color:#556777;line-height:1.2}.si .s{font-size:10px;color:#666;margin-top:2px}.hr{text-align:right}.brand{font-size:13px;font-weight:700;color:#556777}.meta{font-size:10px;color:#777;margin-top:2px}.dtitle{text-align:center;margin:14px 0 16px}.dtitle h2{font-size:15px;font-weight:800;color:#556777;text-transform:uppercase;letter-spacing:1px}.dtitle .yr{font-size:11px;color:#888;margin-top:3px}table{width:100%;border-collapse:collapse;margin-bottom:14px}th{background:#556777;color:#fff;padding:8px 7px;font-size:11px;text-align:left;font-weight:600}td{padding:6px 7px;font-size:12px;border-bottom:1px solid #eaecf0;vertical-align:middle}tr:nth-child(even) td{background:#f8faff}.ch{background:#556777;color:#fff;padding:9px 14px;border-radius:6px;margin:18px 0 9px;font-weight:700;font-size:13px}.stats{display:flex;gap:12px;margin:10px 0 14px}.stat{background:#f0f1f2;border-radius:8px;padding:10px 16px;text-align:center;flex:1}.stat .v{font-size:20px;font-weight:800;color:#556777}.stat .l{font-size:10px;color:#666;margin-top:2px}.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}.paid{background:#d8f3e6;color:#065f46}.unpaid{background:#fee2e2;color:#991b1b}.warn{background:#fdeccd;color:#92400e}.footer{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10px;color:#999}.pbtn{display:block;margin:20px auto 0;padding:11px 32px;background:#556777;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600}@media print{.pbtn{display:none}@page{margin:12mm}}`;
 
-  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" style="border-radius:50%;border:2px solid #556777" alt="">`:'<div style="width:54px;height:54px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">🏫</div>'}<div class="si"><h1>${school}</h1><div class="s">${schoolSub}</div><div class="s">📞 ${phone}</div></div></div><div class="hr"><div class="brand">🛡️ SchoolSafe</div><div class="meta">Année ${yr}</div><div class="meta">${printDate}</div></div></div>`;
-  const ftr=`<div class="footer"><span>© ${new Date().getFullYear()} ${school}</span><span>L'excellence au service de l'avenir</span><span>Document officiel SchoolSafe</span></div>`;
+  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" style="border-radius:50%;border:2px solid #556777" alt="">`:'<div style="width:54px;height:54px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">🏫</div>'}<div class="si"><h1>${school}</h1><div class="s">${schoolSub}</div><div class="s">📞 ${phone}</div></div></div><div class="hr"><div class="brand">The Wise School International</div><div class="meta">Année ${yr}</div><div class="meta">${printDate}</div></div></div>`;
+  const ftr=`<div class="footer"><span>© ${new Date().getFullYear()} ${school}</span><span>L'excellence au service de l'avenir</span><span>Document officiel</span></div>`;
 
   if(type==='bulletin'){
     const sid=arguments[1];
@@ -22419,8 +22419,8 @@ window.downloadBulletin = (sid, _forceTrim) => {
   const condColor={Excellent:'#1f9d6b',Bien:'#657786',Moyen:'#d98a2b',Mauvais:'#dc2626'};
   const latestCond=conducts.length?conducts[conducts.length-1]:null;
   const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#1a1a1a;background:#fff;font-size:12.5px}.print-bar{background:#556777;color:#fff;padding:12px 20px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin:-20px -20px 20px}.print-bar button{background:#fff;color:#556777;border:none;padding:7px 18px;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer}.hdr{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #556777;margin-bottom:14px}.hl{display:flex;align-items:center;gap:12px}.logo{width:56px;height:56px;object-fit:cover;border-radius:50%;border:2px solid #556777}.si h1{font-size:15px;font-weight:800;color:#556777;line-height:1.2}.si .s{font-size:10px;color:#666;margin-top:2px}.hr{text-align:right}.brand{font-size:12px;font-weight:700;color:#556777}.meta{font-size:10px;color:#777;margin-top:2px}.dtitle{text-align:center;margin:12px 0 14px;border:2px solid #556777;border-radius:8px;padding:10px}.dtitle h2{font-size:14px;font-weight:800;color:#556777;text-transform:uppercase;letter-spacing:1px}.dtitle .yr{font-size:11px;color:#555;margin-top:3px}.student-card{display:flex;align-items:center;gap:18px;padding:14px;background:#f8faff;border:1.5px solid #dadee2;border-radius:10px;margin-bottom:16px}.stu-photo{width:80px;height:100px;border-radius:8px;overflow:hidden;background:#dadee2;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex-shrink:0;border:2.5px solid #556777}.stu-info{flex:1}.stu-name{font-size:17px;font-weight:800;color:#556777}.stu-meta{font-size:11px;color:#555;margin-top:3px}.stu-rank{text-align:center;min-width:90px}.stu-pct{font-size:26px;font-weight:900}.stu-pos{font-size:11px;color:#666;margin:2px 0}.stu-mention{font-size:13px;font-weight:800}.result-box{display:inline-block;padding:6px 16px;border-radius:8px;font-size:12px;font-weight:800;margin-top:8px}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#556777;color:#fff;padding:7px 6px;font-size:10.5px;text-align:center;font-weight:600}th:first-child{text-align:left}td{padding:5px 6px;font-size:11.5px;border-bottom:1px solid #e8ecf3;vertical-align:middle}td:first-child{font-size:12px}.total-row td{font-weight:800;background:#fff7ee;border-top:2px solid #556777}.section-hdr td{background:#556777;color:#fff;font-weight:700;font-size:11px;padding:5px 6px}.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:22px}.sig-box{text-align:center}.sig-line{height:56px;border-bottom:1.5px solid #aaa;margin-bottom:6px}.sig-label{font-size:10px;color:#666}.footer{margin-top:18px;padding-top:8px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10px;color:#999}.stat-row{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}.stat-box{flex:1;min-width:100px;padding:8px 10px;border:1px solid #dde5f0;border-radius:8px;text-align:center}.stat-num{font-size:18px;font-weight:800}.stat-lbl{font-size:10px;color:#666;margin-top:2px}@media print{.print-bar{display:none}@page{margin:10mm;size:A4}}`;
-  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:'<div style="width:56px;height:56px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">🏫</div>'}<div class="si"><h1>${esc(school)}</h1><div class="s">${esc(schoolSub)}</div><div class="s">📞 ${esc(phone)}${dgep?` · N° DGEP: ${esc(dgep)}`:''}</div></div></div><div class="hr"><div class="brand">🛡️ SchoolSafe</div><div class="meta">Année ${yr}</div><div class="meta">${printDate}</div></div></div>`;
-  const ftr=`<div class="footer"><span>© ${new Date().getFullYear()} ${esc(school)}${schoolSub?' — '+esc(schoolSub):''}</span><span>L'excellence au service de l'avenir</span><span>Bulletin généré par SchoolSafe</span></div>`;
+  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:'<div style="width:56px;height:56px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">🏫</div>'}<div class="si"><h1>${esc(school)}</h1><div class="s">${esc(schoolSub)}</div><div class="s">📞 ${esc(phone)}${dgep?` · N° DGEP: ${esc(dgep)}`:''}</div></div></div><div class="hr"><div class="brand">The Wise School International</div><div class="meta">Année ${yr}</div><div class="meta">${printDate}</div></div></div>`;
+  const ftr=`<div class="footer"><span>© ${new Date().getFullYear()} ${esc(school)}${schoolSub?' — '+esc(schoolSub):''}</span><span>L'excellence au service de l'avenir</span><span>Bulletin de l'école</span></div>`;
   const bodyHtml=`
   <div class="student-card">
     <div class="stu-photo">${k.photo?`<img src="${k.photo}" style="width:100%;height:100%;object-fit:cover">`:`<span style="color:#5e6c78">${ini(k.name)}</span>`}</div>
@@ -22507,8 +22507,8 @@ window.exportAllBulletinsPDF = (cid, forceTrim) => {
     return{id:s.id,moy:sw?Math.round(tw/sw):0,cond:Math.round(cAvg*25)};
   }).sort((a,b)=>(b.moy*0.85+b.cond*0.15)-(a.moy*0.85+a.cond*0.15));
   const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#1a1a1a;background:#fff;font-size:12.5px}.page{page-break-after:always;margin-bottom:0}.hdr{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #556777;margin-bottom:14px}.hl{display:flex;align-items:center;gap:12px}.logo{width:56px;height:56px;object-fit:cover;border-radius:50%;border:2px solid #556777}.si h1{font-size:15px;font-weight:800;color:#556777;line-height:1.2}.si .s{font-size:10px;color:#666;margin-top:2px}.hr{text-align:right}.brand{font-size:12px;font-weight:700;color:#556777}.meta{font-size:10px;color:#777;margin-top:2px}.dtitle{text-align:center;margin:12px 0 14px;border:2px solid #556777;border-radius:8px;padding:10px}.dtitle h2{font-size:14px;font-weight:800;color:#556777;text-transform:uppercase;letter-spacing:1px}.dtitle .yr{font-size:11px;color:#555;margin-top:3px}.student-card{display:flex;align-items:center;gap:18px;padding:14px;background:#f8faff;border:1.5px solid #dadee2;border-radius:10px;margin-bottom:16px}.stu-photo{width:80px;height:100px;border-radius:8px;overflow:hidden;background:#dadee2;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex-shrink:0;border:2.5px solid #556777}.stu-info{flex:1}.stu-name{font-size:17px;font-weight:800;color:#556777}.stu-meta{font-size:11px;color:#555;margin-top:3px}.stu-rank{text-align:center;min-width:90px}.stu-pct{font-size:26px;font-weight:900}.stu-pos{font-size:11px;color:#666;margin:2px 0}.stu-mention{font-size:13px;font-weight:800}.result-box{display:inline-block;padding:6px 16px;border-radius:8px;font-size:12px;font-weight:800;margin-top:8px}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#556777;color:#fff;padding:7px 6px;font-size:10.5px;text-align:center;font-weight:600}th:first-child{text-align:left}td{padding:5px 6px;font-size:11.5px;border-bottom:1px solid #e8ecf3;vertical-align:middle}td:first-child{font-size:12px}.total-row td{font-weight:800;background:#fff7ee;border-top:2px solid #556777}.section-hdr td{background:#556777;color:#fff;font-weight:700;font-size:11px;padding:5px 6px}.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:22px}.sig-box{text-align:center}.sig-line{height:56px;border-bottom:1.5px solid #aaa;margin-bottom:6px}.sig-label{font-size:10px;color:#666}.footer{margin-top:18px;padding-top:8px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10px;color:#999}.stat-row{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}.stat-box{flex:1;min-width:100px;padding:8px 10px;border:1px solid #dde5f0;border-radius:8px;text-align:center}.stat-num{font-size:18px;font-weight:800}.stat-lbl{font-size:10px;color:#666;margin-top:2px}@media print{@page{margin:10mm;size:A4}}`;
-  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:'<div style="width:56px;height:56px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">🏫</div>'}<div class="si"><h1>${esc(school)}</h1><div class="s">${esc(schoolSub)}</div><div class="s">📞 ${esc(phone)}${dgep?` · N° DGEP: ${esc(dgep)}`:''}</div></div></div><div class="hr"><div class="brand">🛡️ SchoolSafe</div><div class="meta">Année ${yr}</div><div class="meta">${printDate}</div></div></div>`;
-  const ftr=`<div class="footer"><span>© ${new Date().getFullYear()} ${esc(school)}</span><span>${esc(cl.name)} — ${trim}</span><span>Bulletin généré par SchoolSafe</span></div>`;
+  const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:'<div style="width:56px;height:56px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">🏫</div>'}<div class="si"><h1>${esc(school)}</h1><div class="s">${esc(schoolSub)}</div><div class="s">📞 ${esc(phone)}${dgep?` · N° DGEP: ${esc(dgep)}`:''}</div></div></div><div class="hr"><div class="brand">The Wise School International</div><div class="meta">Année ${yr}</div><div class="meta">${printDate}</div></div></div>`;
+  const ftr=`<div class="footer"><span>© ${new Date().getFullYear()} ${esc(school)}</span><span>${esc(cl.name)} — ${trim}</span><span>Bulletin de l'école</span></div>`;
   const sectionRows=(sid,mats,flag)=>mats.map(m=>{
     const coeff=m.coeff||1;
     const t1=matAvgPct(sid,m.name,'T1'),t2=matAvgPct(sid,m.name,'T2'),t3=matAvgPct(sid,m.name,'T3');
@@ -23854,7 +23854,7 @@ window.printSanctionLetter = (id) => {
     <div class="sig-box"><div style="margin-bottom:40px"></div>${byU?esc(byU.name):'Titulaire'}<br><small>(signature)</small></div>
     <div class="sig-box"><div style="margin-bottom:40px"></div>Parent/Tuteur<br><small>(signature + date)</small></div>
   </div>
-  <div style="margin-top:40px;font-size:11px;color:#999;text-align:center">Document généré par SchoolSafe v3 · ${today()}</div>
+  <div style="margin-top:40px;font-size:11px;color:#999;text-align:center">Document officiel · ${today()}</div>
   </body></html>`;
   dlPDF(_sanctionHtmlStart,`Sanction-${s.name.replace(/ /g,'_')}-${today()}.pdf`);
 };
@@ -26227,7 +26227,7 @@ window.exportArchivePDF = () => {
       </div>
     </div>
     <div class="hr">
-      <div style="font-size:14px;font-weight:700">🛡️ SchoolSafe</div>
+      <div style="font-size:14px;font-weight:700">The Wise School International</div>
       <div>Document généré le</div>
       <div style="font-weight:700">${printDate}</div>
     </div>
@@ -26260,13 +26260,13 @@ window.exportArchivePDF = () => {
     <div class="icon">⭐</div>
     <div class="txt">
       <h3>${school||'SchoolSafe'}${schoolSub?' — '+schoolSub:''}</h3>
-      <p>Document officiel de clôture d'année · Généré par SchoolSafe${school?' · '+school:''}</p>
+      <p>Document officiel de clôture d'année${school?' · '+school:''}</p>
     </div>
   </div>
 
   <div class="footer">
     <span>© ${new Date().getFullYear()} ${school}</span>
-    <span class="brand">🛡️ SchoolSafe — Document de clôture officiel</span>
+    <span class="brand">Document de clôture officiel</span>
     <span>Année ${yr} · ${printDate}</span>
   </div>
 
@@ -26989,7 +26989,7 @@ window.printTenafepList = () => {
       <div><div style="height:50px"></div><div class="sig-line">Responsable pédagogique</div></div>
       <div><div style="height:50px"></div><div class="sig-line">Délégué MEPSP / SECOPE</div></div>
     </div>
-    <div class="footer-doc">Document officiel généré par SchoolSafe v3.0 · ${sc.name||'SchoolSafe'} · ${yr}</div>
+    <div class="footer-doc">Document officiel · ${sc.name||'SchoolSafe'} · ${yr}</div>
   </div>
   </body></html>`;
   dlPDF(_tenHtml,`Liste-ENAFEP-${yr}.pdf`);
@@ -27164,7 +27164,7 @@ window.printExetatList = () => {
       <div><div style="height:50px"></div><div class="sig-line">Responsable pédagogique</div></div>
       <div><div style="height:50px"></div><div class="sig-line">Délégué MEPSP / SECOPE</div></div>
     </div>
-    <div class="footer-doc">Document officiel généré par SchoolSafe v3.0 · ${sc.name||'SchoolSafe'} · ${yr}</div>
+    <div class="footer-doc">Document officiel · ${sc.name||'SchoolSafe'} · ${yr}</div>
   </div>
   </body></html>`;
   dlPDF(_extHtml,`Liste-EXETAT-${yr}.pdf`);
@@ -27304,7 +27304,7 @@ window.printFicheSante = (sid) => {
       <div style="border-top:2px solid #374151;padding-top:6px;text-align:center;font-size:12px;color:#6b7280">Signature Direction</div>
       <div style="border-top:2px solid #374151;padding-top:6px;text-align:center;font-size:12px;color:#6b7280">Signature Infirmier/e</div>
     </div>
-    <div style="text-align:center;font-size:10px;color:#9ca3af;margin-top:20px">Imprimé le ${today()} — SchoolSafe v3.0</div>
+    <div style="text-align:center;font-size:10px;color:#9ca3af;margin-top:20px">Imprimé le ${today()}</div>
   </div>`;
   dlPDF(htmlStr,`FicheSante_${s.name.replace(/\s+/g,'_')}.pdf`);
 };
@@ -28634,7 +28634,7 @@ window.printPersonnelFichePaie = (salId) => {
       (DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',
       (()=>{const a=(DB.users||[]).find(x=>x.id===sal.by);return a?{nom:a.name,role:window._roleOfficiel(a.role)||'Caisse',le:sal.paid_date||''}:null;})(),
       {nom:sal.person_name,role:sal.person_role||''})}
-  <div class="foot">Document confidentiel · SchoolSafe · ${today()}</div>
+  <div class="foot">Document confidentiel · ${today()}</div>
   </body></html>`;
   dlPDF(html,`FichePaie-${sal.person_name.replace(/ /g,'_')}-${sal.month}.pdf`);
 };
@@ -28678,7 +28678,7 @@ window.printFichePaie = (teacherId, month) => {
       (DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',
       (()=>{const a=(DB.users||[]).find(x=>x.id===sal.by);return a?{nom:a.name,role:window._roleOfficiel(a.role)||'Caisse',le:sal.paid_date||''}:null;})(),
       {nom:u.name,role:window._roleOfficiel(u.role)||''})}
-  <div class="conf">🔒 Document confidentiel — SchoolSafe v3.0 · Généré le ${today()}</div>
+  <div class="conf">🔒 Document confidentiel · Généré le ${today()}</div>
   </div></body></html>`;
   dlPDF(_ficheHtml,`Fiche-Paie-${u.name.replace(/ /g,'_')}-${month}.pdf`);
 };
@@ -28754,7 +28754,7 @@ window.printRapportSecope = () => {
     ${fees.inscription?`<tr><td>Frais d'inscription / élève</td><td>${_cur()}${fees.inscription}</td></tr>`:''}
     <tr><td>Total recouvré</td><td style="font-weight:700;color:#1f9d6b">${_cur()}${totalPaid}</td></tr>
   </tbody></table>
-  <div style="margin-top:6px;font-size:12px;color:#5e6c78">Document généré le ${today()} — SchoolSafe v3.0</div>
+  <div style="margin-top:6px;font-size:12px;color:#5e6c78">Document généré le ${today()}</div>
   <div class="sig">
     <div><div style="height:40px"></div><div class="sig-line">Directeur(trice) d'école</div></div>
     <div><div style="height:40px"></div><div class="sig-line">Responsable pédagogique</div></div>

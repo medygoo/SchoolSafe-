@@ -80,6 +80,28 @@ Ce que l'utilisateur voit porte **deux noms seulement** : le logiciel et l'écol
 
 C'est la distinction la plus souvent perdue, et elle se paie cher.
 
+**Elle s'est payée le 4 août 2026 : VINGT documents écrivaient le nom du
+logiciel.** Le bulletin portait `🛡️ SchoolSafe` en filet d'en-tête ; les listes
+ENAFEP et EXETAT, « Document officiel généré par SchoolSafe v3.0 » ; l'archive
+de clôture, « 🛡️ SchoolSafe — Document de clôture officiel ». Une administration
+congolaise qui reçoit cela lit que **c'est le logiciel qui délivre**.
+
+Trouvé en suivant une consigne de Loms sur un seul document — *« la charte même
+au devoir »* — dont l'en-tête portait « SchoolSafe — Plateforme scolaire
+numérique ». **Un exemple précis a désigné un défaut sur vingt.**
+
+`audit-logo.mjs` tient désormais les trois côtés de la distinction, et refuse
+dans les deux sens :
+
+| | |
+|---|---|
+| l'emblème de l'école **est** sur les 38 documents | obligatoire |
+| l'emblème de l'école **n'est pas** dans l'interface | jamais |
+| le nom du logiciel **n'est pas** dans les documents | jamais |
+
+Restent admis : `sc.name \|\| 'SchoolSafe'` — un repli, pas une signature — et
+les noms de fichier, qui ne s'impriment pas.
+
 **L'emblème de l'école n'entre PAS dans l'interface.** Erreur commise puis
 corrigée : donner une valeur par défaut au logo de l'école l'a fait paraître
 dans la barre latérale, l'écran de connexion et « À propos » dès le premier

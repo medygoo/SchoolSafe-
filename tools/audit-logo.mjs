@@ -120,8 +120,54 @@ console.log(sans
 // quelqu'un écrira `window.SCHOOL_LOGO = 'data:image/…'`, l'emblème de
 // l'école reparaîtra dans la barre latérale dès le premier lancement — et
 // l'application se remettra à porter l'école.
-let repliHorsDoc = 0;
+let repliHorsDoc = 0, nomLogiciel = 0;
 const debutsDocuments = new Set(sorties.map(x => debutFonction(x.ligne - 1)));
+
+// ══════════════════════════════════════════════════════════════════════════
+//  LE NOM DU LOGICIEL N'ENTRE PAS DANS UN DOCUMENT DE L'ÉCOLE
+//
+//  Symétrique du contrôle de l'emblème, et de la même famille : l'interface
+//  porte SchoolSafe, le papier porte Le Sage.
+//
+//  Un bulletin qui affiche « 🛡️ SchoolSafe » en en-tête, une liste ENAFEP qui
+//  se dit « générée par SchoolSafe v3.0 », un certificat qui porte le nom de
+//  l'éditeur : une administration lit cela au premier coup d'œil et comprend
+//  que c'est le LOGICIEL qui délivre. Ce n'est pas lui qui engage.
+//
+//  Vingt documents étaient dans ce cas le 4 août 2026, dont les bulletins, les
+//  deux listes d'examen d'État, les fiches de paie et l'archive de clôture.
+//  Personne ne l'avait vu : rien ne le vérifiait.
+//
+//  Reste légitime — et donc admis ici :
+//   · `sc.name || 'SchoolSafe'` : un REPLI quand l'école n'a pas de nom
+//     enregistré. C'est une valeur par défaut, pas une signature ;
+//   · les NOMS DE FICHIER : ils ne s'impriment pas sur le document.
+{
+  let mentions = 0;
+  console.log('');
+  for (const s2 of sorties) {
+    const d = debutFonction(s2.ligne - 1);
+    const fn = nomFonction(lignes[d]);
+    if (ASSISTANTS.has(fn)) continue;
+    for (let k = d; k <= s2.ligne - 1; k++) {
+      const l = lignes[k];
+      if (!/SchoolSafe/.test(l)) continue;
+      if (/^\s*(\/\/|\*)/.test(l)) continue;
+      for (const m of l.matchAll(/SchoolSafe/g)) {
+        const ctx = l.slice(Math.max(0, m.index - 30), m.index + 30);
+        if (/\|\|\s*['"]SchoolSafe/.test(ctx)) continue;        // repli du nom
+        if (/download\s*=|fname|filename|\.json`|\.png'/.test(ctx)) continue; // nom de fichier
+        mentions++;
+        console.log(`   \u2717 ${fn.padEnd(28)} ligne ${k + 1} — le nom du LOGICIEL dans un document de l'école`);
+        break;
+      }
+    }
+  }
+  console.log(mentions
+    ? `\u2717 ${mentions} mention(s) : une administration croira que c'est le logiciel qui délivre`
+    : `\u2713 Aucun document ne porte le nom du logiciel — le papier porte l'école`);
+  nomLogiciel = mentions;
+}
 
 // ── LE REPLI DES DOCUMENTS, ET SA FRONTIÈRE ──────────────────────────────
 // Depuis le 4 août 2026, l'emblème du Complexe Scolaire Le Sage est intégré
@@ -174,4 +220,4 @@ console.log(repli
   : `\u2713 L'emblème ne peut venir que de la Direction — aucun repli intégré, donc aucune fuite possible`);
 
 
-process.exit(sans + repli + repliHorsDoc ? 1 : 0);
+process.exit(sans + repli + repliHorsDoc + nomLogiciel ? 1 : 0);
