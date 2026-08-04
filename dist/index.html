@@ -7698,7 +7698,15 @@ function dashboardParent() {
 
 // Constantes du système de cartes
 let schoolImg = new Image();
-schoolImg.src = window.SCHOOL_LOGO;
+// Jamais `null` : affecter null à un `src` produit la chaîne « null », donc
+// une requête vers /null qui répond 404 à CHAQUE chargement. Invisible, donc
+// jamais corrigé.
+//
+// Et pas de repli intégré ici : `schoolImg` vit au niveau du fichier, hors de
+// tout document. Ce sont `ssBuildBadge` et `ssBuildCarte` qui construisent la
+// carte, et elles lisent déjà l'emblème intégré elles-mêmes. Le contrôle
+// inverse de audit-logo.mjs a refusé ma première version — il a eu raison.
+if (window.SCHOOL_LOGO) schoolImg.src = window.SCHOOL_LOGO;
 
 // ── License ──
 // ── CONFIGURATION SUPABASE ──
@@ -22922,6 +22930,9 @@ window.extractSiteLogoColor = () => {
       toast('Couleur extraite du logo : '+hex, 'success');
     };
     img.crossOrigin = 'anonymous';
+    // Extraire une couleur d'un emblème que la Direction n'a pas téléversé
+    // n'a pas de sens : on le dit, au lieu de demander /null.
+    if (!window.SCHOOL_LOGO) { toast("Téléversez d'abord l'emblème de l'école", 'warning'); return; }
     img.src = window.SCHOOL_LOGO;
   } catch(e) { toast('Erreur extraction couleur','error'); }
 };
