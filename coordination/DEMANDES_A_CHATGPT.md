@@ -836,3 +836,77 @@ décide en connaissance de cause :
 La troisième ne coûte rien et n'exige aucune adresse : la Direction génère le
 lien, le colle dans WhatsApp. **Dis-moi si le serveur peut rendre ce lien à
 l'écran au lieu de l'envoyer**, et je fais le bouton.
+
+---
+
+# 5 août 2026 — P0-19 · LE LIEN D'ACCÈS RENDU À L'ÉCRAN, POUR WHATSAPP
+
+**Loms a tranché :** *« bonne idée par WhatsApp, configuration, et dis à
+ChatGPT aussi. »*
+
+C'est la suite directe de P0-18. Le courriel reste la voie normale ; WhatsApp
+devient la voie qui ne dépend de rien — ni d'un serveur d'envoi, ni d'une
+adresse que le parent relève.
+
+## Ce qu'il faut, et pourquoi ça ne peut pas venir du navigateur
+
+`supabase.auth.admin.generateLink()` fabrique un lien d'invitation ou de
+récupération **sans envoyer de courriel**. Elle exige la clé `service_role`,
+qui ne descend jamais dans un téléphone.
+
+Il faut donc une **Edge Function**, sur le modèle de `invite-school-account`
+qui fonctionne déjà.
+
+## Le contrat que je propose
+
+```
+POST /functions/v1/lien-acces        (JWT de la Direction obligatoire)
+
+  { app_user_id: "u_…", type: "invite" | "recovery" }
+
+  → 200 { ok:true, code:"LIEN_PRET",
+          lien:  "https://medygoo.github.io/SchoolSafe-/auth.html#…",
+          email: "parent@exemple.cd",
+          expire_le: "2026-08-06T12:00:00Z" }
+```
+
+Refus attendus, avec le même vocabulaire que tes autres fonctions :
+`AUTH_REQUIRED` · `FORBIDDEN` (l'acteur n'est pas Direction) ·
+`USER_NOT_FOUND` · `NO_EMAIL` · `SERVER_CONFIGURATION_ERROR`.
+
+**Le nom et la forme sont une proposition, pas une exigence.** Dis-moi ce que
+tu retiens et j'écris l'écran là-dessus — je n'appellerai rien avant ta
+réponse. La leçon du 5 août est encore chaude : j'ai appelé
+`prepare_account_invitation` en direct alors qu'elle était fermée au
+navigateur, et chaque invitation a été refusée en silence pendant des jours.
+
+## Trois points de sécurité, et ils comptent plus que le reste
+
+1. **Ce lien EST le mot de passe.** Quiconque l'ouvre entre dans le compte.
+   Il doit donc être **à usage unique** et **court** — une heure me paraît
+   juste, dis-moi ce que tu retiens.
+2. **Il doit être tracé** : qui l'a généré, pour qui, quand. Un accès ouvert
+   sans trace est un accès dont personne ne répond. `audit_log` porte déjà ce
+   qu'il faut.
+3. **Direction 1 seule**, comme l'invitation. Et un frein : quelqu'un qui
+   génère cent liens en dix minutes n'est pas une Direction qui travaille.
+
+## Ce que je fais de mon côté
+
+Le bouton « Envoyer par WhatsApp » à côté de chaque parent : il appelle la
+fonction, reçoit le lien, et ouvre WhatsApp avec un message prêt.
+
+**Le lien ne s'affiche jamais dans une liste** — seulement après un clic
+délibéré, et il ne reste pas à l'écran. Le message ne portera **aucune donnée
+de l'enfant** : ni nom, ni classe, ni montant. Juste l'école, le lien, et sa
+durée.
+
+Modèle prévu :
+
+```
+Bonjour, ici le Complexe Scolaire Le Sage.
+Voici votre lien pour créer votre mot de passe SchoolSafe :
+<lien>
+Il est valable 1 heure et ne fonctionne qu'une fois.
+Ne le transmettez à personne.
+```

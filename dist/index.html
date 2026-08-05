@@ -10154,6 +10154,7 @@ R.parents = () => {
           </div>
           <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
             ${u.phone?waBtn(u.phone,u.name):''}
+            ${S.user.role==='direction'&&u.phone?`<button id="wa_${u.id}" class="btn btn-outline btn-sm" style="border-color:#25D366;color:#128C4A" title="Générer un lien d'accès et l'envoyer par WhatsApp" onclick="_envoyerLienWhatsApp('${u.id}')">🔗 Lien</button>`:''}
             <button class="btn btn-outline btn-sm" onclick="openUserForm('parent','${u.id}')">Modifier</button>
             <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
           </div>
@@ -27167,6 +27168,79 @@ window.autoActivatePaid = () => {
   else toast('Tous les élèves à jour sont déjà activés','info');
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  LE LIEN D'ACCÈS PAR WHATSAPP
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Décision de Loms, 5 août 2026 : « bonne idée par WhatsApp ».
+//
+//  POURQUOI. Tout l'accès passe aujourd'hui par un courriel — invitation
+//  pour entrer, lien pour réinitialiser. Deux choses le rendent fragile à
+//  l'échelle d'une école : le service d'envoi de Supabase n'est pas prévu
+//  pour la production (P0-18), et un parent de Kinshasa n'a pas toujours une
+//  adresse qu'il relève. WhatsApp ne dépend ni de l'un ni de l'autre.
+//
+//  CE LIEN EST LE MOT DE PASSE. Quiconque l'ouvre entre dans le compte. Trois
+//  règles en découlent, et elles ne se négocient pas :
+//    · il ne s'affiche JAMAIS dans une liste — seulement après un clic
+//      délibéré, et il ne reste pas à l'écran ;
+//    · le message ne porte AUCUNE donnée de l'enfant : ni nom, ni classe, ni
+//      montant. Un message WhatsApp se transfère, se lit par-dessus l'épaule,
+//      reste dans un téléphone prêté ;
+//    · il est tracé — qui l'a généré, pour qui, quand.
+//
+//  LA CLÉ QUI FABRIQUE CE LIEN NE DESCEND PAS DANS UN TÉLÉPHONE.
+//  `auth.admin.generateLink()` exige `service_role`. Le navigateur passe donc
+//  par une Edge Function, comme pour l'invitation. Le contrat est proposé à
+//  ChatGPT en P0-19 ; tant qu'il ne l'a pas posée, ce bouton le DIT — il ne
+//  reste pas muet et ne prétend pas avoir envoyé quoi que ce soit.
+window._lienAcces = async (userId, type) => {
+  return await _edgeFn('lien-acces', { app_user_id: userId, type: type || 'recovery' });
+};
+
+window._envoyerLienWhatsApp = async (uid) => {
+  // Exposée globalement, et elle ouvre un accès : elle porte sa garde.
+  if (!S.user || S.user.role !== 'direction') { toast('Seule la Direction 1 peut générer un lien d\'accès','error'); return; }
+  const u = (DB.users||[]).find(x => x.id === uid);
+  if (!u) { toast('Compte introuvable — rechargez','error'); return; }
+  if (!(u.phone||'').trim()) {
+    toast(`${u.name} n'a pas de numéro enregistré — ouvrez sa fiche`, 'warning'); return;
+  }
+  const _fin = window._btnBusy('#wa_' + uid, '⏳');
+  try {
+    const r = await window._lienAcces(uid, 'recovery');
+    if (!r.ok) {
+      // On nomme la panne au lieu de dire « réessayez ». Celui qui lit doit
+      // pouvoir la décrire, et celui qui dépanne doit savoir où chercher.
+      const dit = {
+        AUTH_REQUIRED: 'Session expirée — reconnectez-vous',
+        FORBIDDEN: 'Seule la Direction 1 peut générer un lien',
+        USER_NOT_FOUND: 'Ce compte n\'existe plus côté serveur',
+        NO_EMAIL: `${u.name} n'a pas d'adresse enregistrée — le lien ne peut pas être fabriqué`,
+        HTTP_404: 'La fonction « lien-acces » n\'est pas encore déployée — c\'est la demande P0-19 à ChatGPT',
+      }[r.code] || ('Le serveur a refusé — ' + (r.code || 'raison inconnue'));
+      toast(dit, 'error');
+      return;
+    }
+    const lien = r.data && r.data.lien;
+    if (!lien) { toast('Le serveur n\'a pas renvoyé de lien — signalez-le','error'); return; }
+
+    const ecole = (DB.settings?.school?.name) || 'votre école';
+    const heures = r.data.expire_le
+      ? Math.max(1, Math.round((new Date(r.data.expire_le) - Date.now()) / 3600000)) : 1;
+    const msg = `Bonjour, ici ${ecole}.\n\n`
+      + `Voici votre lien pour créer votre mot de passe SchoolSafe :\n${lien}\n\n`
+      + `Il est valable ${heures} heure${heures > 1 ? 's' : ''} et ne fonctionne qu'une seule fois.\n`
+      + `Ne le transmettez à personne.`;
+    const url = waLink(u.phone, msg);
+    if (!url) { toast('Numéro inutilisable — corrigez-le dans sa fiche','error'); return; }
+
+    logAudit('lien_acces', `${u.name} — lien d'accès généré et ouvert dans WhatsApp par ${window._acteur()}`, uid);
+    window.open(url, '_blank', 'noopener');
+    toast(`WhatsApp ouvert pour ${u.name} — le lien expire dans ${heures} h`, 'success');
+  } finally { _fin(); }
+};
+
 window.resetParentPin = async (uid) => {
   if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
   const u=DB.users.find(x=>x.id===uid); if(!u||u.role!=='parent') return;
@@ -27184,7 +27258,11 @@ window.resetParentPin = async (uid) => {
   }
   const _r = await window._inviterCompte(uid, u.email.trim(), u.name);
   if (!_r.ok) { toast(_codeMsg(_r.code), 'error'); return; }
-  toast(`Lien envoyé à ${u.email.trim()} — ${u.name} choisira son mot de passe`, 'success');
+  // « Envoyé » ne veut pas dire « reçu ». Le serveur confirme qu'il a préparé
+  // l'invitation ; il ne promet pas que le courriel est arrivé. La Direction
+  // doit savoir qu'une autre voie existe si rien n'arrive — demandé à ChatGPT
+  // de me dire ce que son `ok:true` garantit vraiment (P0-18).
+  toast(`Invitation partie vers ${u.email.trim()}. Si rien n'arrive, envoyez le lien par WhatsApp.`, 'success');
   saveToCrypt(); render();
 };
 
