@@ -704,6 +704,48 @@ profil par `users.auth_user_id`. Tant qu'il n'existe pas une Direction active
 avec son identité Auth rattachée, personne ne peut entrer — et aucune correction
 du navigateur n'y changera rien. C'est P0-10 dans `DEMANDES_A_CHATGPT.md`.
 
+### Une lecture qui ÉCHOUE n'est pas une lecture qui ne trouve RIEN
+
+**5 août 2026**, la même journée, en tirant le fil suivant. Loms : *« quand tu
+es connecté à ton compte, après un temps, l'application rejette ton mot de passe
+quand tu essaies de te connecter, ça refuse. »*
+
+`_get` rend `null` pour **tout** échec — jeton expiré, RLS qui refuse, serveur en
+panne, réseau muet — et la connexion traitait ce `null` exactement comme un
+tableau vide. Mesuré au navigateur, **mot de passe bon dans les cinq cas** :
+
+| ce qui se passait vraiment | ce que l'écran répondait |
+|---|---|
+| aucun profil rattaché | « Mot de passe accepté, mais aucun profil n'est rattaché à cette adresse » |
+| jeton expiré (401) | *le même, mot pour mot* |
+| RLS refuse (403) | *le même* |
+| serveur en panne (500) | *le même* |
+| réseau muet | *le même* |
+
+…et la personne était **déconnectée** dans la foulée, à chaque fois. Quatre fois
+sur cinq c'était faux : le compte existait, le mot de passe était bon, seule la
+lecture avait échoué.
+
+Trois choses à retenir, et elles dépassent la connexion :
+
+1. **Un rendu `null` qui confond « pas trouvé » et « je n'ai pas pu chercher »
+   fabrique des accusations.** Le nom qu'on affiche ensuite désigne un coupable
+   — ici l'utilisateur et son mot de passe — alors que la panne est ailleurs.
+2. **L'information manquante était déjà là.** `_noteReadState` relève le statut
+   HTTP depuis le contrat `ROLE_LOAD`, avec un commentaire qui dit exactement
+   pourquoi : *« Seul le statut HTTP le dit. »* Il n'a jamais été lu ici. Une
+   moitié du dépôt savait ce que l'autre ignorait.
+3. **Une panne d'infrastructure ne doit pas déconnecter.** Déconnecter oblige à
+   tout recommencer et transforme un hoquet de réseau en « ça refuse ». On ne
+   sort que si l'identité est inutilisable : aucun profil, compte désactivé,
+   rôle inconnu, jeton invalide.
+
+Et le corollaire pour Kinshasa : **un seul aller-retour ne décide pas de l'accès
+de quelqu'un à son école.** `_lireMonProfil` réessaie trois fois, 400 ms puis
+800 ms — mais seulement sur les pannes passagères. Un 401, un 403 ou un 404
+rendront la même chose une seconde plus tard : les réessayer ne fait qu'ajouter
+de l'attente à un refus.
+
 ### Les gardes de rôle
 
 Toute fonction exposée globalement qui écrit doit vérifier le rôle.
