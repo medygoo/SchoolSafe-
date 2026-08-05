@@ -1396,7 +1396,8 @@ window._uid = (p='') => p+(typeof crypto!=='undefined'&&crypto.randomUUID?crypto
 // L’accès universel est une capacité serveur uniquement.
 // Ne jamais placer de code maître, de PIN de support ou de hash dérivé dans un client public.
 window.ini = n => n.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-window.gpin = () => { let p; do { p = String(Math.floor(100000 + Math.random() * 900000)); } while (DB.users.some(u => u.pin === p)); return p; };
+// `gpin` tirait un code à six chiffres au hasard. Plus personne ne l'appelle :
+// la personne choisit son mot de passe elle-même, depuis le lien reçu.
 
 // ── CLASS COLORS ──
 window.CLASS_COLORS = {
@@ -3104,21 +3105,10 @@ function _xorDecryptLegacy(enc) {
     return JSON.parse(decodeURIComponent(r));
   } catch(e) { return null; }
 }
-// ── Lockout login persistant (survit au F5) ──────────────────────────────────
-const LOGIN_FAILS_KEY = 'schoolsafe_login_fails';
-function _loadLoginState() {
-  try {
-    const d = JSON.parse(localStorage.getItem(LOGIN_FAILS_KEY)||'{}');
-    const now = Date.now();
-    const lu = d.lockUntil||{};
-    // Purge les lockouts expirés
-    Object.keys(lu).forEach(k => { if (lu[k]<=now) { delete lu[k]; delete (d.fails||{})[k]; } });
-    return { fails: d.fails||{}, lockUntil: lu };
-  } catch(_) { return { fails:{}, lockUntil:{} }; }
-}
-function _saveLoginState(st) {
-  try { localStorage.setItem(LOGIN_FAILS_KEY, JSON.stringify(st)); } catch(_) {}
-}
+// Le compteur d'échecs et le blocage temporaire vivaient ici. Ils
+// protégeaient la connexion par code, qui n'existe plus : Supabase Auth
+// applique sa propre limitation de débit, côté serveur — là où un compteur
+// rangé dans le localStorage du visiteur ne protégeait de rien.
 
 // ── Chiffrement messages (clé partagée école, protège contenu au repos dans Supabase) ──
 let _msgEncKey = null;
@@ -4242,18 +4232,9 @@ window.showLogin = () => {
   window._startLoginIdleTimer&&window._startLoginIdleTimer();
   window._startLoginHeroRotation&&window._startLoginHeroRotation();
 };
-async function _hashPin(pin) {
-  const enc = new TextEncoder().encode(pin);
-  const buf = await crypto.subtle.digest('SHA-256', enc);
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-// SEC-04 : hash salé par utilisateur (sel = uid) — défait les rainbow tables sur PIN 6 chiffres.
-// _hashPin reste réservé à la migration des PIN utilisateurs hérités.
-async function _hashPinSalted(pin, uid) {
-  const enc = new TextEncoder().encode((uid||'') + '|SchoolSafe_v2|' + pin);
-  const buf = await crypto.subtle.digest('SHA-256', enc);
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
+// Les deux fonctions de hachage de PIN qui se trouvaient ici sont parties
+// avec la connexion par code. On ne garde pas du code mort qui hache un
+// mot de passe : le prochain lecteur croirait qu'il sert encore.
 const _isDirRole = r => r==='direction'||r==='direction2'||r==='direction3';
 function _authErrorMessage(error) {
   const msg = String(error?.message || '').toLowerCase();
@@ -4263,6 +4244,13 @@ function _authErrorMessage(error) {
   if (msg.includes('different from the old')) return 'Choisissez un mot de passe différent de l’ancien';
   if (msg.includes('password') && (msg.includes('least') || msg.includes('short'))) return 'Le mot de passe doit contenir au moins 8 caractères';
   if (msg.includes('session') || msg.includes('expired') || msg.includes('token')) return 'Le lien a expiré — demandez une nouvelle invitation';
+  // Une panne de réseau n'est PAS un mot de passe refusé. Les confondre
+  // envoie quelqu'un ressaisir vingt fois un mot de passe correct.
+  if (msg.includes('fetch') || msg.includes('network') || msg.includes('failed to')) {
+    return navigator.onLine
+      ? 'Le serveur de l’école ne répond pas — réessayez dans un instant'
+      : 'Vous êtes hors ligne — la connexion demande Internet';
+  }
   return 'Connexion impossible — réessayez';
 }
 
@@ -4291,9 +4279,24 @@ async function _openSupabaseSession(session, password, messageId) {
   );
   const user = Array.isArray(rows) ? rows[0] : null;
   if (user) user.role = _normRole(user.role);
-  if (!user || user.status !== 'active' || !NAV[_roleUI(user.role)]) {
+  // Quatre pannes DIFFÉRENTES portaient le même message — « Compte non
+  // autorisé ou désactivé ». Celui qui le lit ne peut ni le corriger ni le
+  // décrire, et celui qui dépanne ne sait pas quoi chercher. Chacune se
+  // nomme maintenant, sans rien révéler qu'on ne sache déjà : la personne
+  // vient de prouver qui elle est, son mot de passe était bon.
+  if (!user) {
     await window._authClient.auth.signOut();
-    _setAuthMessage(target, 'Compte non autorisé ou désactivé');
+    _setAuthMessage(target, 'Mot de passe accepté, mais aucun profil n’est rattaché à cette adresse — la Direction doit renvoyer l’invitation');
+    return false;
+  }
+  if (user.status !== 'active') {
+    await window._authClient.auth.signOut();
+    _setAuthMessage(target, 'Ce compte est désactivé — adressez-vous à la Direction');
+    return false;
+  }
+  if (!NAV[_roleUI(user.role)]) {
+    await window._authClient.auth.signOut();
+    _setAuthMessage(target, `Rôle « ${user.role || '—'} » inconnu de cette version — signalez-le à la Direction`);
     return false;
   }
 
@@ -4361,6 +4364,12 @@ window._showPendingPasswordSetup = async function(force) {
 
 window._resumeInvitation = async function() {
   _setAuthMessage('PM', '');
+  if (!window._authClient) {
+    _setAuthMessage('PM', navigator.onLine
+      ? 'Connexion au serveur de l’école indisponible — rechargez la page'
+      : 'Vous êtes hors ligne — la première connexion demande Internet');
+    return;
+  }
   await window._showPendingPasswordSetup(true);
 };
 
@@ -4370,7 +4379,16 @@ window._cancelPasswordSetup = function() {
 };
 
 window._requestPasswordReset = async function() {
-  if (window._passwordResetBusy || !window._authClient) return;
+  if (window._passwordResetBusy) return;
+  // Sans client d'authentification, ce bouton ne faisait RIEN : ni action,
+  // ni message. On appuie, il ne se passe rien, et on croit l'application
+  // cassée sans savoir pourquoi.
+  if (!window._authClient) {
+    _setAuthMessage('PM', navigator.onLine
+      ? 'Connexion au serveur de l’école indisponible — rechargez la page'
+      : 'Vous êtes hors ligne — l’envoi du lien demande Internet');
+    return;
+  }
   const email = ($('LN')?.value || '').trim().toLowerCase();
   if (!email) {
     _setAuthMessage('PM', 'Entrez d’abord votre adresse e-mail');
@@ -4384,15 +4402,23 @@ window._requestPasswordReset = async function() {
   window._passwordResetBusy = true;
   _setAuthMessage('PM', 'Envoi du lien sécurisé…');
   try {
-    const redirectTo = 'https://medygoo.github.io/SchoolSafe-/auth.html?v=1';
+    // L'adresse de retour était écrite en dur sur github.io. Une école qui
+    // ouvre l'application depuis son propre domaine recevait donc un lien
+    // qui la renvoyait ailleurs — et la session ouverte là-bas ne servait à
+    // rien ici. On repart de l'endroit d'où la personne a cliqué.
+    const redirectTo = new URL('auth.html', location.href).href;
     const { error } = await window._authClient.auth.resetPasswordForEmail(email, { redirectTo });
-    if (error) {
-      _setAuthMessage('PM', _authErrorMessage(error));
-      return;
-    }
-    _setAuthMessage('PM', 'E-mail envoyé. Ouvrez le lien reçu pour choisir un nouveau mot de passe.');
-  } catch (error) {
-    _setAuthMessage('PM', _authErrorMessage(error));
+    // MÊME PHRASE dans les deux cas — c'est une exigence, pas une négligence.
+    // Un message qui change selon que l'adresse existe ou non permet à
+    // n'importe qui de savoir, une adresse à la fois, qui a un compte dans
+    // cette école. La seule exception : une limitation de débit, qui ne dit
+    // rien de l'adresse et que la personne doit comprendre pour attendre.
+    const debordement = /too many requests|rate limit/i.test(String(error?.message||''));
+    _setAuthMessage('PM', debordement
+      ? 'Trop de demandes — attendez quelques minutes avant de réessayer'
+      : 'Si cette adresse correspond à un compte, un lien vient d’être envoyé. Pensez à regarder les indésirables.');
+  } catch (_) {
+    _setAuthMessage('PM', 'Si cette adresse correspond à un compte, un lien vient d’être envoyé. Pensez à regarder les indésirables.');
   } finally {
     window._passwordResetBusy = false;
   }
@@ -4487,132 +4513,29 @@ async function _tryLoginInner() {
     return;
   }
 
-  const normName = value => (value||'').trim().toLowerCase().replace(/\s+/g,' ').normalize('NFD').replace(/[̀-ͯ]/g,'');
-  const name = normName(rawLogin);
-  const pin = rawSecret.trim();
-  if (!name) { $('PM').textContent='Entrez votre nom'; return; }
-  if (!pin) { $('PM').textContent='Entrez votre code'; return; }
-  // Vérification du lockout (persisté localStorage — résiste au F5)
-  { const _lkSt=_loadLoginState(),_lkN=name.slice(0,20); if(_lkSt.lockUntil[_lkN]&&Date.now()<_lkSt.lockUntil[_lkN]){const _rem=Math.ceil((_lkSt.lockUntil[_lkN]-Date.now())/60000);$('PM').textContent=`Compte bloqué — réessayez dans ${_rem} min`;return;}}
-  // Support offline post-migration PBKDF2 : si DB.users vide et pas d'ancienne clé aléatoire,
-  // tenter de déchiffrer le cache avec la clé dérivée du PIN saisi.
-  if ((DB.users||[]).length===0 && !localStorage.getItem(CRYPT_KEY_STORE) && localStorage.getItem(CRYPT_STORE)) {
-    try { const _sk=await _pbkdf2DeriveKey(pin); _aesKey=_sk; await loadFromCrypt(); } catch(_) {}
-  }
-
-  // ── École migrée au central : login via Edge Function, qui résout SCHOOL_KEY
-  //    (license_key public) en school_id réel, vérifie nom+code contre `users`
-  //    scopé à cette école, et renvoie un JWT signé school_id+role. Ce JWT
-  //    devient le Bearer token de toutes les requêtes PostgREST suivantes.
-  //    Tant que SCHOOL_KEY/LOGIN_FN_URL ne sont pas configurés (école pas
-  //    encore basculée), ce bloc est ignoré et le login 100% local ci-dessous
-  //    s'applique. ──
-  if (SCHOOL_KEY && LOGIN_FN_URL) {
-    try {
-      // apikey + Authorization = clé anon du projet CENTRAL : exigée par la
-      // passerelle Supabase avant d'atteindre le code de l'Edge Function.
-      const r = await fetch(LOGIN_FN_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': CENTRAL_KEY,
-          'Authorization': 'Bearer ' + CENTRAL_KEY,
-        },
-        body: JSON.stringify({ license_key: SCHOOL_KEY, name: $('LN')?.value||'', pin }),
-      });
-      const data = await r.json().catch(() => null);
-      if (!r.ok || !data?.user || !data?.supabase_url) {
-        console.warn('[login]', r.status, data);
-        $('PM').textContent = data?.error || 'Nom ou code incorrect';
-        $('LP').value=''; setTimeout(()=>$('PM').textContent='',3000); return;
-      }
-      // Connecter SchoolSafe à la base Supabase propre à cette école
-      window._updateSupabase(data.supabase_url, data.supabase_key || data.supabase_anon_key);
-      window.DB_ONLINE = true;
-
-      // Une file d'attente non vide signifie que le serveur est en retard sur
-      // l'appareil : tirer son instantané effacerait les écritures en attente.
-      // On part donc du cache local, et la file s'écoule en arrière-plan — la
-      // vider ici ferait patienter l'utilisateur une requête par élément.
-      const _pend = window.syncQueue.count();
-      if (_pend > 0) {
-        await loadFromCrypt().catch(() => {});
-        // Le cache local peut être vide sur un appareil neuf : dans ce cas
-        // seul le serveur a des données, et il faut bien les charger.
-        if (!(DB.users || []).length) await loadFromSupabase();
-        window.syncSoon(800);
-      } else {
-        await loadFromSupabase();
-      }
-      loginAs(data.user);
-    } catch (e) {
-      $('PM').textContent='Connexion impossible — réessayez'; setTimeout(()=>$('PM').textContent='',2500);
-    }
-    return;
-  }
-
-  const u = DB.users.find(u =>
-    normName(u.name)===name ||
-    (u.initials && normName(u.initials)===name) ||
-    normName(ini(u.name))===name
-  );
-
-  // Charger credentials ciblés en mode local — évite l'exposition en masse dans le bulk SELECT
-  if (!LOGIN_FN_URL && window.DB_ONLINE && u && !u.pin) {
-    try {
-      const cr = await _get('users','select=pin,pin_hashed,pin_hashed_v2&id=eq.'+encodeURIComponent(u.id)+'&limit=1');
-      const c = (Array.isArray(cr)?cr:[])[0];
-      if (c) { u.pin = c.pin; u.pin_hashed = c.pin_hashed; u.pin_hashed_v2 = c.pin_hashed_v2; }
-    } catch(_) {}
-  }
-  const hashV2 = u ? await _hashPinSalted(pin, u.id) : null;
-  const hash = await _hashPin(pin);
-// Aucun override universel n’est évalué dans le navigateur.
-// La future session support passe par begin-universal-session avec MFA, grant et audit.
-  if (!u) {
-    const _lk=(($('LN')?.value||'').trim().toLowerCase().slice(0,20))||'unknown';
-    const _lsSt=_loadLoginState(); _lsSt.fails[_lk]=(_lsSt.fails[_lk]||0)+1; _saveLoginState(_lsSt);
-    if(_lsSt.fails[_lk]===3){
-      try{logAudit('login_suspect',`3 tentatives échouées : "${_lk}"`);}catch(_){}
-      (DB.users||[]).filter(d=>d.role==='direction').forEach(d=>pushNotif(d.id,`Tentatives de connexion suspectes (3x) pour le nom "${_lk}"`));
-    }
-    $('PM').textContent='Nom ou code incorrect'; $('LP').value=''; setTimeout(()=>$('PM').textContent='',2000); return;
-  }
-  if (_isDirRole(u.role)) {
-    if (pin.length < 6) { $('PM').textContent='Mot de passe : minimum 6 caractères'; return; }
-  } else {
-    if (pin.length!==6||!/^\d{6}$/.test(pin)) { $('PM').textContent='Code PIN : 6 chiffres requis'; return; }
-  }
-  const match = u.pin_hashed_v2 ? u.pin===hashV2 : (u.pin_hashed ? u.pin===hash : u.pin===pin);
-  if (!match) {
-    const _lk2=(u.name||'').toLowerCase().slice(0,20);
-    const _lsPIN=_loadLoginState();
-    _lsPIN.fails[_lk2]=(_lsPIN.fails[_lk2]||0)+1;
-    const _fc=_lsPIN.fails[_lk2];
-    if(_fc>=5){
-      const _lockMs=Math.min(5*60*1000*Math.pow(2,_fc-5),30*60*1000);
-      _lsPIN.lockUntil[_lk2]=Date.now()+_lockMs;
-      _saveLoginState(_lsPIN);
-      const _lockMin=Math.round(_lockMs/60000);
-      $('PM').textContent=`Compte bloqué ${_lockMin} min après ${_fc} tentatives`; $('LP').value=''; return;
-    }
-    _saveLoginState(_lsPIN);
-    if(_fc===3){
-      try{logAudit('login_suspect',`3 tentatives mot de passe incorrect : "${_lk2}"`);}catch(_){}
-      (DB.users||[]).filter(d=>d.role==='direction').forEach(d=>pushNotif(d.id,`Tentatives de connexion suspectes (${_fc}x) pour le compte "${esc(u.name)}"`));
-    }
-    $('PM').textContent='Nom ou code incorrect'; $('LP').value=''; setTimeout(()=>$('PM').textContent='',2000); return;
-  }
-  // Les deux migrations de hachage qui se trouvaient ici écrivaient dans
-  // users.pin, pin_hashed et pin_hashed_v2 — TROIS COLONNES QUI N'EXISTENT
-  // PAS. Elles partaient donc à chaque connexion réussie pour être refusées.
-  // Ce chemin est de toute façon celui de l'ancienne connexion par code, que
-  // Supabase Auth remplace : il ne sert plus qu'au cache hors ligne.
-  saveToCrypt(); // snapshot synchrone → credentials de cet user dans le cache offline
-  DB.users.forEach(x => { delete x.pin; delete x.pin_hashed; delete x.pin_hashed_v2; }); // purge mémoire post-auth
-  const _lkOk=(u.name||'').toLowerCase().slice(0,20); const _lsOk=_loadLoginState(); _lsOk.fails[_lkOk]=0; delete _lsOk.lockUntil[_lkOk]; _saveLoginState(_lsOk);
-  await _initAESKeyFromPIN(pin); // dériver la clé PBKDF2 + migration transparente si ancienne clé présente
-  loginAs(u);
+  // ═══════════════════════════════════════════════════════════════════════
+  //  IL N'Y A PLUS DE CONNEXION PAR CODE — et il ne faut pas faire semblant
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  //  Ici se trouvaient 125 lignes d'authentification par nom + code PIN.
+  //  Elles comparaient la saisie à `users.pin`, `pin_hashed`, `pin_hashed_v2`
+  //  — TROIS COLONNES QUI N'EXISTENT PAS dans la base. PostgREST refuse une
+  //  lecture qui nomme une colonne inconnue : la requête échouait en entier,
+  //  `u.pin` restait indéfini, et la comparaison rendait toujours faux.
+  //
+  //  Conséquence exacte, et c'est celle que Loms a vue : dès que le client
+  //  Supabase ne se crée pas — le script du CDN n'arrive pas, le réseau
+  //  filtre, l'appareil est hors ligne — l'application basculait EN SILENCE
+  //  sur ce chemin et répondait « Nom ou code incorrect » à une adresse et un
+  //  mot de passe parfaitement justes. Un repli qui ne peut pas réussir n'est
+  //  pas un repli : c'est un mensonge poli.
+  //
+  //  La seule porte d'entrée est l'invitation reçue par courriel, puis le mot
+  //  de passe que la personne a choisi elle-même. Quand cette porte n'est pas
+  //  joignable, on le DIT.
+  $('PM').textContent = navigator.onLine
+    ? 'Connexion au serveur de l\u2019école indisponible — rechargez la page'
+    : 'Vous êtes hors ligne — la connexion demande Internet';
 };
 window.loginAs = async user => {
   S.user=user; S.page='dashboard'; S._history=[];
@@ -9685,7 +9608,8 @@ window.openUserForm = (role, uid) => {
   if(uid && !u){ toast('Utilisateur introuvable — rechargez la page','error'); return; }
   const meta = ROLE_META[role]||{label:role,icon:'👤'};
   const existingLang = uid ? (classes.find(x=>x.teacher_id_en===uid)?'en':'fr') : 'fr';
-  const pinDisplay = u&&u.pin&&!u.pin_hashed ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">${_isDirRole(role)?'Mot de passe':'PIN'} actuel : <span style="font-family:monospace;font-weight:700;color:#2f7bd6">${u.pin}</span></div>` : (u?`<div style="font-size:12px;color:var(--text-muted);margin-top:4px">${_isDirRole(role)?'Mot de passe':'PIN'} chiffré — entrez un nouveau pour le réinitialiser</div>`:'');
+  // `pinDisplay` affichait ici le code en clair dans la fiche du compte. Il
+  // n'avait plus aucun appelant et lisait `users.pin`, qui n'existe pas.
   const classOpts = role==='enseignant' ? `
 <div class="form-group"><label class="form-label">Section d'enseignement</label>
   <div style="display:flex;gap:12px;padding:8px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
@@ -12798,21 +12722,9 @@ R.palmares = () => {
     const couvertures=selTrim!=='Tous'?(DB.prevision_matiere||[]).filter(p=>p.cid===cl.id&&p.trimestre===selTrim&&p.validated):[];
     const avgCouv=couvertures.length?Math.round(couvertures.reduce((s,p)=>s+(p.pourcentage||0),0)/couvertures.length):null;
 
-    const ranked=students.map(s=>{
-      const conduct=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const retards=(DB.attendance||[]).filter(a=>a.sid===s.id&&a.status==='late').length;
-      let totalPct=0,sumCoeff=0;
-      matieres.forEach(m=>{
-        const a=matAvgPct(s.id,m.name,trimFilter);
-        if(a!==null){const c=m.coeff||1;totalPct+=a*c;sumCoeff+=c;}
-      });
-      const moyPct=sumCoeff?Math.round(totalPct/sumCoeff):0;
-      const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-      const condAvg=conduct.length?conduct.reduce((a,c)=>a+(condMap[c.score]||0),0)/conduct.length:0;
-      const condPct=Math.round(condAvg*25);
-      const total=Math.round(moyPct*0.85+condPct*0.15);
-      return {...s,moyPct,condAvg,condPct,total,retards,gradeCount:sumCoeff};
-    }).sort((a,b)=>b.total-a.total);
+    // Une seule réponse à « qui est premier ? » — voir `_classer`.
+    const ranked=window._classer(students,()=>matieres,trimFilter)
+      .map(l=>({...l.eleve,...l,condAvg:l.condPct/25}));
 
     html+=`
     <div style="margin-bottom:24px">
@@ -12928,18 +12840,11 @@ R.palmares_parent = () => {
       return p?p.pourcentage:null;
     };
 
-    const ranked=students.map(s=>{
-      let totalPct=0,sumCoeff=0;
-      matieres.forEach(m=>{const a=matAvgPct(s.id,m.name,trimFilter);if(a!==null){const c=m.coeff||1;totalPct+=a*c;sumCoeff+=c;}});
-      const moyPct=sumCoeff?Math.round(totalPct/sumCoeff):0;
-      const conduct=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-      const condAvg=conduct.length?conduct.reduce((a,c)=>a+(condMap[c.score]||0),0)/conduct.length:0;
-      const total=Math.round(moyPct*0.85+Math.round(condAvg*25)*0.15);
-      return {...s,moyPct,total};
-    }).sort((a,b)=>b.total-a.total);
+    // Le parent et la Direction lisent le MÊME classement — voir `_classer`.
+    const ranked=window._classer(students,()=>matieres,trimFilter)
+      .map(l=>({...l.eleve,...l}));
 
-    const pos=ranked.findIndex(s=>s.id===k.id)+1;
+    const pos=(ranked.find(s=>s.id===k.id)||{}).rang||0;
     const me=ranked.find(s=>s.id===k.id);
     const mention=me?getMention(me.total):{l:'—',c:'#a89c8b'};
 
@@ -12949,9 +12854,7 @@ R.palmares_parent = () => {
 
     const renderSection=(secMats,secLabel,flag,profName,bg)=>{
       if(!secMats.length) return '';
-      let tot=0,sumC=0;
-      secMats.forEach(m=>{const a=matAvgPct(k.id,m.name,trimFilter);if(a!==null){const c=m.coeff||1;tot+=a*c;sumC+=c;}});
-      const moy=sumC?Math.round(tot/sumC):null;
+      const moy=window._totalSection(k.id,secMats,trimFilter).pct;
       const bc2=moy===null?'#efe3d3':moy>=70?'#2fbf8f':moy>=50?'#f59e0b':'#ef5b5b';
       return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px;background:${bg}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
@@ -14519,6 +14422,23 @@ window.matAvgPct = (sid, matiere, trimester) => {
   return sumW ? Math.round(sumWN / sumW) : null;
 };
 
+// ── _totalSection — la sommation d'une section de bulletin, une seule fois ──
+//
+//  Trois copies : la section à l'écran (`renderSection`), le sous-total du
+//  bulletin d'un élève, celui du bulletin de toute la classe. Elles disaient
+//  la même chose de trois manières, donc elles pouvaient diverger.
+//
+//  Rend `{pct, tot, max, coeff}` : `pct` pour l'écran, `tot/max` en points
+//  pour le papier — le bulletin congolais imprime « 148/200 pts ».
+window._totalSection = (sid, matieres, trim) => {
+  let tot = 0, max = 0, coeff = 0;
+  (matieres||[]).forEach(m => {
+    const a = matAvgPct(sid, m.name, trim);
+    if (a !== null) { const c = m.coeff||1; tot += a*c; max += 100*c; coeff += c; }
+  });
+  return { pct: coeff ? Math.round(tot/coeff) : null, tot: Math.round(tot), max, coeff };
+};
+
 // Overall weighted average pct for a student across given matieres (with coefficients)
 window.studentAvgPct = (sid, matieres, trimester) => {
   let totalW = 0, sumCoeff = 0;
@@ -14529,48 +14449,111 @@ window.studentAvgPct = (sid, matieres, trimester) => {
   return sumCoeff ? Math.round(totalW / sumCoeff) : null;
 };
 
-// Rank of a student within their class (1 = best). Returns {pos, total} or null
-window.getRankInClass = (sid) => {
-  const s=DB.students.find(x=>x.id===sid); if(!s) return null;
-  const cl=gc(s.cid); if(!cl) return null;
-  const students=DB.students.filter(x=>x.cid===cl.id);
-  const matieres=getClassMatieres(cl.id);
-  const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-  const score=x=>{
-    let tw=0,sc=0;
-    matieres.forEach(m=>{const a=matAvgPct(x.id,m.name);if(a!==null){const c=m.coeff||1;tw+=a*c;sc+=c;}});
-    const moy=sc?Math.round(tw/sc):0;
-    const cond=(DB.conduct||[]).filter(c=>c.sid===x.id);
-    const cAvg=cond.length?cond.reduce((a,c)=>a+(condMap[c.score]||0),0)/cond.length:3; // défaut "Bien" si aucune conduite — ne pas pénaliser
-    return Math.round(moy*0.85+Math.round(cAvg*25)*0.15);
-  };
-  const ranked=students.map(x=>({id:x.id,total:score(x)})).sort((a,b)=>b.total-a.total);
-  // Ex-aequo: même score → même rang (1, 1, 3, ...)
-  let rank = 1;
-  const rankedWithRank = ranked.map((x, i) => {
-    if (i > 0 && x.total < ranked[i-1].total) rank = i + 1;
-    return {...x, rank};
-  });
-  const me=rankedWithRank.find(x=>x.id===sid);
-  return {pos: me?me.rank:0, total:me?me.total:0, outOf:students.length};
+// ═══════════════════════════════════════════════════════════════════════════
+//  _classer — LA SEULE RÉPONSE À « QUI EST PREMIER ? »
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  La même formule était recopiée QUATRE fois — palmarès de la Direction,
+//  palmarès du parent, rang sur la fiche de l'élève, Top 10 de l'école — et
+//  les quatre copies avaient divergé sur cinq points :
+//
+//    · un enfant SANS note de conduite valait 0 % de conduite ici, 75 % là.
+//      Sur une moyenne de 60 %, cela fait 51 au palmarès et 62 sur sa fiche.
+//      Le même enfant, deux nombres, deux écrans, la même famille devant ;
+//    · un élève ARCHIVÉ (diplômé l'an dernier) restait dans les quatre
+//      classements de l'année en cours ;
+//    · l'ex æquo n'existait que dans UNE des quatre — ailleurs, deux élèves
+//      à égalité recevaient les rangs 3 et 4 ;
+//    · le Top 10 lisait toujours `currentTrimestre` en ignorant le trimestre
+//      choisi à l'écran, à côté d'un palmarès qui, lui, l'écoutait ;
+//    · le Top 10 ne rendait pas `cid`, et DEUX tableaux de bord filtrent le
+//      podium d'une classe sur ce champ : la section « Top palmarès » était
+//      donc VIDE en permanence, sans que rien ne le signale.
+//
+//  Ce n'est pas un choix de style : c'est la panne que Loms redoute le plus —
+//  « imagine qu'un parent voie les cotes de son enfant, et qu'à la fin son
+//  enfant ne réussisse pas ». Tout peut être juste ailleurs ; si deux écrans
+//  se contredisent, la famille cesse d'y croire.
+//
+//  Les règles retenues, une fois pour toutes :
+//    1. conduite absente ⇒ « Bien » (75 %). Ne pas pénaliser un enfant dont
+//       l'enseignant n'a rien saisi. C'était déjà le commentaire écrit dans
+//       deux des quatre copies ;
+//    2. élève archivé ⇒ hors de tout classement de l'année en cours ;
+//    3. ex æquo ⇒ même total, même rang (1, 1, 3…) ;
+//    4. la conduite suit le trimestre demandé QUAND l'enregistrement le porte.
+//       `conduct` n'a pas de colonne `trimestre` : on réconcilie à la lecture
+//       plutôt que de l'inventer. Demandé à ChatGPT — voir DEMANDES_A_CHATGPT.
+//
+//  `eleves`     la liste à classer
+//  `matieresDe` (eleve) → matières prises en compte pour lui
+//  `trim`       'T1'|'T2'|'T3', ou rien pour toute l'année
+// ═══════════════════════════════════════════════════════════════════════════
+window._CONDUITE = {Excellent:4, Bien:3, Moyen:2, Mauvais:1};
+
+// La conduite du trimestre demandé — ou toutes, si aucune ne le porte.
+window._conduiteDe = (sid, trim) => {
+  const tout = (DB.conduct||[]).filter(c => c.sid === sid);
+  if (!trim) return tout;
+  const dutrim = tout.filter(c => (c.trimestre || c.trim || c.trimester) === trim);
+  // Un enregistrement sans trimestre est ancien, pas absent : on ne l'écarte
+  // que si d'autres, eux, savent dire de quel trimestre ils sont.
+  return tout.some(c => c.trimestre || c.trim || c.trimester) ? dutrim : tout;
 };
 
-// School-wide top 10 for current trimester — used on parent profile
-window.getSchoolTop10 = () => {
-  const trim = DB.settings.currentTrimestre || 'T1';
-  const condMap = {Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-  return (DB.students||[]).map(s => {
-    const cl = gc(s.cid); if(!cl) return null;
-    const matieres = getClassMatieres(s.cid); if(!matieres.length) return null;
-    let totalW=0, sumC=0;
-    matieres.forEach(m => { const a=matAvgPct(s.id,m.name,trim); if(a!==null){const c=m.coeff||1;totalW+=a*c;sumC+=c;} });
-    if(!sumC) return null;
-    const moyPct = Math.round(totalW/sumC);
-    const condArr = (DB.conduct||[]).filter(c=>c.sid===s.id);
-    const condAvg = condArr.length ? condArr.reduce((sum,c)=>sum+(condMap[c.score]||0),0)/condArr.length : 3; // défaut "Bien" si aucune conduite — ne pas pénaliser
-    const score = Math.round(moyPct*0.85 + Math.round(condAvg*25)*0.15);
-    return {id:s.id, name:s.name, cl, moyPct, score};
-  }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,10);
+// La conduite en pourcentage. AUCUNE note ⇒ « Bien », jamais 0.
+window._conduitePct = (sid, trim) => {
+  const cs = window._conduiteDe(sid, trim);
+  const moy = cs.length
+    ? cs.reduce((a,c) => a + (window._CONDUITE[c.score]||0), 0) / cs.length
+    : 3;
+  return Math.round(moy * 25);
+};
+
+window._classer = (eleves, matieresDe, trim) => {
+  const vivants = (eleves||[]).filter(s => s && !s.archived);
+  const lignes = vivants.map(s => {
+    const matieres = (typeof matieresDe === 'function' ? matieresDe(s) : matieresDe) || [];
+    let totalPct = 0, sumCoeff = 0;
+    matieres.forEach(m => {
+      const a = matAvgPct(s.id, m.name, trim);
+      if (a !== null) { const c = m.coeff||1; totalPct += a*c; sumCoeff += c; }
+    });
+    const moyPct  = sumCoeff ? Math.round(totalPct/sumCoeff) : 0;
+    const condPct = window._conduitePct(s.id, trim);
+    return {
+      id: s.id, nom: s.name, name: s.name, cid: s.cid, cl: gc(s.cid),
+      moyPct, condPct, total: Math.round(moyPct*0.85 + condPct*0.15),
+      retards: (DB.attendance||[]).filter(a => a.sid===s.id && a.status==='late').length,
+      gradeCount: sumCoeff, eleve: s,
+    };
+  }).sort((a,b) => b.total - a.total);
+  // Ex æquo : même total, même rang (1, 1, 3…)
+  let rang = 1;
+  return lignes.map((l, i) => {
+    if (i > 0 && l.total < lignes[i-1].total) rang = i + 1;
+    return {...l, rang};
+  });
+};
+
+// Rank of a student within their class (1 = best). Returns {pos, total} or null
+window.getRankInClass = (sid, trim) => {
+  const s=DB.students.find(x=>x.id===sid); if(!s) return null;
+  const cl=gc(s.cid); if(!cl) return null;
+  const matieres=getClassMatieres(cl.id);
+  const classement=window._classer(DB.students.filter(x=>x.cid===cl.id), ()=>matieres, trim);
+  const me=classement.find(x=>x.id===sid);
+  return {pos: me?me.rang:0, total: me?me.total:0, outOf: classement.length};
+};
+
+// School-wide top 10 — `cid` est dans la réponse : deux tableaux de bord
+// filtrent le podium d'une classe dessus.
+window.getSchoolTop10 = (trim) => {
+  const t = trim || DB.settings.currentTrimestre || 'T1';
+  return window._classer(DB.students||[], s => getClassMatieres(s.cid), t)
+    .filter(l => l.cl && l.gradeCount)
+    .slice(0, 10)
+    .map(l => ({...l, score: l.total}));
 };
 
 window._gradeTrim = 'T1';
@@ -15994,7 +15977,7 @@ R.cahier_texte = () => {
     const cl=gc(k.cid); if(!cl) return;
     const entries=(DB.cahier_texte||[]).filter(e=>e.cid===k.cid&&e.status==='published').sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const byDate={}; entries.forEach(e=>{if(!byDate[e.date])byDate[e.date]=[];byDate[e.date].push(e);});
-    const upcoming=(DB.cahier_prep||[]).filter(e=>e.cid===k.cid&&e.status!=='fait'&&e.validated).sort((a,b)=>(a.date_prevue||'').localeCompare(b.date_prevue||''));
+    const upcoming=(DB.cahier_prep||[]).map(window._prepLire).filter(e=>e.cid===k.cid&&!e._fait&&e.validated).sort((a,b)=>(a._date||'').localeCompare(b._date||''));
     const [cc]=clsColor(cl.name);
     html+=`<div style="margin-bottom:20px">
       <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:${cc}18;border-radius:14px;border-left:4px solid ${cc};margin-bottom:10px">
@@ -16094,6 +16077,47 @@ window.saveCahier = () => {
   saveToCrypt(); closeModal(); render();
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  _prepLire — UNE fiche de préparation, DEUX vocabulaires
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  `cahier_prep` porte deux générations de champs, nées à des époques
+//  différentes et toutes deux encore ÉCRITES aujourd'hui :
+//
+//    l'écran de navigation  content · date_prevue · by         · status
+//    le studio du profil    titre   · date_lesson · teacher_id · statut
+//                           + revision/intro, developpement, synthese/conclusion
+//
+//  Les colonnes des deux existent en base : rien n'est rejeté, donc rien ne
+//  se voit. Mais chaque écran ne lisait QUE la moitié de la table. Une fiche
+//  remplie dans le studio n'apparaissait pas au suivi de la Direction ; une
+//  fiche remplie à la navigation n'apparaissait pas dans le profil. Personne
+//  n'a de message d'erreur : la ligne manque, simplement.
+//
+//  On réconcilie À LA LECTURE plutôt que de reprendre les écritures d'une
+//  application en service. Champs rendus, tous préfixés `_` :
+//    _date · _titre · _auteur · _corps · _statut · _fait
+// ═══════════════════════════════════════════════════════════════════════════
+window._prepLire = (p) => {
+  if (!p) return {};
+  const prem = (...v) => v.find(x => x !== undefined && x !== null && x !== '') ?? '';
+  const corps = [p.objectifs, p.prerequis, p.revision, p.intro, p.developpement,
+                 p.synthese, p.conclusion, p.evaluation, p.content]
+    .filter(x => x && String(x).trim()).join('\n\n');
+  const titre = prem(p.titre, (p.content||'').split('\n')[0].slice(0, 80));
+  const statut = prem(p.statut, p.status, 'brouillon');
+  return {
+    ...p,
+    _date:   prem(p.date_lesson, p.date_prevue, p.semaine, p.created_at),
+    _titre:  titre || 'Sans titre',
+    _auteur: prem(p.teacher_id, p.by) || null,
+    _corps:  corps,
+    _statut: statut,
+    // « fait » et « termine » disent la même chose dans les deux vocabulaires.
+    _fait:   statut === 'fait' || statut === 'termine' || statut === 'terminé',
+  };
+};
+
 // ── CAHIER DE PRÉPARATION (planification des leçons à venir) ──
 R.cahier_prep = () => {
   const role=S.user.role;
@@ -16101,26 +16125,33 @@ R.cahier_prep = () => {
   // ── DIRECTION : suivi des préparations par classe ──────────────────────────
   if(role==='direction'||role==='direction2') {
     let html=`<div class="ww-toolbar"><span style="font-size:16px;font-weight:700">📋 Suivi Cahier de préparation</span></div>`;
-    const all=DB.cahier_prep||[];
+    // Les deux vocabulaires se lisent ici — voir `_prepLire`. Sans lui, la
+    // moitié des fiches manquait à ce suivi sans qu'aucune erreur ne le dise.
+    const all=(DB.cahier_prep||[]).map(window._prepLire);
     if(!all.length) return html+`<div style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:60px;margin-bottom:16px">📋</div>Aucune préparation enregistrée</div>`;
     DB.classes.forEach(cl=>{
-      const items=all.filter(e=>e.cid===cl.id).sort((a,b)=>(a.date_prevue||'').localeCompare(b.date_prevue||''));
+      const items=all.filter(e=>e.cid===cl.id).sort((a,b)=>(a._date||'').localeCompare(b._date||''));
       if(!items.length) return;
       const [cc]=clsColor(cl.name);
-      const done=items.filter(e=>e.status==='fait').length;
-      const late=items.filter(e=>e.status!=='fait'&&e.date_prevue<today()).length;
+      const done=items.filter(e=>e._fait).length;
+      const late=items.filter(e=>!e._fait&&e._date&&e._date<today()).length;
       html+=`<div class="ww-section" style="margin-bottom:14px">
         <div class="ww-section-header">
           <span class="ww-section-title" style="color:${cc}">${esc(cl.name)}</span>
           <span style="font-size:11px;color:var(--text-muted)">${done}/${items.length} fait${late?` · ⚠️ ${late} en retard`:''}</span>
         </div>
-        ${items.map(e=>`<div class="ww-item">
-          <div class="ww-item-icon" style="background:${e.status==='fait'?'#d8f3e6':e.date_prevue<today()?'#fee2e2':e.validated?'#dbeafe':'#fdeccd'}">${e.status==='fait'?'✅':e.date_prevue<today()?'⚠️':e.validated?'✔️':'🕓'}</div>
+        ${items.map(e=>{
+          const enRetard=!e._fait&&e._date&&e._date<today();
+          const d=e._date?new Date(e._date+'T12:00'):null;
+          // Ne rien afficher vaut mieux qu'afficher « Invalid Date ».
+          const dLib=d&&!isNaN(d)?d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'';
+          return `<div class="ww-item">
+          <div class="ww-item-icon" style="background:${e._fait?'#d8f3e6':enRetard?'#fee2e2':e.validated?'#dbeafe':'#fdeccd'}">${e._fait?'✅':enRetard?'⚠️':e.validated?'✔️':'🕓'}</div>
           <div class="ww-item-content">
-            <div class="ww-item-title">${esc(e.matiere)} <span style="font-size:11px;color:var(--text-muted)">${new Date(e.date_prevue).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>${!e.validated&&e.status!=='fait'?` <span style="font-size:10px;background:#fdeccd;color:#92400e;padding:1px 6px;border-radius:8px;font-weight:700">À valider</span>`:''}</div>
-            <div class="ww-item-sub" style="white-space:normal;line-height:1.5">${esc(e.content)}</div>
+            <div class="ww-item-title">${esc(e.matiere||e._titre)} ${dLib?`<span style="font-size:11px;color:var(--text-muted)">${dLib}</span>`:''}${!e.validated&&!e._fait?` <span style="font-size:10px;background:#fdeccd;color:#92400e;padding:1px 6px;border-radius:8px;font-weight:700">À valider</span>`:''}</div>
+            <div class="ww-item-sub" style="white-space:normal;line-height:1.5">${esc(e._corps||e._titre)}</div>
           </div>
-        </div>`).join('')}
+        </div>`;}).join('')}
       </div>`;
     });
     return html;
@@ -16130,23 +16161,26 @@ R.cahier_prep = () => {
   if(role==='enseignant') {
     const mc=getMyClass();
     if(!mc.cl) return `<div style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:60px;margin-bottom:16px">📋</div>Aucune classe assignée</div>`;
-    const items=(DB.cahier_prep||[]).filter(e=>e.cid===mc.cl.id&&e.by===S.user.id).sort((a,b)=>(a.date_prevue||'').localeCompare(b.date_prevue||''));
+    // L'enseignant voit SES fiches, quel que soit l'écran qui les a écrites.
+    const items=(DB.cahier_prep||[]).map(window._prepLire).filter(e=>e.cid===mc.cl.id&&e._auteur===S.user.id).sort((a,b)=>(a._date||'').localeCompare(b._date||''));
     return `
     <div class="ww-toolbar">
       <span style="font-size:16px;font-weight:700">📋 ${t('Cahier de préparation','Lesson Plan')} — ${esc(mc.cl.name)}</span>
       <button class="btn btn-primary" onclick="openCahierPrepM()">➕ ${t('Planifier','Plan')}</button>
     </div>
     ${items.length?items.map((e,i)=>{
-      const isLate=e.status!=='fait'&&e.date_prevue<today();
-      const pendingValidation=e.status!=='fait'&&!e.validated;
+      const isLate=!e._fait&&e._date&&e._date<today();
+      const pendingValidation=!e._fait&&!e.validated;
+      const _d=e._date?new Date(e._date+'T12:00'):null;
+      const _dLib=_d&&!isNaN(_d)?_d.toLocaleDateString(getLang()==='en'?'en-GB':'fr-FR',{day:'numeric',month:'long'}):'';
       return `<div class="ww-item" style="animation-delay:${i*.04}s">
-        <div class="ww-item-icon" style="background:${e.status==='fait'?'#d8f3e6':isLate?'#fee2e2':pendingValidation?'#fdeccd':'#dbeafe'}">${e.status==='fait'?'✅':isLate?'⚠️':pendingValidation?'🕓':'✔️'}</div>
+        <div class="ww-item-icon" style="background:${e._fait?'#d8f3e6':isLate?'#fee2e2':pendingValidation?'#fdeccd':'#dbeafe'}">${e._fait?'✅':isLate?'⚠️':pendingValidation?'🕓':'✔️'}</div>
         <div class="ww-item-content">
-          <div class="ww-item-title">${esc(e.matiere)} <span style="font-size:11px;color:var(--text-muted)">${new Date(e.date_prevue).toLocaleDateString(getLang()==='en'?'en-GB':'fr-FR',{day:'numeric',month:'long'})}</span></div>
-          <div class="ww-item-sub" style="white-space:normal;line-height:1.5;margin-top:4px">${esc(e.content)}</div>
-          ${e.status!=='fait'?`<div style="font-size:11px;font-weight:700;color:${pendingValidation?'#92400e':'#1f9d6b'};margin-top:4px">${pendingValidation?'🕓 '+t('En attente de validation Direction','Awaiting management validation'):'✔️ '+t('Validé par la Direction','Validated by management')}</div>`:''}
+          <div class="ww-item-title">${esc(e.matiere||e._titre)} ${_dLib?`<span style="font-size:11px;color:var(--text-muted)">${_dLib}</span>`:''}</div>
+          <div class="ww-item-sub" style="white-space:normal;line-height:1.5;margin-top:4px">${esc(e._corps||e._titre)}</div>
+          ${!e._fait?`<div style="font-size:11px;font-weight:700;color:${pendingValidation?'#92400e':'#1f9d6b'};margin-top:4px">${pendingValidation?'🕓 '+t('En attente de validation Direction','Awaiting management validation'):'✔️ '+t('Validé par la Direction','Validated by management')}</div>`:''}
           <div style="display:flex;gap:8px;margin-top:8px">
-            ${e.status!=='fait'?`<button class="btn btn-primary btn-sm" onclick="markCahierPrepDone('${e.id}')">✅ ${t('Marquer fait','Mark done')}</button>`:''}
+            ${!e._fait?`<button class="btn btn-primary btn-sm" onclick="markCahierPrepDone('${e.id}')">✅ ${t('Marquer fait','Mark done')}</button>`:''}
             <button class="btn btn-outline btn-sm" onclick="deleteCahierPrep('${e.id}')">🗑️</button>
           </div>
         </div>
@@ -22241,16 +22275,7 @@ window.genererPalmaresAnnuel = () => {
     const stds=students.filter(s=>s.cid===cl.id);
     if(!stds.length) return;
     const matieres=getClassMatieres(cl.id);
-    const ranked=stds.map(s=>{
-      let totalPct=0,sumC=0;
-      matieres.forEach(m=>{const a=matAvgPct(s.id,m.name);if(a!==null){const c=m.coeff||1;totalPct+=a*c;sumC+=c;}});
-      const moyPct=sumC?Math.round(totalPct/sumC):0;
-      const conduct=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-      const condAvg=conduct.length?conduct.reduce((a,c)=>a+(condMap[c.score]||0),0)/conduct.length:0;
-      const total=Math.round(moyPct*0.85+Math.round(condAvg*25)*0.15);
-      return {...s,moyPct,total};
-    }).sort((a,b)=>b.total-a.total);
+    const ranked=window._classer(stds,()=>matieres).map(l=>({...l.eleve,...l}));
 
     classesHtml+=`
     <div style="margin-bottom:30px;page-break-inside:avoid">
@@ -22530,17 +22555,12 @@ window.printPVDeliberation = () => {
     if(!studs.length) return '';
     const mats=getClassMatieres(cl.id);
     const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-    const ranked=studs.map(s=>{
-      let tw=0,sw=0;
-      mats.forEach(m=>{const a=matAvgPct(s.id,m.name,trim);if(a!==null){const c=m.coeff||1;tw+=a*c;sw+=c;}});
-      const moy=sw?Math.round(tw/sw):0;
-      const conds=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const cAvg=conds.length?conds.reduce((a,c)=>a+(condMap[c.score]||0),0)/conds.length:0;
-      const total=Math.round(moy*0.85+Math.round(cAvg*25)*0.15);
-      const mention=moy>=80?'Grande Distinction':moy>=70?'Distinction':moy>=60?'Satisfaction':moy>=50?'Avertissement':'Échec';
-      const decision=moy>=50?'ADMIS(E)':'AJOURNÉ(E)';
-      return{...s,moy,total,mention,decision};
-    }).sort((a,b)=>b.total-a.total);
+    const ranked=window._classer(studs,()=>mats,trim).map(l=>{
+      const moy=l.moyPct;
+      return{...l.eleve,...l,moy,
+        mention:moy>=80?'Grande Distinction':moy>=70?'Distinction':moy>=60?'Satisfaction':moy>=50?'Avertissement':'Échec',
+        decision:moy>=50?'ADMIS(E)':'AJOURNÉ(E)'};
+    });
     const admis=ranked.filter(s=>s.decision==='ADMIS(E)').length;
     const echec=ranked.filter(s=>s.decision==='AJOURNÉ(E)').length;
     return `
@@ -22681,15 +22701,9 @@ window.printReport = (type) => {
     const profFR=isBilingual?gu(cl.teacher_id):cl?gu(cl.teacher_id):null;
     const profEN=isBilingual?gu(cl.teacher_id_en):null;
     const students=cl?DB.students.filter(s=>s.cid===cl.id):[];
-    const ranked=students.map(s=>{
-      const moy=studentAvgPct(s.id,matieres);
-      const conduct=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const cm={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-      const cAvg=conduct.length?conduct.reduce((a,c)=>a+(cm[c.score]||0),0)/conduct.length:0;
-      return{id:s.id,moy,cond:Math.round(cAvg*25)};
-    }).sort((a,b)=>(b.moy*0.85+b.cond*0.15)-(a.moy*0.85+a.cond*0.15));
-    const pos=ranked.findIndex(r=>r.id===k.id)+1;
+    const ranked=window._classer(students,()=>matieres).map(l=>({...l,moy:l.moyPct,cond:l.condPct}));
     const me=ranked.find(r=>r.id===k.id);
+    const pos=me?me.rang:0;
     const mention=me?(me.moy>=90?'Excellent':me.moy>=75?'Très Bien':me.moy>=60?'Bien':me.moy>=50?'Passable':'À améliorer'):'—';
     const mColor=me&&me.moy>=75?'#1f9d6b':me&&me.moy>=50?'#d98a2b':'#dc2626';
 
@@ -22749,8 +22763,8 @@ window.printReport = (type) => {
       const gradeMatSet=new Set((DB.grades||[]).filter(g=>studs.some(s=>s.id===g.sid)).map(g=>g.matiere));
       const mats=clMats.filter(m=>gradeMatSet.has(m.name));
       const matNames=mats.map(m=>m.name);
-      const ranked=studs.map(s=>{const avg=studentAvgPct(s.id,mats);return{s,avg};}).sort((a,b)=>b.avg-a.avg);
-      return `<div class="ch">🏆 ${esc(cl.name)}</div><table><tr><th>Rang</th><th>Nom</th>${matNames.map(m=>`<th style="font-size:10px">${esc(m)}</th>`).join('')}<th>Moy.</th><th>Mention</th></tr>${ranked.map(({s,avg},i)=>{const m=avg>=90?'Excellent':avg>=75?'Bien':avg>=60?'Assez bien':avg>=50?'Passable':'Insuffisant';const mc=avg>=75?'paid':avg>=50?'warn':'unpaid';return`<tr><td style="font-weight:700;color:${i<3?'#d98a2b':'#aaa'}">${['🥇','🥈','🥉'][i]||i+1}</td><td style="font-weight:600">${esc(s.name)}</td>${matNames.map(mt=>{const a=matAvgPct(s.id,mt);return`<td style="text-align:center;color:${a!==null&&a>=50?'#1f9d6b':'#dc2626'};font-weight:600">${a!==null?a+'%':'—'}</td>`;}).join('')}<td style="font-weight:800;text-align:center;color:${avg>=50?'#1f9d6b':'#dc2626'}">${avg}%</td><td><span class="pill ${mc}">${m}</span></td></tr>`;}).join('')}</table>`;
+      const ranked=window._classer(studs,()=>mats).map(l=>({s:l.eleve,avg:l.moyPct,rang:l.rang}));
+      return `<div class="ch">🏆 ${esc(cl.name)}</div><table><tr><th>Rang</th><th>Nom</th>${matNames.map(m=>`<th style="font-size:10px">${esc(m)}</th>`).join('')}<th>Moy.</th><th>Mention</th></tr>${ranked.map(({s,avg,rang})=>{const m=avg>=90?'Excellent':avg>=75?'Bien':avg>=60?'Assez bien':avg>=50?'Passable':'Insuffisant';const mc=avg>=75?'paid':avg>=50?'warn':'unpaid';return`<tr><td style="font-weight:700;color:${rang<=3?'#d98a2b':'#aaa'}">${['🥇','🥈','🥉'][rang-1]||rang}</td><td style="font-weight:600">${esc(s.name)}</td>${matNames.map(mt=>{const a=matAvgPct(s.id,mt);return`<td style="text-align:center;color:${a!==null&&a>=50?'#1f9d6b':'#dc2626'};font-weight:600">${a!==null?a+'%':'—'}</td>`;}).join('')}<td style="font-weight:800;text-align:center;color:${avg>=50?'#1f9d6b':'#dc2626'}">${avg}%</td><td><span class="pill ${mc}">${m}</span></td></tr>`;}).join('')}</table>`;
     }).join('');
 
   } else if(type==='attendance'){
@@ -22881,21 +22895,15 @@ window.downloadBulletin = (sid, _forceTrim) => {
   const titulaire=cl?(gu(cl.titulaire_id)||profFR):null;
   const students=cl?DB.students.filter(s=>s.cid===cl.id):[];
   // Rank with coefficients
-  const ranked=students.map(s=>{
-    let tw=0,sw=0;
-    matieres.forEach(m=>{const a=matAvgPct(s.id,m.name);if(a!==null){const c=m.coeff||1;tw+=a*c;sw+=c;}});
-    const conds=(DB.conduct||[]).filter(c=>c.sid===s.id);
-    const cm={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-    const cAvg=conds.length?conds.reduce((a,c)=>a+(cm[c.score]||0),0)/conds.length:0;
-    return{id:s.id,moy:sw?Math.round(tw/sw):0,cond:Math.round(cAvg*25)};
-  }).sort((a,b)=>(b.moy*0.85+b.cond*0.15)-(a.moy*0.85+a.cond*0.15));
-  const pos=ranked.findIndex(r=>r.id===k.id)+1;
+  // Le rang imprimé est celui du palmarès — voir `_classer`.
+  const ranked=window._classer(students,()=>matieres).map(l=>({...l,moy:l.moyPct,cond:l.condPct}));
   const me=ranked.find(r=>r.id===k.id);
+  const pos=me?me.rang:0;
   // Weighted total points
   const frMats=isBilingual?matieres.filter(m=>m.lang==='fr'):matieres.filter(m=>m.lang!=='en');
   const enMats=matieres.filter(m=>m.lang==='en');
   const coMats=matieres.filter(m=>m.lang==='commun');
-  const calcSection=mats=>{let tot=0,max=0;mats.forEach(m=>{const a=matAvgPct(k.id,m.name);if(a!==null){const c=m.coeff||1;tot+=a*c;max+=100*c;}});return{tot,max};};
+  const calcSection=mats=>window._totalSection(k.id,mats);
   const frC=calcSection(frMats), enC=calcSection(enMats), coC=calcSection(coMats);
   const grandTot=frC.tot+enC.tot+coC.tot, grandMax=frC.max+enC.max+coC.max;
   const grandPct=grandMax?Math.round(grandTot/grandMax*100):0;
@@ -23013,14 +23021,8 @@ window.exportAllBulletinsPDF = (cid, forceTrim) => {
   const enMatsAll=matieres.filter(m=>m.lang==='en');
   const coMatsAll=matieres.filter(m=>m.lang==='commun');
   // Rank all students for position
-  const ranked=students.map(s=>{
-    let tw=0,sw=0;
-    matieres.forEach(m=>{const a=matAvgPct(s.id,m.name);if(a!==null){const c=m.coeff||1;tw+=a*c;sw+=c;}});
-    const conds=(DB.conduct||[]).filter(c=>c.sid===s.id);
-    const cm={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-    const cAvg=conds.length?conds.reduce((a,c)=>a+(cm[c.score]||0),0)/conds.length:0;
-    return{id:s.id,moy:sw?Math.round(tw/sw):0,cond:Math.round(cAvg*25)};
-  }).sort((a,b)=>(b.moy*0.85+b.cond*0.15)-(a.moy*0.85+a.cond*0.15));
+  // Le rang imprimé est celui du palmarès — voir `_classer`.
+  const ranked=window._classer(students,()=>matieres).map(l=>({...l,moy:l.moyPct,cond:l.condPct}));
   const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#1a1a1a;background:#fff;font-size:12.5px}.page{page-break-after:always;margin-bottom:0}.hdr{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #556777;margin-bottom:14px}.hl{display:flex;align-items:center;gap:12px}.logo{width:56px;height:56px;object-fit:cover;border-radius:50%;border:2px solid #556777}.si h1{font-size:15px;font-weight:800;color:#556777;line-height:1.2}.si .s{font-size:10px;color:#666;margin-top:2px}.hr{text-align:right}.brand{font-size:12px;font-weight:700;color:#556777}.meta{font-size:10px;color:#777;margin-top:2px}.dtitle{text-align:center;margin:12px 0 14px;border:2px solid #556777;border-radius:8px;padding:10px}.dtitle h2{font-size:14px;font-weight:800;color:#556777;text-transform:uppercase;letter-spacing:1px}.dtitle .yr{font-size:11px;color:#555;margin-top:3px}.student-card{display:flex;align-items:center;gap:18px;padding:14px;background:#f8faff;border:1.5px solid #dadee2;border-radius:10px;margin-bottom:16px}.stu-photo{width:80px;height:100px;border-radius:8px;overflow:hidden;background:#dadee2;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex-shrink:0;border:2.5px solid #556777}.stu-info{flex:1}.stu-name{font-size:17px;font-weight:800;color:#556777}.stu-meta{font-size:11px;color:#555;margin-top:3px}.stu-rank{text-align:center;min-width:90px}.stu-pct{font-size:26px;font-weight:900}.stu-pos{font-size:11px;color:#666;margin:2px 0}.stu-mention{font-size:13px;font-weight:800}.result-box{display:inline-block;padding:6px 16px;border-radius:8px;font-size:12px;font-weight:800;margin-top:8px}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#556777;color:#fff;padding:7px 6px;font-size:10.5px;text-align:center;font-weight:600}th:first-child{text-align:left}td{padding:5px 6px;font-size:11.5px;border-bottom:1px solid #e8ecf3;vertical-align:middle}td:first-child{font-size:12px}.total-row td{font-weight:800;background:#fff7ee;border-top:2px solid #556777}.section-hdr td{background:#556777;color:#fff;font-weight:700;font-size:11px;padding:5px 6px}.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:22px}.sig-box{text-align:center}.sig-line{height:56px;border-bottom:1.5px solid #aaa;margin-bottom:6px}.sig-label{font-size:10px;color:#666}.footer{margin-top:18px;padding-top:8px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10px;color:#999}.stat-row{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}.stat-box{flex:1;min-width:100px;padding:8px 10px;border:1px solid #dde5f0;border-radius:8px;text-align:center}.stat-num{font-size:18px;font-weight:800}.stat-lbl{font-size:10px;color:#666;margin-top:2px}@media print{@page{margin:10mm;size:A4}}`;
   const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:'<div style="width:56px;height:56px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">🏫</div>'}<div class="si"><h1>${esc(school)}</h1><div class="s">${esc(schoolSub)}</div><div class="s">📞 ${esc(phone)}${dgep?` · N° DGEP: ${esc(dgep)}`:''}</div></div></div><div class="hr"><div class="brand">The Wise School International</div><div class="meta">Année ${yr}</div><div class="meta">${printDate}</div></div></div>`;
   const ftr=`<div class="footer"><span>© ${new Date().getFullYear()} ${esc(school)}</span><span>${esc(cl.name)} — ${trim}</span><span>Bulletin de l'école</span></div>`;
@@ -23043,9 +23045,9 @@ window.exportAllBulletinsPDF = (cid, forceTrim) => {
     </tr>`;
   }).join('');
   const pages=students.map(k=>{
-    const pos=ranked.findIndex(r=>r.id===k.id)+1;
     const me=ranked.find(r=>r.id===k.id);
-    const calcSec=mats=>{let tot=0,max=0;mats.forEach(m=>{const a=matAvgPct(k.id,m.name);if(a!==null){const c=m.coeff||1;tot+=a*c;max+=100*c;}});return{tot,max};};
+    const pos=me?me.rang:0;
+    const calcSec=mats=>window._totalSection(k.id,mats);
     const frC=calcSec(frMatsAll),enC=calcSec(enMatsAll),coC=calcSec(coMatsAll);
     const grandTot=frC.tot+enC.tot+coC.tot,grandMax=frC.max+enC.max+coC.max;
     const grandPct=grandMax?Math.round(grandTot/grandMax*100):0;
@@ -24839,13 +24841,13 @@ R.profil_enseignant = () => {
     <!-- ══ CAHIER DE PRÉPARATION ══ -->
     <div data-ptab="prep" data-ptab-mode="dark" style="${tab==='prep'?'':'display:none'}">
       ${(()=>{
-        const myPreps=(DB.cahier_prep||[]).filter(p=>p.teacher_id===u.id).sort((a,b)=>(b.date_lesson||b.semaine||'').localeCompare(a.date_lesson||a.semaine||''));
+        const myPreps=(DB.cahier_prep||[]).map(window._prepLire).filter(p=>p._auteur===u.id).sort((a,b)=>(b._date||'').localeCompare(a._date||''));
         const selMonth=window._prepMonth||today().slice(0,7);
         const selMode=window._prepMode||'all';
         const EDAY_L=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
         const EPER=['07h30–08h30','08h30–09h30','09h30–10h30','10h30–11h30','11h30–12h30','14h00–15h00','15h00–16h00'];
         const filtered=myPreps.filter(p=>{
-          const inMonth=!selMonth||(p.date_lesson||p.semaine||'').startsWith(selMonth);
+          const inMonth=!selMonth||(p._date||'').startsWith(selMonth);
           const modeOk=selMode==='all'||(selMode==='linked'?!!p.linked_day:!p.linked_day);
           return inMonth&&modeOk;
         });
@@ -24912,7 +24914,7 @@ R.profil_enseignant = () => {
 
         <!-- Stats rapides -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;animation:fadeInUp .25s .08s ease both">
-          ${[[myPreps.length,t('Total','Total'),'#5b9be8'],[myPreps.filter(p=>p.statut==='finalise').length,t('Finalisées','Final'),'#34d399'],[myPreps.filter(p=>!p.statut||p.statut==='brouillon').length,t('Brouillons','Drafts'),'#fbbf24']].map(([n,lbl,c])=>`
+          ${[[myPreps.length,t('Total','Total'),'#5b9be8'],[myPreps.filter(p=>p._statut==='finalise').length,t('Finalisées','Final'),'#34d399'],[myPreps.filter(p=>p._statut==='brouillon').length,t('Brouillons','Drafts'),'#fbbf24']].map(([n,lbl,c])=>`
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px;text-align:center;border:1px solid rgba(255,255,255,.08)">
             <div style="font-size:22px;font-weight:900;color:${c}">${n}</div>
             <div style="font-size:10px;color:rgba(255,255,255,.5);margin-top:2px">${lbl}</div>
@@ -24923,13 +24925,13 @@ R.profil_enseignant = () => {
         ${filtered.length?filtered.map((p,pi)=>{
           const dayLbl=p.linked_day?EDAY_L[['lun','mar','mer','jeu','ven','sam'].indexOf(p.linked_day)]||'':'';
           const perLbl=p.linked_period!=null?EPER[p.linked_period]||'':'';
-          const statut=p.statut||'brouillon';
+          const statut=p._statut;
           return `<div class="pt-glass" style="border-radius:16px;padding:14px;margin-bottom:12px;animation:fadeInUp .3s ${pi*.06}s ease both;border-left:3px solid ${statClr[statut]||'rgba(255,255,255,.2)'}">
             <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
               <div style="width:38px;height:38px;border-radius:11px;background:${p.linked_day?'rgba(32,95,174,.35)':'rgba(155,111,212,.3)'};display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${p.linked_day?'🔗':'✏️'}</div>
               <div style="flex:1;min-width:0">
-                <div style="font-size:14px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.titre||t('Sans titre','Untitled'))}</div>
-                <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:2px">${esc(p.matiere||'—')} · ${p.date_lesson||p.semaine||'—'}${dayLbl?' · '+dayLbl+(perLbl?' '+perLbl:''):''}</div>
+                <div style="font-size:14px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p._titre)}</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:2px">${esc(p.matiere||'—')} · ${p._date||'—'}${dayLbl?' · '+dayLbl+(perLbl?' '+perLbl:''):''}</div>
               </div>
               <span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;background:${statClr[statut]||'rgba(255,255,255,.12)'};color:#1a2333;white-space:nowrap;flex-shrink:0">${statLbl[statut]||statut}</span>
             </div>
@@ -25081,7 +25083,7 @@ window.savePrep = (prepId) => {
   const mc=getMyClass(); const cl=mc.cl;
   const now=today();
   const data={
-    id: prepId||'prep_'+Date.now(),
+    id: prepId||_uid('prep_'),
     teacher_id: S.user.id,
     cid: cl?.id||null,
     matiere: matiere.trim(),
@@ -25319,8 +25321,8 @@ R.profil_parent = () => {
     const moy=sumC?Math.round(moyPct/sumC):null;
     const mention=moy===null?null:moy>=90?{l:'Excellent',c:'#1f9d6b',bg:'#f0fdf4'}:moy>=75?{l:'Très Bien',c:'#2f8fa6',bg:'#eaf3fc'}:moy>=60?{l:'Bien',c:'#2f7bd6',bg:'#eaf3fc'}:moy>=50?{l:'Assez Bien',c:'#d98a2b',bg:'#fffbeb'}:{l:'À améliorer',c:'#dc2626',bg:'#fef2f2'};
     const classStudents=cl?(DB.students||[]).filter(s=>s.cid===cl.id):[];
-    const ranked=classStudents.map(s=>{let tp=0,sc=0;matieres.forEach(m=>{const a=matAvgPct(s.id,m.name,trim);if(a!==null){const c=m.coeff||1;tp+=a*c;sc+=c;}});return{id:s.id,score:sc?Math.round(tp/sc):0};}).sort((a,b)=>b.score-a.score);
-    const rank=ranked.findIndex(s=>s.id===kid.id)+1;
+    const ranked=window._classer(classStudents,()=>matieres,trim);
+    const rank=(ranked.find(s=>s.id===kid.id)||{}).rang||0;
     const photo=kid.photo||kid.photo_url;
 
     // SVG ring for payment
@@ -26677,14 +26679,9 @@ window.exportArchivePDF = () => {
     const studs = DB.students.filter(s=>s.cid===cl.id);
     if(!studs.length) return '';
     const mats = getClassMatieres(cl.id);
-    const ranked = studs.map(s=>{
-      let tot=0,cnt=0;
-      mats.forEach(m=>{const a=matAvgPct(s.id,m.name);if(a!==null){tot+=a;cnt++;}});
-      const moy = cnt?Math.round(tot/cnt):0;
-      const cond = (DB.conduct||[]).filter(c=>c.sid===s.id);
-      const cAvg = cond.length?cond.reduce((a,c)=>a+({Excellent:4,Bien:3,Moyen:2,Mauvais:1}[c.score]||0),0)/cond.length:3; // défaut "Bien" si aucune conduite — ne pas pénaliser
-      return {...s, moy, score:Math.round(moy*0.85+Math.round(cAvg*25)*0.15)};
-    }).sort((a,b)=>b.score-a.score);
+    // Celui-ci ignorait les coefficients : une matière à coeff 3 pesait
+    // autant qu'une matière à coeff 1. Il passe par `_classer` comme les autres.
+    const ranked = window._classer(studs,()=>mats).map(l=>({...l.eleve,...l,moy:l.moyPct,score:l.total}));
     const medals=['🥇','🥈','🥉'];
     return `<div class="section">
       <div class="section-title">🏫 ${esc(cl.name)} <span style="font-weight:400;font-size:10px;opacity:.8">(${studs.length} élèves)</span></div>
@@ -26902,9 +26899,9 @@ R.acces_parents = () => {
         ${par?`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border-radius:8px;margin-bottom:8px">
           <span style="font-size:11px;color:var(--text-muted)">👨‍👩‍👧</span>
           <span style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(par.name)}</span>
-          ${par.pin&&!par.pin_hashed?`<span style="font-family:monospace;font-size:12px;font-weight:700;padding:2px 8px;background:rgba(59,110,240,.2);color:#93c5fd;border-radius:8px;flex-shrink:0">PIN: ${par.pin}</span>`:''}
+          <!-- Le PIN du parent s'affichait ici en clair, à côté de son nom. -->
           ${par.phone?waBtn(par.phone,par.name):''}
-          <button onclick="resetParentPin('${par.id}')" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer;flex-shrink:0;color:var(--text)" title="Réinitialiser le PIN">🔑</button>
+          <button onclick="resetParentPin('${par.id}')" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer;flex-shrink:0;color:var(--text)" title="Envoyer un lien de connexion">🔑</button>
         </div>`:`<div style="font-size:12px;color:#fbbf24;margin-bottom:8px;padding:6px 10px;background:rgba(217,158,11,.18);border-radius:8px">⚠️ Aucun compte parent lié</div>`}
         ${pTotal>0?`<div style="margin-bottom:8px">
           <div style="height:6px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden">
