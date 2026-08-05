@@ -750,3 +750,89 @@ P0-8 (registre des cartes) · P0-9 (détection mensuelle) · P0-10 (le premier
 compte Direction) · P0-11 (`conduct.trimestre`) · P0-12 (Direction 2 crée des
 comptes) · P0-13 (supprimer un compte ne supprime pas l'identité Auth) ·
 P0-14 (`get_safe_settings` absente du dépôt).
+
+---
+
+# 5 août 2026 — P0-18 · L'ENVOI DES COURRIELS NE TIENDRA PAS À 300 PARENTS
+
+**Loms, mot pour mot :** *« l'application sera utilisée chez plusieurs parents,
+il faut faire une chose stable. Imagine que 20 parents réinitialisent leur mot
+de passe — on doit trouver une solution stable et puissante. »*
+
+C'est la bonne question, et elle ne se règle pas dans le navigateur.
+
+## Le point qui casse
+
+Toute la chaîne d'accès repose sur un courriel :
+
+```
+création du profil → invitation par courriel → la personne choisit son mot de passe
+mot de passe perdu → lien par courriel → nouveau mot de passe
+```
+
+**Le service d'envoi intégré de Supabase n'est pas prévu pour la production.**
+Il est limité à quelques messages par heure, et Supabase le dit lui-même. À
+350 élèves, une rentrée envoie des centaines d'invitations en deux jours ; une
+panne de mot de passe un lundi matin en envoie vingt en dix minutes.
+
+Ce qui se passe alors n'est pas une erreur visible : **les courriels ne partent
+tout simplement pas**. Le parent ne reçoit rien, rappelle l'école, et personne
+ne sait dire pourquoi. C'est exactement l'échec silencieux que ce projet
+traque partout ailleurs.
+
+## Ce que je te demande
+
+**1. Configurer un SMTP réel dans le projet Supabase** (Authentication →
+   Emails → SMTP Settings). L'école a maintenant son propre serveur de
+   messagerie :
+
+```
+   serveur   smtp.cslesage.com
+   port      465 (SSL)
+   compte    une adresse de l'école, à créer par la Direction
+```
+
+   Vérifié en direct aujourd'hui : `MX`, `SPF` et `DKIM` de `cslesage.com`
+   sont en place et corrects. Les messages partiront donc au nom de l'école et
+   n'iront pas dans les indésirables.
+
+   **Dis-moi si tu préfères un service transactionnel** (Resend, Brevo,
+   Postmark…) plutôt que le SMTP de LWS : un hébergeur mutualisé plafonne
+   souvent l'envoi à quelques centaines de messages par jour, ce qui suffit
+   peut-être — mais c'est toi qui connais le volume, et c'est à vérifier
+   AVANT la rentrée, pas pendant.
+
+**2. Me dire les limites réelles une fois posé** : combien de messages par
+   heure, par jour. J'en ai besoin pour savoir si l'écran doit freiner les
+   envois en masse ou non — et pour le dire à la Direction plutôt que de la
+   laisser deviner.
+
+**3. Vérifier ce qui se passe quand un envoi échoue.** Aujourd'hui
+   `invite-school-account` rend `{ok:true, code:'ACCOUNT_INVITED'}` — mais
+   est-ce que ce `ok:true` signifie « le courriel est PARTI » ou seulement
+   « l'invitation est enregistrée » ? L'écran annonce « Invitation envoyée à
+   … » sur la foi de cette réponse. Si le message n'est jamais parti, l'école
+   attend une famille qui n'a rien reçu.
+
+   **Si tu ne peux pas garantir l'envoi, dis-le : je change la phrase.** Une
+   réserve honnête vaut mieux qu'une confirmation fausse.
+
+## La question de fond, qui appartient à Loms
+
+Un parent de Kinshasa n'a pas toujours une adresse électronique qu'il relève.
+Si l'expérience montre que beaucoup n'en ont pas, la voie du courriel restera
+fragile quelle que soit la qualité du serveur.
+
+**Je ne tranche pas** — c'est une décision de Loms, et le choix du 4 août était
+le courriel. Je signale seulement qu'il existe d'autres voies, pour qu'il
+décide en connaissance de cause :
+
+| voie | ce qu'elle demande |
+|---|---|
+| courriel (aujourd'hui) | chaque parent relève une adresse |
+| code par SMS | un fournisseur SMS, et un coût par message |
+| lien envoyé par WhatsApp par l'école | rien de plus — le lien est le même |
+
+La troisième ne coûte rien et n'exige aucune adresse : la Direction génère le
+lien, le colle dans WhatsApp. **Dis-moi si le serveur peut rendre ce lien à
+l'écran au lieu de l'envoyer**, et je fais le bouton.
