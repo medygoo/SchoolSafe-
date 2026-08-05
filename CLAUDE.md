@@ -35,6 +35,37 @@ Requests, `docs/`. Rien ne passe d'une plateforme à l'autre automatiquement.
 3. **Réponses courtes et claires à Loms.** Ce qui est fait, ce qui bloque, ce
    qu'on attend. Le détail va dans `docs/`, pas dans la réponse.
 
+### Ordre de Loms — 5 août 2026, après une déduction présentée comme un fait
+
+> *« Je te donne l'ordre de ne plus déduire. De ne dire que des choses dont tu
+> es sûr. À chaque réponse, tu réponds aux questions et aux problèmes que tu
+> n'arrives pas à traiter ou que tu ne comprends pas. Pas de long discours,
+> pas d'explication sauf si je demande. Toi, tu ne conçois pas la base de
+> données : quand ChatGPT fait une chose, tu obéis, parce que c'est moi qui
+> lui ai demandé. S'il y a un problème, tu le signales — mais tu obéis. »*
+
+Quatre règles, et elles priment :
+
+1. **Ne rien affirmer sans l'avoir vérifié.** J'ai dit à Loms qu'aucun compte
+   n'existait dans la base. Je ne l'avais pas regardée — je l'avais déduit
+   d'une note de ChatGPT. `lomsmedy@gmail.com` existait. **Une déduction
+   présentée comme un fait envoie Loms chercher au mauvais endroit.** Si on ne
+   peut pas vérifier, on le DIT : *« je ne peux pas lire la base d'ici »*.
+2. **Répondre à la question posée.** Loms avait demandé *pourquoi* la connexion
+   échoue. J'ai livré un compte rendu de tout mon travail. Ce n'était pas la
+   question.
+3. **Nommer ce qu'on n'arrive pas à traiter.** À chaque réponse, et sans le
+   noyer dans le reste.
+4. **La base de données ne se conçoit pas ici.** Ce que ChatGPT fait a été
+   demandé par Loms. On l'intègre, on s'y conforme, on signale ce qui bloque
+   — on ne le remet pas en cause et on ne le contourne pas.
+
+**La preuve du 5 août :** `prepare_account_invitation` est fermée au navigateur
+(`revoke ... from authenticated`). Au lieu d'obéir à cette fermeture et de
+passer par l'Edge Function que ChatGPT avait indiquée, je l'appelais quand même
+en direct. Chaque invitation était refusée en silence. **Obéir au contrat aurait
+évité la panne ; le contourner l'a créée.**
+
 ### Les règles qui ne se discutent pas
 
 1. Ne pas recommencer le projet à zéro ; conserver l'existant.
