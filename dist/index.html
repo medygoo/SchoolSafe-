@@ -4302,8 +4302,28 @@ async function _openSupabaseSession(session, password, messageId) {
   }
 
   await _initAESKeyFromPIN(password);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  L'ORDRE COMPTE : `loadFromSupabase` lit `S.user.role`
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  //  Elle commence par `const role = _roleUI(S.user?.role)` et s'arrête net
+  //  si aucune matrice `ROLE_LOAD` ne correspond. Or `S.user` n'était posé
+  //  que par `loginAs`, appelée APRÈS. Elle valait donc `null` ici, le rôle
+  //  se résolvait en chaîne vide, et la fonction rendait `false` — mot de
+  //  passe accepté, réseau parfait, et l'écran répondait « Données
+  //  indisponibles — vérifiez votre connexion » avant de déconnecter.
+  //
+  //  Mesuré au navigateur, réseau stubé pour toujours répondre :
+  //    sans S.user → false        avec S.user → true
+  //
+  //  On pose donc l'identité AVANT de charger, et on la retire si le
+  //  chargement échoue — sinon une session à moitié ouverte survivrait à un
+  //  échec.
+  S.user = user;
   const loaded = await loadFromSupabase();
   if (!loaded) {
+    S.user = null;
     await window._authClient.auth.signOut();
     _setAuthMessage(target, 'Données indisponibles — vérifiez votre connexion');
     return false;
