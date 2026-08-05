@@ -9667,13 +9667,33 @@ ${classOpts}`,
 // personne. C'est `prepare_account_invitation` qui garantit cela côté
 // serveur — il relie l'adresse au profil EXISTANT, et refuse si l'adresse
 // appartient déjà à quelqu'un d'autre (EMAIL_IN_USE).
+//
+// ET LA PORTE N'EST PAS CELLE QUE JE CROYAIS. J'appelais directement la
+// fonction SQL `prepare_account_invitation`. Sa dernière ligne dit :
+//
+//     revoke all on function public.prepare_account_invitation(...)
+//       from public, anon, authenticated;
+//     grant execute ... to service_role;
+//
+// Elle est REFUSÉE au navigateur, par construction — et c'est voulu :
+// préparer une invitation, c'est ouvrir un accès. La clé qui peut le faire
+// ne descend pas dans un téléphone.
+//
+// La bonne porte est l'Edge Function `invite-school-account`, qui tourne
+// côté serveur avec cette clé, vérifie le jeton de la Direction, appelle la
+// fonction SQL et envoie le courriel. C'est exactement ce que ChatGPT avait
+// écrit dans AUTH_EMAIL_RECOVERY_DECISION ; je ne l'avais pas suivi.
+//
+// Conséquence de l'erreur : CHAQUE invitation partie de l'application était
+// refusée. Le compte se créait — `save_school_user_profile` est bien ouvert
+// à `authenticated` — mais le courriel ne partait jamais. La Direction
+// voyait le nom apparaître dans la liste et attendait un message qui
+// n'existait pas.
 window._inviterCompte = async (userId, courriel, nom) => {
   if (!courriel) return { ok:false, code:'PAS_D_ADRESSE' };
-  const r = await _rpc('prepare_account_invitation', {
-    p_actor_auth_user_id: (window._authClient
-      ? (await window._authClient.auth.getSession()).data?.session?.user?.id : null) || null,
-    p_app_user_id: userId,
-    p_email: courriel,
+  const r = await _edgeFn('invite-school-account', {
+    app_user_id: userId,
+    email: courriel,
   });
   if (!r.ok) return r;
   // Le serveur a préparé l'invitation ; l'envoi du courriel lui appartient.
