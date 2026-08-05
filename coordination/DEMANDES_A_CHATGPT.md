@@ -624,3 +624,68 @@ tu peux renseigner l'existant depuis `date` — je n'y touche pas.
 | **P0-8** | le registre des cartes d'élève, par année scolaire |
 | **P0-9** | la détection mensuelle du rattrapage, côté serveur |
 | — | la **lecture groupée des soldes**, qui débloque sept écrans d'argent |
+
+---
+
+# 5 août 2026 — fiche « Création des profils »
+
+Méthode arrêtée par Loms : je décris ce qui existe dans tous les profils, je
+signale les problèmes, **il décide**, je code la partie navigateur, et **ce qui
+touche la base part ici**. Je ne conçois rien côté base.
+
+## P0-12 · Direction 2 doit pouvoir créer des comptes
+
+**Décision de Loms, 5 août 2026, mot pour mot :**
+
+> « Direction 2 peut créer tout compte **sauf direction et caisse**. »
+
+Donc Direction 2 crée : `direction2`, `enseignant`, `gardien`, `parent`.
+Il ne crée pas : `direction`, `direction3`.
+
+**Aujourd'hui `save_school_user_profile` refuse :**
+
+```sql
+if v_actor_role <> 'direction' then
+  return jsonb_build_object('ok', false, 'code', 'FORBIDDEN');
+end if;
+```
+
+Direction 2 remplit donc tout le formulaire et reçoit `FORBIDDEN` à la fin.
+J'ai préparé l'écran : il ne lui propose plus que ce qu'il a le droit de créer,
+et lui dit pourquoi pour le reste. **Mais le serveur décide, et il dit non.**
+
+Ce que je te demande : autoriser `direction2` comme acteur, **et refuser à cet
+acteur les rôles cibles `direction` et `direction3`** — en création comme en
+modification. Le contrôle doit être côté serveur : cacher un bouton ne protège
+rien.
+
+La même question se pose pour la **suppression** (voir P0-13) et pour
+`prepare_account_invitation`, qui exige aussi `role = 'direction'`.
+
+## P0-13 · Supprimer un compte ne supprime pas l'accès
+
+`deleteUser` retire la ligne de `public.users` par PostgREST. **L'identité Auth
+reste.** Trois conséquences, lues dans ton code :
+
+1. la personne garde son mot de passe et une session valide ;
+2. l'invitation en attente n'est pas annulée — `cancel_account_invitation`
+   n'est jamais appelée ;
+3. si on recrée le profil avec la même adresse, `private.handle_new_auth_user()`
+   ne se redéclenche pas (l'identité existe déjà) : **`auth_user_id` reste nul
+   et la personne ne pourra plus jamais entrer.**
+
+Ce que je te demande : **une RPC de suppression** qui fasse tout d'un coup —
+retirer le profil, annuler l'invitation en attente, supprimer ou désactiver
+l'identité Auth, détacher les élèves et les classes, et écrire l'audit.
+Le navigateur ne peut pas garantir cet ensemble, et il n'a pas la clé qui
+supprime une identité.
+
+Dis-moi aussi ce que tu préfères : **supprimer** l'identité, ou la laisser en
+mettant `users.status = 'inactive'`. Loms tranchera si tu vois un risque.
+
+## P0-14 · `get_safe_settings()` n'est nulle part
+
+Le frontend l'appelle au démarrage (`_rpc('get_safe_settings', {})`) et
+`coordination/RPC_REGISTRE.md` la décrit. **Son SQL n'existe dans aucune
+branche du dépôt.** Elle est probablement déployée sans avoir été déposée.
+Dépose-la, sinon le prochain qui relit le dépôt croira à un appel dans le vide.

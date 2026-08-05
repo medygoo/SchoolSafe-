@@ -2372,6 +2372,7 @@ window.NAV = {
       {id:'parents',i:'👨‍👩‍👧',l:'Parents'},
       {id:'authorized',i:'🔑',l:'Personnes autorisées'},
       {id:'acces_parents',i:'🔐',l:'Accès parents'},
+      {id:'accounts',i:'👥',l:'Comptes Accès'},
       {s:'Pédagogie'},
       {id:'palmares',i:'🏆',l:'Palmarès'},
       {id:'attendance',i:'✏️',l:'Présences'},
@@ -9600,6 +9601,22 @@ window._simpleList = (role, icon, gradient) => {
   </div>`}`);
 };
 
+// CE QUE DIRECTION 2 PEUT CRÉER — Loms, 5 août 2026 :
+//
+//   « Direction 2 peut créer tout compte SAUF direction et caisse. »
+//
+// Donc : Direction 2, enseignant, gardien, parent — oui.
+// Direction 1 et Caisse — non. Ce sont les deux profils qui touchent à
+// l'argent et aux droits ; ils restent la main de Direction 1.
+//
+// ⚠️ Le SERVEUR ne le permet pas encore : `save_school_user_profile` refuse
+// tout acteur dont le rôle n'est pas exactement `direction`. Tant que
+// ChatGPT n'a pas ouvert la fonction à `direction2` (demande P0-12),
+// Direction 2 sera refusé à l'enregistrement. On le lui dit d'avance
+// plutôt que de le laisser remplir un formulaire pour rien.
+window._D2_INTERDIT = ['direction', 'direction3'];
+window._d2PeutToucher = (role) => !window._D2_INTERDIT.includes(role);
+
 window.openUserForm = (role, uid) => {
   window._userPhoto = null;
   const users = DB.users||[];
@@ -9610,6 +9627,42 @@ window.openUserForm = (role, uid) => {
   const existingLang = uid ? (classes.find(x=>x.teacher_id_en===uid)?'en':'fr') : 'fr';
   // `pinDisplay` affichait ici le code en clair dans la fiche du compte. Il
   // n'avait plus aucun appelant et lisait `users.pin`, qui n'existe pas.
+  // ── Les enfants, à la création du parent ────────────────────────────────
+  //
+  // Loms, 5 août 2026 : « oui ça sera plus rapide, mais ça ne doit pas être
+  // obligatoire, parce qu'on va le relier après même si on oublie. »
+  //
+  // Donc : proposé, jamais exigé. Un parent sans enfant s'enregistre, et la
+  // fiche de l'élève reste l'autre chemin.
+  //
+  // Les élèves DÉJÀ rattachés à un autre parent portent son nom : cocher
+  // l'enfant de quelqu'un d'autre le lui retire, et personne ne s'en
+  // apercevrait. On le dit avant, pas après.
+  const kidsOpts = role==='parent' ? (() => {
+    const eleves = (DB.students||[]).filter(s => !s.archived);
+    if (!eleves.length) return '';
+    const parNom = (a,b) => (a.name||'').localeCompare(b.name||'', 'fr');
+    const aMoi = eleves.filter(s => uid && s.pid === uid).sort(parNom);
+    const libres = eleves.filter(s => !s.pid).sort(parNom);
+    const aUnAutre = eleves.filter(s => s.pid && s.pid !== uid).sort(parNom);
+    const ligne = s => {
+      const cl = gc(s.cid);
+      const autre = s.pid && s.pid !== uid ? (gu(s.pid)||{}).name : null;
+      return `<label style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:9px;cursor:pointer;font-size:13.5px">
+        <input type="checkbox" class="usr_kid_cb" data-sid="${s.id}" ${uid && s.pid===uid ? 'checked' : ''} style="accent-color:#9b6fd4;width:16px;height:16px;flex-shrink:0">
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.name)}${cl?` <span style="color:var(--text-muted);font-size:11.5px">${esc(cl.name)}</span>`:''}</span>
+        ${autre?`<span class="pill" style="background:#fdeccd;color:#92400e;font-size:10px;font-weight:700;flex-shrink:0">déjà à ${esc(autre.split(' ')[0])}</span>`:''}
+      </label>`;
+    };
+    const groupe = (titre, arr) => arr.length
+      ? `<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin:8px 0 2px">${titre} (${arr.length})</div>${arr.map(ligne).join('')}`
+      : '';
+    return `<div class="form-group"><label class="form-label">Enfants rattachés <span style="font-weight:400;color:var(--text-muted);font-size:12px">— facultatif, se fait aussi depuis la fiche de l'élève</span></label>
+      <div style="max-height:230px;overflow-y:auto;padding:6px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+        ${groupe('Ses enfants', aMoi)}${groupe('Sans parent', libres)}${groupe('Rattachés à un autre parent', aUnAutre)}
+      </div></div>`;
+  })() : '';
+
   const classOpts = role==='enseignant' ? `
 <div class="form-group"><label class="form-label">Section d'enseignement</label>
   <div style="display:flex;gap:12px;padding:8px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
@@ -9647,7 +9700,7 @@ ${photoOpts}
     </div>
   </div>
 </div>
-${classOpts}`,
+${classOpts}${kidsOpts}`,
 `<button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveUser()">💾 ${u?'Mettre à jour':'Ajouter'}</button>`);
 };
 
@@ -9727,7 +9780,7 @@ window.saveUser = async () => {
   if(!name){markFieldError('usr_name','Nom requis');return;}
   const uid=idEl.value;
   const role=roleEl.value;
-  if(S.user.role==='direction2' && ['direction','direction2','direction3'].includes(role)){toast('Accès non autorisé','error');return;}
+  if(S.user.role==='direction2' && !window._d2PeutToucher(role)){toast('Direction 1 et Caisse ne se créent que depuis Direction 1','error');return;}
   const courriel=($('usr_email')?.value||'').trim().toLowerCase();
   if(courriel && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courriel)){
     markFieldError('usr_email','Adresse e-mail invalide'); return;
@@ -9833,6 +9886,7 @@ window.saveUser = async () => {
       return;
     }
     if (_res.data && _res.data.user) Object.assign(existingUser, _res.data.user);
+    if (role==='parent') window._rattacherEnfants(uid);
     // Une adresse ajoutée à un profil qui n'en avait pas : l'invitation part.
     if (courriel && !_avaitCourriel) {
       const _inv = await window._inviterCompte(uid, courriel, name);
@@ -9875,6 +9929,7 @@ window.saveUser = async () => {
     }
     if (_res.data && _res.data.user) Object.assign(ns, _res.data.user);
     logAudit('user_add', `${name} — ${role}`, ns.id);
+    if (role==='parent') { const _l=window._rattacherEnfants(ns.id); if(_l&&_l.lies) toast(`${_l.lies} enfant${_l.lies>1?'s':''} rattaché${_l.lies>1?'s':''}`,'info'); }
     if (courriel) {
       const _inv = await window._inviterCompte(ns.id, courriel, name);
       if (!_inv.ok) toast('Compte créé, mais l\'invitation n\'est pas partie — ' + _codeMsg(_inv.code), 'warning');
@@ -9884,6 +9939,25 @@ window.saveUser = async () => {
     toast(`🎉 ${name} ajouté`,'success');
   }
   closeModal(); saveToCrypt(); render();
+};
+
+// Rattacher les enfants cochés — après que le serveur a accepté le profil,
+// jamais avant : un lien vers un parent refusé serait un lien orphelin.
+window._rattacherEnfants = (pid) => {
+  const cbs = document.querySelectorAll('.usr_kid_cb');
+  if (!cbs.length) return;
+  const voulus = new Set([...cbs].filter(c => c.checked).map(c => c.dataset.sid));
+  const aLier = [], aDelier = [];
+  cbs.forEach(cb => {
+    const s = (DB.students||[]).find(x => x.id === cb.dataset.sid); if (!s) return;
+    if (voulus.has(s.id)) { if (s.pid !== pid) { s.pid = pid; aLier.push(s.id); } }
+    else if (s.pid === pid) { s.pid = null; aDelier.push(s.id); }
+  });
+  // `students.pid` est une colonne ordinaire : un patch groupé suffit, et
+  // deux appels valent mieux que quarante.
+  if (aLier.length)   pushSync('students','patch',{pid},          'id=in.('+aLier.join(',')+')');
+  if (aDelier.length) pushSync('students','patch',{pid:null},     'id=in.('+aDelier.join(',')+')');
+  return { lies:aLier.length, delies:aDelier.length };
 };
 
 window._userPhoto = null;
@@ -9953,7 +10027,7 @@ window.renvoyerInvitation = async (uid) => {
 window.deleteUser = (uid) => {
   const u=DB.users.find(x=>x.id===uid); if(!u) return;
   if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
-  if(S.user.role==='direction2' && ['direction','direction2','direction3'].includes(u.role)){toast('Accès non autorisé','error');return;}
+  if(S.user.role==='direction2' && !window._d2PeutToucher(u.role)){toast('Direction 1 et Caisse ne se suppriment que depuis Direction 1','error');return;}
   const linked=DB.students.filter(s=>s.pid===uid);
   showC(`Supprimer ${u.name} ?`,linked.length?`⚠️ ${linked.length} élève(s) lié(s) — le lien parent sera retiré.`:'Cette action est irréversible.',()=>{
     linked.forEach(s=>{s.pid=null;});
@@ -26223,8 +26297,13 @@ window.saveCaisseProfile = () => {
 
 // ── COMPTES ACCÈS (Direction 1 seulement) ──
 R.accounts = () => {
-  const _g=_requireRole('direction'); if(_g) return _g;
+  // Direction 2 entre ici depuis le 5 août : c'est le seul écran d'où l'on
+  // crée un compte de direction. Il n'y voit que ce qu'il a le droit de
+  // créer — Direction 1 et la Caisse restent la main de Direction 1.
+  const _g=_requireRole('direction','direction2'); if(_g) return _g;
+  const _d2 = S.user.role==='direction2';
   const mkSection = (role, gradient) => {
+    if (_d2 && !window._d2PeutToucher(role)) return '';
     const meta=ROLE_META[role]||{label:role,icon:'👤',color:'#6f6557',bg:'#f6ede0'};
     const users=DB.users.filter(u=>u.role===role);
     return `
@@ -26274,7 +26353,8 @@ R.accounts = () => {
   <div class="ww-toolbar"><span style="font-size:16px;font-weight:700">Comptes Accès</span></div>
   ${mkSection('direction','linear-gradient(90deg,#243a6b,#205fae)')}
   ${mkSection('direction2','linear-gradient(90deg,#2f7bd6,#9b6fd4)')}
-  ${mkSection('direction3','linear-gradient(90deg,#1f9d6b,#2fbf8f)')}`;
+  ${mkSection('direction3','linear-gradient(90deg,#1f9d6b,#2fbf8f)')}
+  ${_d2?`<div style="font-size:12.5px;color:var(--text-muted);padding:10px 14px;background:var(--bg);border-radius:10px;line-height:1.55">Les comptes <strong>Direction 1</strong> et <strong>Caisse</strong> se créent depuis Direction 1.</div>`:''}`;
 };
 
 // ── PROFIL DIRECTION 1 ──
