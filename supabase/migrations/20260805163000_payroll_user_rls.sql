@@ -70,6 +70,16 @@ as $$
 declare
   v_teacher_is_user boolean;
 begin
+  -- Lorsqu'une identité applicative est supprimée, la FK met user_id à NULL.
+  -- Ne pas le restaurer depuis teacher_id : la pièce comptable doit survivre,
+  -- mais elle ne doit plus pointer vers un compte inexistant.
+  if tg_op = 'UPDATE'
+     and old.user_id is not null
+     and new.user_id is null
+     and new.teacher_id is not distinct from old.teacher_id then
+    return new;
+  end if;
+
   if new.user_id is not null then
     if not exists (select 1 from public.users u where u.id = new.user_id) then
       raise exception using
@@ -146,8 +156,8 @@ create policy salaries_direction_delete
 on public.salaries for delete to authenticated
 using (private.current_app_role() = 'direction');
 
--- La Caisse doit voir les fiches à verser, mais ne reçoit aucun droit direct
--- d'écriture : le versement passe par mark_salary_paid().
+-- La Caisse voit les fiches à verser, mais ne reçoit aucun droit direct
+-- d'écriture : le versement passe exclusivement par mark_salary_paid().
 create policy salaries_cashier_select
 on public.salaries for select to authenticated
 using (private.current_app_role() = 'direction3');
@@ -161,7 +171,8 @@ using (
   and coalesce(user_id, teacher_id) = private.current_app_user_id()
 );
 
--- Même séparation pour les avances.
+-- Même séparation pour les avances. La Caisse peut les consulter dans le
+-- calcul de la paie, mais seul Direction 1 les crée ou les modifie.
 create policy advances_direction_select
 on public.advances for select to authenticated
 using (private.current_app_role() = 'direction');
@@ -241,7 +252,7 @@ declare
   v_row public.salaries%rowtype;
 begin
   v_role := private.current_app_role();
-  if v_role not in ('direction', 'direction3') then
+  if v_role is null or v_role not in ('direction', 'direction3') then
     return jsonb_build_object(
       'ok', false,
       'code', 'ACCESS_DENIED',
@@ -300,81 +311,10 @@ begin
 end
 $$;
 
-create or replace function public.mark_advance_repaid(p_advance_id text)
-returns jsonb
-language plpgsql
-security definer
-set search_path = pg_catalog, public, private
-as $$
-declare
-  v_role text;
-  v_row public.advances%rowtype;
-begin
-  v_role := private.current_app_role();
-  if v_role not in ('direction', 'direction3') then
-    return jsonb_build_object(
-      'ok', false,
-      'code', 'ACCESS_DENIED',
-      'message', 'Seule la Direction 1 ou la Caisse peut confirmer ce remboursement.'
-    );
-  end if;
-
-  select * into v_row
-  from public.advances
-  where id = p_advance_id
-  for update;
-
-  if not found then
-    return jsonb_build_object(
-      'ok', false,
-      'code', 'ADVANCE_NOT_FOUND',
-      'message', 'Avance introuvable.'
-    );
-  end if;
-
-  if coalesce(v_row.repaid, false) or v_row.status = 'repaid' then
-    return jsonb_build_object(
-      'ok', true,
-      'code', 'ADVANCE_ALREADY_REPAID',
-      'message', 'Cette avance était déjà marquée comme remboursée.',
-      'data', jsonb_build_object(
-        'id', v_row.id,
-        'repaid', true,
-        'status', 'repaid',
-        'amount', v_row.amount
-      )
-    );
-  end if;
-
-  update public.advances
-  set repaid = true,
-      status = 'repaid',
-      updated_at = now()
-  where id = p_advance_id
-  returning * into v_row;
-
-  return jsonb_build_object(
-    'ok', true,
-    'code', 'ADVANCE_REPAID',
-    'message', 'Remboursement de l’avance confirmé.',
-    'data', jsonb_build_object(
-      'id', v_row.id,
-      'repaid', v_row.repaid,
-      'status', v_row.status,
-      'amount', v_row.amount
-    )
-  );
-end
-$$;
-
 revoke all on function public.mark_salary_paid(text) from public, anon;
-revoke all on function public.mark_advance_repaid(text) from public, anon;
 grant execute on function public.mark_salary_paid(text) to authenticated;
-grant execute on function public.mark_advance_repaid(text) to authenticated;
 
 comment on function public.mark_salary_paid(text) is
   'Confirme uniquement le versement d’un salaire. Direction 1 ou Caisse ; aucun montant ne peut être modifié.';
-comment on function public.mark_advance_repaid(text) is
-  'Confirme uniquement le remboursement d’une avance. Direction 1 ou Caisse ; aucun montant ne peut être modifié.';
 
 commit;
