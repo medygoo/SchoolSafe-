@@ -12798,21 +12798,9 @@ R.palmares = () => {
     const couvertures=selTrim!=='Tous'?(DB.prevision_matiere||[]).filter(p=>p.cid===cl.id&&p.trimestre===selTrim&&p.validated):[];
     const avgCouv=couvertures.length?Math.round(couvertures.reduce((s,p)=>s+(p.pourcentage||0),0)/couvertures.length):null;
 
-    const ranked=students.map(s=>{
-      const conduct=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const retards=(DB.attendance||[]).filter(a=>a.sid===s.id&&a.status==='late').length;
-      let totalPct=0,sumCoeff=0;
-      matieres.forEach(m=>{
-        const a=matAvgPct(s.id,m.name,trimFilter);
-        if(a!==null){const c=m.coeff||1;totalPct+=a*c;sumCoeff+=c;}
-      });
-      const moyPct=sumCoeff?Math.round(totalPct/sumCoeff):0;
-      const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-      const condAvg=conduct.length?conduct.reduce((a,c)=>a+(condMap[c.score]||0),0)/conduct.length:0;
-      const condPct=Math.round(condAvg*25);
-      const total=Math.round(moyPct*0.85+condPct*0.15);
-      return {...s,moyPct,condAvg,condPct,total,retards,gradeCount:sumCoeff};
-    }).sort((a,b)=>b.total-a.total);
+    // Une seule réponse à « qui est premier ? » — voir `_classer`.
+    const ranked=window._classer(students,()=>matieres,trimFilter)
+      .map(l=>({...l.eleve,...l,condAvg:l.condPct/25}));
 
     html+=`
     <div style="margin-bottom:24px">
@@ -12928,18 +12916,11 @@ R.palmares_parent = () => {
       return p?p.pourcentage:null;
     };
 
-    const ranked=students.map(s=>{
-      let totalPct=0,sumCoeff=0;
-      matieres.forEach(m=>{const a=matAvgPct(s.id,m.name,trimFilter);if(a!==null){const c=m.coeff||1;totalPct+=a*c;sumCoeff+=c;}});
-      const moyPct=sumCoeff?Math.round(totalPct/sumCoeff):0;
-      const conduct=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-      const condAvg=conduct.length?conduct.reduce((a,c)=>a+(condMap[c.score]||0),0)/conduct.length:0;
-      const total=Math.round(moyPct*0.85+Math.round(condAvg*25)*0.15);
-      return {...s,moyPct,total};
-    }).sort((a,b)=>b.total-a.total);
+    // Le parent et la Direction lisent le MÊME classement — voir `_classer`.
+    const ranked=window._classer(students,()=>matieres,trimFilter)
+      .map(l=>({...l.eleve,...l}));
 
-    const pos=ranked.findIndex(s=>s.id===k.id)+1;
+    const pos=(ranked.find(s=>s.id===k.id)||{}).rang||0;
     const me=ranked.find(s=>s.id===k.id);
     const mention=me?getMention(me.total):{l:'—',c:'#a89c8b'};
 
@@ -12949,9 +12930,7 @@ R.palmares_parent = () => {
 
     const renderSection=(secMats,secLabel,flag,profName,bg)=>{
       if(!secMats.length) return '';
-      let tot=0,sumC=0;
-      secMats.forEach(m=>{const a=matAvgPct(k.id,m.name,trimFilter);if(a!==null){const c=m.coeff||1;tot+=a*c;sumC+=c;}});
-      const moy=sumC?Math.round(tot/sumC):null;
+      const moy=window._totalSection(k.id,secMats,trimFilter).pct;
       const bc2=moy===null?'#efe3d3':moy>=70?'#2fbf8f':moy>=50?'#f59e0b':'#ef5b5b';
       return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px;background:${bg}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
@@ -14519,6 +14498,23 @@ window.matAvgPct = (sid, matiere, trimester) => {
   return sumW ? Math.round(sumWN / sumW) : null;
 };
 
+// ── _totalSection — la sommation d'une section de bulletin, une seule fois ──
+//
+//  Trois copies : la section à l'écran (`renderSection`), le sous-total du
+//  bulletin d'un élève, celui du bulletin de toute la classe. Elles disaient
+//  la même chose de trois manières, donc elles pouvaient diverger.
+//
+//  Rend `{pct, tot, max, coeff}` : `pct` pour l'écran, `tot/max` en points
+//  pour le papier — le bulletin congolais imprime « 148/200 pts ».
+window._totalSection = (sid, matieres, trim) => {
+  let tot = 0, max = 0, coeff = 0;
+  (matieres||[]).forEach(m => {
+    const a = matAvgPct(sid, m.name, trim);
+    if (a !== null) { const c = m.coeff||1; tot += a*c; max += 100*c; coeff += c; }
+  });
+  return { pct: coeff ? Math.round(tot/coeff) : null, tot: Math.round(tot), max, coeff };
+};
+
 // Overall weighted average pct for a student across given matieres (with coefficients)
 window.studentAvgPct = (sid, matieres, trimester) => {
   let totalW = 0, sumCoeff = 0;
@@ -14529,48 +14525,111 @@ window.studentAvgPct = (sid, matieres, trimester) => {
   return sumCoeff ? Math.round(totalW / sumCoeff) : null;
 };
 
-// Rank of a student within their class (1 = best). Returns {pos, total} or null
-window.getRankInClass = (sid) => {
-  const s=DB.students.find(x=>x.id===sid); if(!s) return null;
-  const cl=gc(s.cid); if(!cl) return null;
-  const students=DB.students.filter(x=>x.cid===cl.id);
-  const matieres=getClassMatieres(cl.id);
-  const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-  const score=x=>{
-    let tw=0,sc=0;
-    matieres.forEach(m=>{const a=matAvgPct(x.id,m.name);if(a!==null){const c=m.coeff||1;tw+=a*c;sc+=c;}});
-    const moy=sc?Math.round(tw/sc):0;
-    const cond=(DB.conduct||[]).filter(c=>c.sid===x.id);
-    const cAvg=cond.length?cond.reduce((a,c)=>a+(condMap[c.score]||0),0)/cond.length:3; // défaut "Bien" si aucune conduite — ne pas pénaliser
-    return Math.round(moy*0.85+Math.round(cAvg*25)*0.15);
-  };
-  const ranked=students.map(x=>({id:x.id,total:score(x)})).sort((a,b)=>b.total-a.total);
-  // Ex-aequo: même score → même rang (1, 1, 3, ...)
-  let rank = 1;
-  const rankedWithRank = ranked.map((x, i) => {
-    if (i > 0 && x.total < ranked[i-1].total) rank = i + 1;
-    return {...x, rank};
-  });
-  const me=rankedWithRank.find(x=>x.id===sid);
-  return {pos: me?me.rank:0, total:me?me.total:0, outOf:students.length};
+// ═══════════════════════════════════════════════════════════════════════════
+//  _classer — LA SEULE RÉPONSE À « QUI EST PREMIER ? »
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  La même formule était recopiée QUATRE fois — palmarès de la Direction,
+//  palmarès du parent, rang sur la fiche de l'élève, Top 10 de l'école — et
+//  les quatre copies avaient divergé sur cinq points :
+//
+//    · un enfant SANS note de conduite valait 0 % de conduite ici, 75 % là.
+//      Sur une moyenne de 60 %, cela fait 51 au palmarès et 62 sur sa fiche.
+//      Le même enfant, deux nombres, deux écrans, la même famille devant ;
+//    · un élève ARCHIVÉ (diplômé l'an dernier) restait dans les quatre
+//      classements de l'année en cours ;
+//    · l'ex æquo n'existait que dans UNE des quatre — ailleurs, deux élèves
+//      à égalité recevaient les rangs 3 et 4 ;
+//    · le Top 10 lisait toujours `currentTrimestre` en ignorant le trimestre
+//      choisi à l'écran, à côté d'un palmarès qui, lui, l'écoutait ;
+//    · le Top 10 ne rendait pas `cid`, et DEUX tableaux de bord filtrent le
+//      podium d'une classe sur ce champ : la section « Top palmarès » était
+//      donc VIDE en permanence, sans que rien ne le signale.
+//
+//  Ce n'est pas un choix de style : c'est la panne que Loms redoute le plus —
+//  « imagine qu'un parent voie les cotes de son enfant, et qu'à la fin son
+//  enfant ne réussisse pas ». Tout peut être juste ailleurs ; si deux écrans
+//  se contredisent, la famille cesse d'y croire.
+//
+//  Les règles retenues, une fois pour toutes :
+//    1. conduite absente ⇒ « Bien » (75 %). Ne pas pénaliser un enfant dont
+//       l'enseignant n'a rien saisi. C'était déjà le commentaire écrit dans
+//       deux des quatre copies ;
+//    2. élève archivé ⇒ hors de tout classement de l'année en cours ;
+//    3. ex æquo ⇒ même total, même rang (1, 1, 3…) ;
+//    4. la conduite suit le trimestre demandé QUAND l'enregistrement le porte.
+//       `conduct` n'a pas de colonne `trimestre` : on réconcilie à la lecture
+//       plutôt que de l'inventer. Demandé à ChatGPT — voir DEMANDES_A_CHATGPT.
+//
+//  `eleves`     la liste à classer
+//  `matieresDe` (eleve) → matières prises en compte pour lui
+//  `trim`       'T1'|'T2'|'T3', ou rien pour toute l'année
+// ═══════════════════════════════════════════════════════════════════════════
+window._CONDUITE = {Excellent:4, Bien:3, Moyen:2, Mauvais:1};
+
+// La conduite du trimestre demandé — ou toutes, si aucune ne le porte.
+window._conduiteDe = (sid, trim) => {
+  const tout = (DB.conduct||[]).filter(c => c.sid === sid);
+  if (!trim) return tout;
+  const dutrim = tout.filter(c => (c.trimestre || c.trim || c.trimester) === trim);
+  // Un enregistrement sans trimestre est ancien, pas absent : on ne l'écarte
+  // que si d'autres, eux, savent dire de quel trimestre ils sont.
+  return tout.some(c => c.trimestre || c.trim || c.trimester) ? dutrim : tout;
 };
 
-// School-wide top 10 for current trimester — used on parent profile
-window.getSchoolTop10 = () => {
-  const trim = DB.settings.currentTrimestre || 'T1';
-  const condMap = {Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-  return (DB.students||[]).map(s => {
-    const cl = gc(s.cid); if(!cl) return null;
-    const matieres = getClassMatieres(s.cid); if(!matieres.length) return null;
-    let totalW=0, sumC=0;
-    matieres.forEach(m => { const a=matAvgPct(s.id,m.name,trim); if(a!==null){const c=m.coeff||1;totalW+=a*c;sumC+=c;} });
-    if(!sumC) return null;
-    const moyPct = Math.round(totalW/sumC);
-    const condArr = (DB.conduct||[]).filter(c=>c.sid===s.id);
-    const condAvg = condArr.length ? condArr.reduce((sum,c)=>sum+(condMap[c.score]||0),0)/condArr.length : 3; // défaut "Bien" si aucune conduite — ne pas pénaliser
-    const score = Math.round(moyPct*0.85 + Math.round(condAvg*25)*0.15);
-    return {id:s.id, name:s.name, cl, moyPct, score};
-  }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,10);
+// La conduite en pourcentage. AUCUNE note ⇒ « Bien », jamais 0.
+window._conduitePct = (sid, trim) => {
+  const cs = window._conduiteDe(sid, trim);
+  const moy = cs.length
+    ? cs.reduce((a,c) => a + (window._CONDUITE[c.score]||0), 0) / cs.length
+    : 3;
+  return Math.round(moy * 25);
+};
+
+window._classer = (eleves, matieresDe, trim) => {
+  const vivants = (eleves||[]).filter(s => s && !s.archived);
+  const lignes = vivants.map(s => {
+    const matieres = (typeof matieresDe === 'function' ? matieresDe(s) : matieresDe) || [];
+    let totalPct = 0, sumCoeff = 0;
+    matieres.forEach(m => {
+      const a = matAvgPct(s.id, m.name, trim);
+      if (a !== null) { const c = m.coeff||1; totalPct += a*c; sumCoeff += c; }
+    });
+    const moyPct  = sumCoeff ? Math.round(totalPct/sumCoeff) : 0;
+    const condPct = window._conduitePct(s.id, trim);
+    return {
+      id: s.id, nom: s.name, name: s.name, cid: s.cid, cl: gc(s.cid),
+      moyPct, condPct, total: Math.round(moyPct*0.85 + condPct*0.15),
+      retards: (DB.attendance||[]).filter(a => a.sid===s.id && a.status==='late').length,
+      gradeCount: sumCoeff, eleve: s,
+    };
+  }).sort((a,b) => b.total - a.total);
+  // Ex æquo : même total, même rang (1, 1, 3…)
+  let rang = 1;
+  return lignes.map((l, i) => {
+    if (i > 0 && l.total < lignes[i-1].total) rang = i + 1;
+    return {...l, rang};
+  });
+};
+
+// Rank of a student within their class (1 = best). Returns {pos, total} or null
+window.getRankInClass = (sid, trim) => {
+  const s=DB.students.find(x=>x.id===sid); if(!s) return null;
+  const cl=gc(s.cid); if(!cl) return null;
+  const matieres=getClassMatieres(cl.id);
+  const classement=window._classer(DB.students.filter(x=>x.cid===cl.id), ()=>matieres, trim);
+  const me=classement.find(x=>x.id===sid);
+  return {pos: me?me.rang:0, total: me?me.total:0, outOf: classement.length};
+};
+
+// School-wide top 10 — `cid` est dans la réponse : deux tableaux de bord
+// filtrent le podium d'une classe dessus.
+window.getSchoolTop10 = (trim) => {
+  const t = trim || DB.settings.currentTrimestre || 'T1';
+  return window._classer(DB.students||[], s => getClassMatieres(s.cid), t)
+    .filter(l => l.cl && l.gradeCount)
+    .slice(0, 10)
+    .map(l => ({...l, score: l.total}));
 };
 
 window._gradeTrim = 'T1';
@@ -15994,7 +16053,7 @@ R.cahier_texte = () => {
     const cl=gc(k.cid); if(!cl) return;
     const entries=(DB.cahier_texte||[]).filter(e=>e.cid===k.cid&&e.status==='published').sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const byDate={}; entries.forEach(e=>{if(!byDate[e.date])byDate[e.date]=[];byDate[e.date].push(e);});
-    const upcoming=(DB.cahier_prep||[]).filter(e=>e.cid===k.cid&&e.status!=='fait'&&e.validated).sort((a,b)=>(a.date_prevue||'').localeCompare(b.date_prevue||''));
+    const upcoming=(DB.cahier_prep||[]).map(window._prepLire).filter(e=>e.cid===k.cid&&!e._fait&&e.validated).sort((a,b)=>(a._date||'').localeCompare(b._date||''));
     const [cc]=clsColor(cl.name);
     html+=`<div style="margin-bottom:20px">
       <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:${cc}18;border-radius:14px;border-left:4px solid ${cc};margin-bottom:10px">
@@ -16094,6 +16153,47 @@ window.saveCahier = () => {
   saveToCrypt(); closeModal(); render();
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  _prepLire — UNE fiche de préparation, DEUX vocabulaires
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  `cahier_prep` porte deux générations de champs, nées à des époques
+//  différentes et toutes deux encore ÉCRITES aujourd'hui :
+//
+//    l'écran de navigation  content · date_prevue · by         · status
+//    le studio du profil    titre   · date_lesson · teacher_id · statut
+//                           + revision/intro, developpement, synthese/conclusion
+//
+//  Les colonnes des deux existent en base : rien n'est rejeté, donc rien ne
+//  se voit. Mais chaque écran ne lisait QUE la moitié de la table. Une fiche
+//  remplie dans le studio n'apparaissait pas au suivi de la Direction ; une
+//  fiche remplie à la navigation n'apparaissait pas dans le profil. Personne
+//  n'a de message d'erreur : la ligne manque, simplement.
+//
+//  On réconcilie À LA LECTURE plutôt que de reprendre les écritures d'une
+//  application en service. Champs rendus, tous préfixés `_` :
+//    _date · _titre · _auteur · _corps · _statut · _fait
+// ═══════════════════════════════════════════════════════════════════════════
+window._prepLire = (p) => {
+  if (!p) return {};
+  const prem = (...v) => v.find(x => x !== undefined && x !== null && x !== '') ?? '';
+  const corps = [p.objectifs, p.prerequis, p.revision, p.intro, p.developpement,
+                 p.synthese, p.conclusion, p.evaluation, p.content]
+    .filter(x => x && String(x).trim()).join('\n\n');
+  const titre = prem(p.titre, (p.content||'').split('\n')[0].slice(0, 80));
+  const statut = prem(p.statut, p.status, 'brouillon');
+  return {
+    ...p,
+    _date:   prem(p.date_lesson, p.date_prevue, p.semaine, p.created_at),
+    _titre:  titre || 'Sans titre',
+    _auteur: prem(p.teacher_id, p.by) || null,
+    _corps:  corps,
+    _statut: statut,
+    // « fait » et « termine » disent la même chose dans les deux vocabulaires.
+    _fait:   statut === 'fait' || statut === 'termine' || statut === 'terminé',
+  };
+};
+
 // ── CAHIER DE PRÉPARATION (planification des leçons à venir) ──
 R.cahier_prep = () => {
   const role=S.user.role;
@@ -16101,26 +16201,33 @@ R.cahier_prep = () => {
   // ── DIRECTION : suivi des préparations par classe ──────────────────────────
   if(role==='direction'||role==='direction2') {
     let html=`<div class="ww-toolbar"><span style="font-size:16px;font-weight:700">📋 Suivi Cahier de préparation</span></div>`;
-    const all=DB.cahier_prep||[];
+    // Les deux vocabulaires se lisent ici — voir `_prepLire`. Sans lui, la
+    // moitié des fiches manquait à ce suivi sans qu'aucune erreur ne le dise.
+    const all=(DB.cahier_prep||[]).map(window._prepLire);
     if(!all.length) return html+`<div style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:60px;margin-bottom:16px">📋</div>Aucune préparation enregistrée</div>`;
     DB.classes.forEach(cl=>{
-      const items=all.filter(e=>e.cid===cl.id).sort((a,b)=>(a.date_prevue||'').localeCompare(b.date_prevue||''));
+      const items=all.filter(e=>e.cid===cl.id).sort((a,b)=>(a._date||'').localeCompare(b._date||''));
       if(!items.length) return;
       const [cc]=clsColor(cl.name);
-      const done=items.filter(e=>e.status==='fait').length;
-      const late=items.filter(e=>e.status!=='fait'&&e.date_prevue<today()).length;
+      const done=items.filter(e=>e._fait).length;
+      const late=items.filter(e=>!e._fait&&e._date&&e._date<today()).length;
       html+=`<div class="ww-section" style="margin-bottom:14px">
         <div class="ww-section-header">
           <span class="ww-section-title" style="color:${cc}">${esc(cl.name)}</span>
           <span style="font-size:11px;color:var(--text-muted)">${done}/${items.length} fait${late?` · ⚠️ ${late} en retard`:''}</span>
         </div>
-        ${items.map(e=>`<div class="ww-item">
-          <div class="ww-item-icon" style="background:${e.status==='fait'?'#d8f3e6':e.date_prevue<today()?'#fee2e2':e.validated?'#dbeafe':'#fdeccd'}">${e.status==='fait'?'✅':e.date_prevue<today()?'⚠️':e.validated?'✔️':'🕓'}</div>
+        ${items.map(e=>{
+          const enRetard=!e._fait&&e._date&&e._date<today();
+          const d=e._date?new Date(e._date+'T12:00'):null;
+          // Ne rien afficher vaut mieux qu'afficher « Invalid Date ».
+          const dLib=d&&!isNaN(d)?d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'';
+          return `<div class="ww-item">
+          <div class="ww-item-icon" style="background:${e._fait?'#d8f3e6':enRetard?'#fee2e2':e.validated?'#dbeafe':'#fdeccd'}">${e._fait?'✅':enRetard?'⚠️':e.validated?'✔️':'🕓'}</div>
           <div class="ww-item-content">
-            <div class="ww-item-title">${esc(e.matiere)} <span style="font-size:11px;color:var(--text-muted)">${new Date(e.date_prevue).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>${!e.validated&&e.status!=='fait'?` <span style="font-size:10px;background:#fdeccd;color:#92400e;padding:1px 6px;border-radius:8px;font-weight:700">À valider</span>`:''}</div>
-            <div class="ww-item-sub" style="white-space:normal;line-height:1.5">${esc(e.content)}</div>
+            <div class="ww-item-title">${esc(e.matiere||e._titre)} ${dLib?`<span style="font-size:11px;color:var(--text-muted)">${dLib}</span>`:''}${!e.validated&&!e._fait?` <span style="font-size:10px;background:#fdeccd;color:#92400e;padding:1px 6px;border-radius:8px;font-weight:700">À valider</span>`:''}</div>
+            <div class="ww-item-sub" style="white-space:normal;line-height:1.5">${esc(e._corps||e._titre)}</div>
           </div>
-        </div>`).join('')}
+        </div>`;}).join('')}
       </div>`;
     });
     return html;
@@ -16130,23 +16237,26 @@ R.cahier_prep = () => {
   if(role==='enseignant') {
     const mc=getMyClass();
     if(!mc.cl) return `<div style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:60px;margin-bottom:16px">📋</div>Aucune classe assignée</div>`;
-    const items=(DB.cahier_prep||[]).filter(e=>e.cid===mc.cl.id&&e.by===S.user.id).sort((a,b)=>(a.date_prevue||'').localeCompare(b.date_prevue||''));
+    // L'enseignant voit SES fiches, quel que soit l'écran qui les a écrites.
+    const items=(DB.cahier_prep||[]).map(window._prepLire).filter(e=>e.cid===mc.cl.id&&e._auteur===S.user.id).sort((a,b)=>(a._date||'').localeCompare(b._date||''));
     return `
     <div class="ww-toolbar">
       <span style="font-size:16px;font-weight:700">📋 ${t('Cahier de préparation','Lesson Plan')} — ${esc(mc.cl.name)}</span>
       <button class="btn btn-primary" onclick="openCahierPrepM()">➕ ${t('Planifier','Plan')}</button>
     </div>
     ${items.length?items.map((e,i)=>{
-      const isLate=e.status!=='fait'&&e.date_prevue<today();
-      const pendingValidation=e.status!=='fait'&&!e.validated;
+      const isLate=!e._fait&&e._date&&e._date<today();
+      const pendingValidation=!e._fait&&!e.validated;
+      const _d=e._date?new Date(e._date+'T12:00'):null;
+      const _dLib=_d&&!isNaN(_d)?_d.toLocaleDateString(getLang()==='en'?'en-GB':'fr-FR',{day:'numeric',month:'long'}):'';
       return `<div class="ww-item" style="animation-delay:${i*.04}s">
-        <div class="ww-item-icon" style="background:${e.status==='fait'?'#d8f3e6':isLate?'#fee2e2':pendingValidation?'#fdeccd':'#dbeafe'}">${e.status==='fait'?'✅':isLate?'⚠️':pendingValidation?'🕓':'✔️'}</div>
+        <div class="ww-item-icon" style="background:${e._fait?'#d8f3e6':isLate?'#fee2e2':pendingValidation?'#fdeccd':'#dbeafe'}">${e._fait?'✅':isLate?'⚠️':pendingValidation?'🕓':'✔️'}</div>
         <div class="ww-item-content">
-          <div class="ww-item-title">${esc(e.matiere)} <span style="font-size:11px;color:var(--text-muted)">${new Date(e.date_prevue).toLocaleDateString(getLang()==='en'?'en-GB':'fr-FR',{day:'numeric',month:'long'})}</span></div>
-          <div class="ww-item-sub" style="white-space:normal;line-height:1.5;margin-top:4px">${esc(e.content)}</div>
-          ${e.status!=='fait'?`<div style="font-size:11px;font-weight:700;color:${pendingValidation?'#92400e':'#1f9d6b'};margin-top:4px">${pendingValidation?'🕓 '+t('En attente de validation Direction','Awaiting management validation'):'✔️ '+t('Validé par la Direction','Validated by management')}</div>`:''}
+          <div class="ww-item-title">${esc(e.matiere||e._titre)} ${_dLib?`<span style="font-size:11px;color:var(--text-muted)">${_dLib}</span>`:''}</div>
+          <div class="ww-item-sub" style="white-space:normal;line-height:1.5;margin-top:4px">${esc(e._corps||e._titre)}</div>
+          ${!e._fait?`<div style="font-size:11px;font-weight:700;color:${pendingValidation?'#92400e':'#1f9d6b'};margin-top:4px">${pendingValidation?'🕓 '+t('En attente de validation Direction','Awaiting management validation'):'✔️ '+t('Validé par la Direction','Validated by management')}</div>`:''}
           <div style="display:flex;gap:8px;margin-top:8px">
-            ${e.status!=='fait'?`<button class="btn btn-primary btn-sm" onclick="markCahierPrepDone('${e.id}')">✅ ${t('Marquer fait','Mark done')}</button>`:''}
+            ${!e._fait?`<button class="btn btn-primary btn-sm" onclick="markCahierPrepDone('${e.id}')">✅ ${t('Marquer fait','Mark done')}</button>`:''}
             <button class="btn btn-outline btn-sm" onclick="deleteCahierPrep('${e.id}')">🗑️</button>
           </div>
         </div>
@@ -22241,16 +22351,7 @@ window.genererPalmaresAnnuel = () => {
     const stds=students.filter(s=>s.cid===cl.id);
     if(!stds.length) return;
     const matieres=getClassMatieres(cl.id);
-    const ranked=stds.map(s=>{
-      let totalPct=0,sumC=0;
-      matieres.forEach(m=>{const a=matAvgPct(s.id,m.name);if(a!==null){const c=m.coeff||1;totalPct+=a*c;sumC+=c;}});
-      const moyPct=sumC?Math.round(totalPct/sumC):0;
-      const conduct=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-      const condAvg=conduct.length?conduct.reduce((a,c)=>a+(condMap[c.score]||0),0)/conduct.length:0;
-      const total=Math.round(moyPct*0.85+Math.round(condAvg*25)*0.15);
-      return {...s,moyPct,total};
-    }).sort((a,b)=>b.total-a.total);
+    const ranked=window._classer(stds,()=>matieres).map(l=>({...l.eleve,...l}));
 
     classesHtml+=`
     <div style="margin-bottom:30px;page-break-inside:avoid">
@@ -22530,17 +22631,12 @@ window.printPVDeliberation = () => {
     if(!studs.length) return '';
     const mats=getClassMatieres(cl.id);
     const condMap={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-    const ranked=studs.map(s=>{
-      let tw=0,sw=0;
-      mats.forEach(m=>{const a=matAvgPct(s.id,m.name,trim);if(a!==null){const c=m.coeff||1;tw+=a*c;sw+=c;}});
-      const moy=sw?Math.round(tw/sw):0;
-      const conds=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const cAvg=conds.length?conds.reduce((a,c)=>a+(condMap[c.score]||0),0)/conds.length:0;
-      const total=Math.round(moy*0.85+Math.round(cAvg*25)*0.15);
-      const mention=moy>=80?'Grande Distinction':moy>=70?'Distinction':moy>=60?'Satisfaction':moy>=50?'Avertissement':'Échec';
-      const decision=moy>=50?'ADMIS(E)':'AJOURNÉ(E)';
-      return{...s,moy,total,mention,decision};
-    }).sort((a,b)=>b.total-a.total);
+    const ranked=window._classer(studs,()=>mats,trim).map(l=>{
+      const moy=l.moyPct;
+      return{...l.eleve,...l,moy,
+        mention:moy>=80?'Grande Distinction':moy>=70?'Distinction':moy>=60?'Satisfaction':moy>=50?'Avertissement':'Échec',
+        decision:moy>=50?'ADMIS(E)':'AJOURNÉ(E)'};
+    });
     const admis=ranked.filter(s=>s.decision==='ADMIS(E)').length;
     const echec=ranked.filter(s=>s.decision==='AJOURNÉ(E)').length;
     return `
@@ -22681,15 +22777,9 @@ window.printReport = (type) => {
     const profFR=isBilingual?gu(cl.teacher_id):cl?gu(cl.teacher_id):null;
     const profEN=isBilingual?gu(cl.teacher_id_en):null;
     const students=cl?DB.students.filter(s=>s.cid===cl.id):[];
-    const ranked=students.map(s=>{
-      const moy=studentAvgPct(s.id,matieres);
-      const conduct=(DB.conduct||[]).filter(c=>c.sid===s.id);
-      const cm={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-      const cAvg=conduct.length?conduct.reduce((a,c)=>a+(cm[c.score]||0),0)/conduct.length:0;
-      return{id:s.id,moy,cond:Math.round(cAvg*25)};
-    }).sort((a,b)=>(b.moy*0.85+b.cond*0.15)-(a.moy*0.85+a.cond*0.15));
-    const pos=ranked.findIndex(r=>r.id===k.id)+1;
+    const ranked=window._classer(students,()=>matieres).map(l=>({...l,moy:l.moyPct,cond:l.condPct}));
     const me=ranked.find(r=>r.id===k.id);
+    const pos=me?me.rang:0;
     const mention=me?(me.moy>=90?'Excellent':me.moy>=75?'Très Bien':me.moy>=60?'Bien':me.moy>=50?'Passable':'À améliorer'):'—';
     const mColor=me&&me.moy>=75?'#1f9d6b':me&&me.moy>=50?'#d98a2b':'#dc2626';
 
@@ -22749,8 +22839,8 @@ window.printReport = (type) => {
       const gradeMatSet=new Set((DB.grades||[]).filter(g=>studs.some(s=>s.id===g.sid)).map(g=>g.matiere));
       const mats=clMats.filter(m=>gradeMatSet.has(m.name));
       const matNames=mats.map(m=>m.name);
-      const ranked=studs.map(s=>{const avg=studentAvgPct(s.id,mats);return{s,avg};}).sort((a,b)=>b.avg-a.avg);
-      return `<div class="ch">🏆 ${esc(cl.name)}</div><table><tr><th>Rang</th><th>Nom</th>${matNames.map(m=>`<th style="font-size:10px">${esc(m)}</th>`).join('')}<th>Moy.</th><th>Mention</th></tr>${ranked.map(({s,avg},i)=>{const m=avg>=90?'Excellent':avg>=75?'Bien':avg>=60?'Assez bien':avg>=50?'Passable':'Insuffisant';const mc=avg>=75?'paid':avg>=50?'warn':'unpaid';return`<tr><td style="font-weight:700;color:${i<3?'#d98a2b':'#aaa'}">${['🥇','🥈','🥉'][i]||i+1}</td><td style="font-weight:600">${esc(s.name)}</td>${matNames.map(mt=>{const a=matAvgPct(s.id,mt);return`<td style="text-align:center;color:${a!==null&&a>=50?'#1f9d6b':'#dc2626'};font-weight:600">${a!==null?a+'%':'—'}</td>`;}).join('')}<td style="font-weight:800;text-align:center;color:${avg>=50?'#1f9d6b':'#dc2626'}">${avg}%</td><td><span class="pill ${mc}">${m}</span></td></tr>`;}).join('')}</table>`;
+      const ranked=window._classer(studs,()=>mats).map(l=>({s:l.eleve,avg:l.moyPct,rang:l.rang}));
+      return `<div class="ch">🏆 ${esc(cl.name)}</div><table><tr><th>Rang</th><th>Nom</th>${matNames.map(m=>`<th style="font-size:10px">${esc(m)}</th>`).join('')}<th>Moy.</th><th>Mention</th></tr>${ranked.map(({s,avg,rang})=>{const m=avg>=90?'Excellent':avg>=75?'Bien':avg>=60?'Assez bien':avg>=50?'Passable':'Insuffisant';const mc=avg>=75?'paid':avg>=50?'warn':'unpaid';return`<tr><td style="font-weight:700;color:${rang<=3?'#d98a2b':'#aaa'}">${['🥇','🥈','🥉'][rang-1]||rang}</td><td style="font-weight:600">${esc(s.name)}</td>${matNames.map(mt=>{const a=matAvgPct(s.id,mt);return`<td style="text-align:center;color:${a!==null&&a>=50?'#1f9d6b':'#dc2626'};font-weight:600">${a!==null?a+'%':'—'}</td>`;}).join('')}<td style="font-weight:800;text-align:center;color:${avg>=50?'#1f9d6b':'#dc2626'}">${avg}%</td><td><span class="pill ${mc}">${m}</span></td></tr>`;}).join('')}</table>`;
     }).join('');
 
   } else if(type==='attendance'){
@@ -22881,21 +22971,15 @@ window.downloadBulletin = (sid, _forceTrim) => {
   const titulaire=cl?(gu(cl.titulaire_id)||profFR):null;
   const students=cl?DB.students.filter(s=>s.cid===cl.id):[];
   // Rank with coefficients
-  const ranked=students.map(s=>{
-    let tw=0,sw=0;
-    matieres.forEach(m=>{const a=matAvgPct(s.id,m.name);if(a!==null){const c=m.coeff||1;tw+=a*c;sw+=c;}});
-    const conds=(DB.conduct||[]).filter(c=>c.sid===s.id);
-    const cm={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-    const cAvg=conds.length?conds.reduce((a,c)=>a+(cm[c.score]||0),0)/conds.length:0;
-    return{id:s.id,moy:sw?Math.round(tw/sw):0,cond:Math.round(cAvg*25)};
-  }).sort((a,b)=>(b.moy*0.85+b.cond*0.15)-(a.moy*0.85+a.cond*0.15));
-  const pos=ranked.findIndex(r=>r.id===k.id)+1;
+  // Le rang imprimé est celui du palmarès — voir `_classer`.
+  const ranked=window._classer(students,()=>matieres).map(l=>({...l,moy:l.moyPct,cond:l.condPct}));
   const me=ranked.find(r=>r.id===k.id);
+  const pos=me?me.rang:0;
   // Weighted total points
   const frMats=isBilingual?matieres.filter(m=>m.lang==='fr'):matieres.filter(m=>m.lang!=='en');
   const enMats=matieres.filter(m=>m.lang==='en');
   const coMats=matieres.filter(m=>m.lang==='commun');
-  const calcSection=mats=>{let tot=0,max=0;mats.forEach(m=>{const a=matAvgPct(k.id,m.name);if(a!==null){const c=m.coeff||1;tot+=a*c;max+=100*c;}});return{tot,max};};
+  const calcSection=mats=>window._totalSection(k.id,mats);
   const frC=calcSection(frMats), enC=calcSection(enMats), coC=calcSection(coMats);
   const grandTot=frC.tot+enC.tot+coC.tot, grandMax=frC.max+enC.max+coC.max;
   const grandPct=grandMax?Math.round(grandTot/grandMax*100):0;
@@ -23013,14 +23097,8 @@ window.exportAllBulletinsPDF = (cid, forceTrim) => {
   const enMatsAll=matieres.filter(m=>m.lang==='en');
   const coMatsAll=matieres.filter(m=>m.lang==='commun');
   // Rank all students for position
-  const ranked=students.map(s=>{
-    let tw=0,sw=0;
-    matieres.forEach(m=>{const a=matAvgPct(s.id,m.name);if(a!==null){const c=m.coeff||1;tw+=a*c;sw+=c;}});
-    const conds=(DB.conduct||[]).filter(c=>c.sid===s.id);
-    const cm={Excellent:4,Bien:3,Moyen:2,Mauvais:1};
-    const cAvg=conds.length?conds.reduce((a,c)=>a+(cm[c.score]||0),0)/conds.length:0;
-    return{id:s.id,moy:sw?Math.round(tw/sw):0,cond:Math.round(cAvg*25)};
-  }).sort((a,b)=>(b.moy*0.85+b.cond*0.15)-(a.moy*0.85+a.cond*0.15));
+  // Le rang imprimé est celui du palmarès — voir `_classer`.
+  const ranked=window._classer(students,()=>matieres).map(l=>({...l,moy:l.moyPct,cond:l.condPct}));
   const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#1a1a1a;background:#fff;font-size:12.5px}.page{page-break-after:always;margin-bottom:0}.hdr{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #556777;margin-bottom:14px}.hl{display:flex;align-items:center;gap:12px}.logo{width:56px;height:56px;object-fit:cover;border-radius:50%;border:2px solid #556777}.si h1{font-size:15px;font-weight:800;color:#556777;line-height:1.2}.si .s{font-size:10px;color:#666;margin-top:2px}.hr{text-align:right}.brand{font-size:12px;font-weight:700;color:#556777}.meta{font-size:10px;color:#777;margin-top:2px}.dtitle{text-align:center;margin:12px 0 14px;border:2px solid #556777;border-radius:8px;padding:10px}.dtitle h2{font-size:14px;font-weight:800;color:#556777;text-transform:uppercase;letter-spacing:1px}.dtitle .yr{font-size:11px;color:#555;margin-top:3px}.student-card{display:flex;align-items:center;gap:18px;padding:14px;background:#f8faff;border:1.5px solid #dadee2;border-radius:10px;margin-bottom:16px}.stu-photo{width:80px;height:100px;border-radius:8px;overflow:hidden;background:#dadee2;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;flex-shrink:0;border:2.5px solid #556777}.stu-info{flex:1}.stu-name{font-size:17px;font-weight:800;color:#556777}.stu-meta{font-size:11px;color:#555;margin-top:3px}.stu-rank{text-align:center;min-width:90px}.stu-pct{font-size:26px;font-weight:900}.stu-pos{font-size:11px;color:#666;margin:2px 0}.stu-mention{font-size:13px;font-weight:800}.result-box{display:inline-block;padding:6px 16px;border-radius:8px;font-size:12px;font-weight:800;margin-top:8px}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#556777;color:#fff;padding:7px 6px;font-size:10.5px;text-align:center;font-weight:600}th:first-child{text-align:left}td{padding:5px 6px;font-size:11.5px;border-bottom:1px solid #e8ecf3;vertical-align:middle}td:first-child{font-size:12px}.total-row td{font-weight:800;background:#fff7ee;border-top:2px solid #556777}.section-hdr td{background:#556777;color:#fff;font-weight:700;font-size:11px;padding:5px 6px}.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:22px}.sig-box{text-align:center}.sig-line{height:56px;border-bottom:1.5px solid #aaa;margin-bottom:6px}.sig-label{font-size:10px;color:#666}.footer{margin-top:18px;padding-top:8px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10px;color:#999}.stat-row{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}.stat-box{flex:1;min-width:100px;padding:8px 10px;border:1px solid #dde5f0;border-radius:8px;text-align:center}.stat-num{font-size:18px;font-weight:800}.stat-lbl{font-size:10px;color:#666;margin-top:2px}@media print{@page{margin:10mm;size:A4}}`;
   const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:'<div style="width:56px;height:56px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px">🏫</div>'}<div class="si"><h1>${esc(school)}</h1><div class="s">${esc(schoolSub)}</div><div class="s">📞 ${esc(phone)}${dgep?` · N° DGEP: ${esc(dgep)}`:''}</div></div></div><div class="hr"><div class="brand">The Wise School International</div><div class="meta">Année ${yr}</div><div class="meta">${printDate}</div></div></div>`;
   const ftr=`<div class="footer"><span>© ${new Date().getFullYear()} ${esc(school)}</span><span>${esc(cl.name)} — ${trim}</span><span>Bulletin de l'école</span></div>`;
@@ -23043,9 +23121,9 @@ window.exportAllBulletinsPDF = (cid, forceTrim) => {
     </tr>`;
   }).join('');
   const pages=students.map(k=>{
-    const pos=ranked.findIndex(r=>r.id===k.id)+1;
     const me=ranked.find(r=>r.id===k.id);
-    const calcSec=mats=>{let tot=0,max=0;mats.forEach(m=>{const a=matAvgPct(k.id,m.name);if(a!==null){const c=m.coeff||1;tot+=a*c;max+=100*c;}});return{tot,max};};
+    const pos=me?me.rang:0;
+    const calcSec=mats=>window._totalSection(k.id,mats);
     const frC=calcSec(frMatsAll),enC=calcSec(enMatsAll),coC=calcSec(coMatsAll);
     const grandTot=frC.tot+enC.tot+coC.tot,grandMax=frC.max+enC.max+coC.max;
     const grandPct=grandMax?Math.round(grandTot/grandMax*100):0;
@@ -24839,13 +24917,13 @@ R.profil_enseignant = () => {
     <!-- ══ CAHIER DE PRÉPARATION ══ -->
     <div data-ptab="prep" data-ptab-mode="dark" style="${tab==='prep'?'':'display:none'}">
       ${(()=>{
-        const myPreps=(DB.cahier_prep||[]).filter(p=>p.teacher_id===u.id).sort((a,b)=>(b.date_lesson||b.semaine||'').localeCompare(a.date_lesson||a.semaine||''));
+        const myPreps=(DB.cahier_prep||[]).map(window._prepLire).filter(p=>p._auteur===u.id).sort((a,b)=>(b._date||'').localeCompare(a._date||''));
         const selMonth=window._prepMonth||today().slice(0,7);
         const selMode=window._prepMode||'all';
         const EDAY_L=['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
         const EPER=['07h30–08h30','08h30–09h30','09h30–10h30','10h30–11h30','11h30–12h30','14h00–15h00','15h00–16h00'];
         const filtered=myPreps.filter(p=>{
-          const inMonth=!selMonth||(p.date_lesson||p.semaine||'').startsWith(selMonth);
+          const inMonth=!selMonth||(p._date||'').startsWith(selMonth);
           const modeOk=selMode==='all'||(selMode==='linked'?!!p.linked_day:!p.linked_day);
           return inMonth&&modeOk;
         });
@@ -24912,7 +24990,7 @@ R.profil_enseignant = () => {
 
         <!-- Stats rapides -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;animation:fadeInUp .25s .08s ease both">
-          ${[[myPreps.length,t('Total','Total'),'#5b9be8'],[myPreps.filter(p=>p.statut==='finalise').length,t('Finalisées','Final'),'#34d399'],[myPreps.filter(p=>!p.statut||p.statut==='brouillon').length,t('Brouillons','Drafts'),'#fbbf24']].map(([n,lbl,c])=>`
+          ${[[myPreps.length,t('Total','Total'),'#5b9be8'],[myPreps.filter(p=>p._statut==='finalise').length,t('Finalisées','Final'),'#34d399'],[myPreps.filter(p=>p._statut==='brouillon').length,t('Brouillons','Drafts'),'#fbbf24']].map(([n,lbl,c])=>`
           <div style="background:rgba(255,255,255,.07);border-radius:12px;padding:12px;text-align:center;border:1px solid rgba(255,255,255,.08)">
             <div style="font-size:22px;font-weight:900;color:${c}">${n}</div>
             <div style="font-size:10px;color:rgba(255,255,255,.5);margin-top:2px">${lbl}</div>
@@ -24923,13 +25001,13 @@ R.profil_enseignant = () => {
         ${filtered.length?filtered.map((p,pi)=>{
           const dayLbl=p.linked_day?EDAY_L[['lun','mar','mer','jeu','ven','sam'].indexOf(p.linked_day)]||'':'';
           const perLbl=p.linked_period!=null?EPER[p.linked_period]||'':'';
-          const statut=p.statut||'brouillon';
+          const statut=p._statut;
           return `<div class="pt-glass" style="border-radius:16px;padding:14px;margin-bottom:12px;animation:fadeInUp .3s ${pi*.06}s ease both;border-left:3px solid ${statClr[statut]||'rgba(255,255,255,.2)'}">
             <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
               <div style="width:38px;height:38px;border-radius:11px;background:${p.linked_day?'rgba(32,95,174,.35)':'rgba(155,111,212,.3)'};display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${p.linked_day?'🔗':'✏️'}</div>
               <div style="flex:1;min-width:0">
-                <div style="font-size:14px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.titre||t('Sans titre','Untitled'))}</div>
-                <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:2px">${esc(p.matiere||'—')} · ${p.date_lesson||p.semaine||'—'}${dayLbl?' · '+dayLbl+(perLbl?' '+perLbl:''):''}</div>
+                <div style="font-size:14px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p._titre)}</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:2px">${esc(p.matiere||'—')} · ${p._date||'—'}${dayLbl?' · '+dayLbl+(perLbl?' '+perLbl:''):''}</div>
               </div>
               <span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;background:${statClr[statut]||'rgba(255,255,255,.12)'};color:#1a2333;white-space:nowrap;flex-shrink:0">${statLbl[statut]||statut}</span>
             </div>
@@ -25081,7 +25159,7 @@ window.savePrep = (prepId) => {
   const mc=getMyClass(); const cl=mc.cl;
   const now=today();
   const data={
-    id: prepId||'prep_'+Date.now(),
+    id: prepId||_uid('prep_'),
     teacher_id: S.user.id,
     cid: cl?.id||null,
     matiere: matiere.trim(),
@@ -25319,8 +25397,8 @@ R.profil_parent = () => {
     const moy=sumC?Math.round(moyPct/sumC):null;
     const mention=moy===null?null:moy>=90?{l:'Excellent',c:'#1f9d6b',bg:'#f0fdf4'}:moy>=75?{l:'Très Bien',c:'#2f8fa6',bg:'#eaf3fc'}:moy>=60?{l:'Bien',c:'#2f7bd6',bg:'#eaf3fc'}:moy>=50?{l:'Assez Bien',c:'#d98a2b',bg:'#fffbeb'}:{l:'À améliorer',c:'#dc2626',bg:'#fef2f2'};
     const classStudents=cl?(DB.students||[]).filter(s=>s.cid===cl.id):[];
-    const ranked=classStudents.map(s=>{let tp=0,sc=0;matieres.forEach(m=>{const a=matAvgPct(s.id,m.name,trim);if(a!==null){const c=m.coeff||1;tp+=a*c;sc+=c;}});return{id:s.id,score:sc?Math.round(tp/sc):0};}).sort((a,b)=>b.score-a.score);
-    const rank=ranked.findIndex(s=>s.id===kid.id)+1;
+    const ranked=window._classer(classStudents,()=>matieres,trim);
+    const rank=(ranked.find(s=>s.id===kid.id)||{}).rang||0;
     const photo=kid.photo||kid.photo_url;
 
     // SVG ring for payment
@@ -26677,14 +26755,9 @@ window.exportArchivePDF = () => {
     const studs = DB.students.filter(s=>s.cid===cl.id);
     if(!studs.length) return '';
     const mats = getClassMatieres(cl.id);
-    const ranked = studs.map(s=>{
-      let tot=0,cnt=0;
-      mats.forEach(m=>{const a=matAvgPct(s.id,m.name);if(a!==null){tot+=a;cnt++;}});
-      const moy = cnt?Math.round(tot/cnt):0;
-      const cond = (DB.conduct||[]).filter(c=>c.sid===s.id);
-      const cAvg = cond.length?cond.reduce((a,c)=>a+({Excellent:4,Bien:3,Moyen:2,Mauvais:1}[c.score]||0),0)/cond.length:3; // défaut "Bien" si aucune conduite — ne pas pénaliser
-      return {...s, moy, score:Math.round(moy*0.85+Math.round(cAvg*25)*0.15)};
-    }).sort((a,b)=>b.score-a.score);
+    // Celui-ci ignorait les coefficients : une matière à coeff 3 pesait
+    // autant qu'une matière à coeff 1. Il passe par `_classer` comme les autres.
+    const ranked = window._classer(studs,()=>mats).map(l=>({...l.eleve,...l,moy:l.moyPct,score:l.total}));
     const medals=['🥇','🥈','🥉'];
     return `<div class="section">
       <div class="section-title">🏫 ${esc(cl.name)} <span style="font-weight:400;font-size:10px;opacity:.8">(${studs.length} élèves)</span></div>
