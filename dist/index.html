@@ -4290,6 +4290,63 @@ function _setAuthMessage(messageId, message) {
   if (el) el.textContent = message || '';
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  LIRE SON PROPRE PROFIL — et savoir POURQUOI quand ça ne marche pas
+// ═════════════════════════════════════════════════════════════════════════════
+//
+//  `_get` rend `null` pour TOUT échec : jeton expiré, RLS qui refuse, serveur
+//  en panne, réseau muet. Et `null` était traité exactement comme un tableau
+//  vide. Mesuré au navigateur, mot de passe BON dans les cinq cas :
+//
+//    aucun profil rattaché   ┐
+//    jeton expiré (401)      │
+//    RLS refuse (403)        ├─ le même message, mot pour mot, et la personne
+//    serveur en panne (500)  │   était DÉCONNECTÉE dans la foulée
+//    réseau muet             ┘
+//
+//  « Mot de passe accepté, mais aucun profil n'est rattaché à cette adresse. »
+//  Quatre fois sur cinq c'était faux : le compte existait, le mot de passe
+//  était bon, et seule la lecture avait échoué. Voilà à quoi ressemble
+//  « l'application refuse mon mot de passe après un temps ».
+//
+//  Le statut HTTP était déjà relevé par `_noteReadState` — il suffisait de le
+//  lire. Deux règles en sortent :
+//    1. une panne d'infrastructure NE DÉCONNECTE PAS. Elle laisse la session
+//       ouverte pour que le nouvel essai parte tout de suite.
+//    2. une lecture qui échoue se RÉESSAIE. Un seul aller-retour sur un réseau
+//       mobile de Kinshasa est trop fragile pour décider de l'accès de
+//       quelqu'un à son école.
+window._lireMonProfil = async (authUserId, essais = 3) => {
+  const q = 'select=id,auth_user_id,email,name,role,initials,phone,photo_url,status&auth_user_id=eq.' +
+            encodeURIComponent(authUserId) + '&limit=1';
+  let etat = 'unavailable';
+  for (let i = 0; i < essais; i++) {
+    const rows = await _get('users', q);
+    etat = window._readState.users || 'unavailable';
+    if (Array.isArray(rows)) return { rows, etat };
+    // Seules les pannes passagères méritent un nouvel essai : un 401, un 403
+    // ou un 404 rendront la même chose une seconde plus tard.
+    if (etat !== 'unavailable' && etat !== 'server_error') break;
+    if (i < essais - 1) await new Promise(r => setTimeout(r, 400 * (i + 1)));
+  }
+  return { rows: null, etat };
+};
+
+// Ce qu'on dit quand la lecture du profil n'a pas abouti, et s'il faut
+// déconnecter. On ne déconnecte QUE si l'identité elle-même est inutilisable.
+window._diagnosticProfil = (etat) => ({
+  empty:            { msg:'Mot de passe accepté, mais aucun profil n’est rattaché à cette adresse — la Direction doit renvoyer l’invitation', sortir:true },
+  session_expired:  { msg:'Votre session n’est plus valide — réessayez de vous connecter', sortir:true },
+  forbidden:        { msg:'Le serveur refuse de lire votre profil — votre mot de passe est bon. Signalez-le à la Direction (accès à « users »)', sortir:false },
+  contract_missing: { msg:'Le serveur de l’école ne répond pas comme prévu — signalez-le à la Direction', sortir:false },
+  server_error:     { msg:'Le serveur de l’école est en panne — votre mot de passe est bon, réessayez dans un instant', sortir:false },
+}[etat] || {
+  msg: navigator.onLine
+    ? 'Le serveur de l’école ne répond pas — votre mot de passe est bon, réessayez dans un instant'
+    : 'Vous êtes hors ligne — la connexion demande Internet',
+  sortir: false,
+});
+
 async function _openSupabaseSession(session, password, messageId) {
   const target = messageId || 'PM';
   const authUser = session?.user;
@@ -4301,11 +4358,7 @@ async function _openSupabaseSession(session, password, messageId) {
   window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY, session.access_token);
   window.DB_ONLINE = true;
 
-  const rows = await _get(
-    'users',
-    'select=id,auth_user_id,email,name,role,initials,phone,photo_url,status&auth_user_id=eq.' +
-      encodeURIComponent(authUser.id) + '&limit=1'
-  );
+  const { rows, etat } = await window._lireMonProfil(authUser.id);
   const user = Array.isArray(rows) ? rows[0] : null;
   if (user) user.role = _normRole(user.role);
   // Quatre pannes DIFFÉRENTES portaient le même message — « Compte non
@@ -4314,8 +4367,9 @@ async function _openSupabaseSession(session, password, messageId) {
   // nomme maintenant, sans rien révéler qu'on ne sache déjà : la personne
   // vient de prouver qui elle est, son mot de passe était bon.
   if (!user) {
-    await window._authClient.auth.signOut();
-    _setAuthMessage(target, 'Mot de passe accepté, mais aucun profil n’est rattaché à cette adresse — la Direction doit renvoyer l’invitation');
+    const d = window._diagnosticProfil(Array.isArray(rows) ? 'empty' : etat);
+    if (d.sortir) await window._authClient.auth.signOut();
+    _setAuthMessage(target, d.msg);
     return false;
   }
   if (user.status !== 'active') {
@@ -4351,9 +4405,13 @@ async function _openSupabaseSession(session, password, messageId) {
   S.user = user;
   const loaded = await loadFromSupabase();
   if (!loaded) {
+    // Même famille que ci-dessus : les données qui n'arrivent pas ne disent
+    // RIEN de l'identité. On ne déconnecte donc pas — le nouvel essai part
+    // tout de suite — et on dit que le mot de passe, lui, était bon.
     S.user = null;
-    await window._authClient.auth.signOut();
-    _setAuthMessage(target, 'Données indisponibles — vérifiez votre connexion');
+    _setAuthMessage(target, navigator.onLine
+      ? 'Votre mot de passe est bon, mais les données de l’école n’arrivent pas — réessayez dans un instant'
+      : 'Vous êtes hors ligne — la connexion demande Internet');
     return false;
   }
 
