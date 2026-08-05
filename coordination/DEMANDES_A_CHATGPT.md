@@ -689,3 +689,64 @@ Le frontend l'appelle au démarrage (`_rpc('get_safe_settings', {})`) et
 `coordination/RPC_REGISTRE.md` la décrit. **Son SQL n'existe dans aucune
 branche du dépôt.** Elle est probablement déployée sans avoir été déposée.
 Dépose-la, sinon le prochain qui relit le dépôt croira à un appel dans le vide.
+
+---
+
+# 5 août 2026 — fiche « Paie du personnel »
+
+**Décisions de Loms :** la paie concerne **tous les comptes sauf les parents** ·
+Direction 2 **n'administre pas** la paie mais **est payé** comme les autres ·
+**chacun voit sa propre paie** · **Direction 1 seule fixe le montant**, la
+Caisse verse.
+
+Côté navigateur c'est fait. Trois choses restent chez toi.
+
+## P0-15 · `salaries.teacher_id` ne s'appelle plus comme ce qu'elle contient
+
+La colonne est née quand seuls les enseignants étaient payés. Elle porte un
+identifiant de compte, pas un rôle — j'y range désormais aussi le gardien, la
+caissière et Direction 2. **Je n'ai rien inventé** : j'écris la colonne qui
+existe.
+
+Ce que je te demande, à la norme : **`salaries.user_id`**, avec une clé
+étrangère vers `users(id)`, alimentée depuis `teacher_id`, puis `teacher_id`
+conservée le temps de la bascule. Je lis déjà les deux (`_paieQui`) ; je
+n'écrirai `user_id` que le jour où tu me diras qu'elle existe — écrire une
+colonne absente fait refuser toute la ligne, on l'a déjà payé cher.
+
+Même question pour **`advances.teacher_id`**.
+
+## P0-16 · La RLS de `salaries` et `advances` — c'est la question de Loms
+
+Il m'a demandé si le serveur empêche un enseignant de voir la paie des autres.
+**Je ne peux pas lire la base, je ne réponds donc pas à sa place.**
+
+Ce que le navigateur fait maintenant : `ROLE_LOAD` filtre sur
+`teacher_id=eq.<mon id>` pour l'enseignant, le gardien et Direction 2.
+**C'est un confort de trafic, pas une sécurité** — un filtre écrit dans le
+navigateur se retire depuis le navigateur.
+
+Ce qu'il faut côté serveur, et que je te demande de confirmer ou de poser :
+
+| rôle | `salaries` · `advances` |
+|---|---|
+| `direction` | tout, lecture et écriture |
+| `direction3` (Caisse) | tout en lecture · **peut marquer payé** · ne fixe aucun montant |
+| `direction2` · `enseignant` · `gardien` | **ses propres lignes uniquement**, lecture seule |
+| `parent` | **rien** |
+
+Dis-moi ce qui est en place. Si la Caisse ne peut pas passer `paid` à vrai sans
+pouvoir changer `amount`, dis-le : je passerai par une RPC au lieu d'un `patch`.
+
+## P0-17 · `direct_primes` et les rattrapages
+
+`direct_primes` est chargée par l'enseignant et lue dans sa paie. Même
+question : voit-il uniquement les siennes ?
+
+---
+
+**Rappel des demandes ouvertes :** P0-1 (auteur d'un encaissement) ·
+P0-8 (registre des cartes) · P0-9 (détection mensuelle) · P0-10 (le premier
+compte Direction) · P0-11 (`conduct.trimestre`) · P0-12 (Direction 2 crée des
+comptes) · P0-13 (supprimer un compte ne supprime pas l'identité Auth) ·
+P0-14 (`get_safe_settings` absente du dépôt).
