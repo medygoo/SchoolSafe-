@@ -982,3 +982,153 @@ et un hoquet réseau laisse entrer quand même. `audit-schema` : **aucun écart 
 
 **Ce que je n'ai pas pu vérifier :** je ne lis pas la base d'ici. Les six
 situations sont jouées contre un serveur simulé, pas contre ton projet Supabase.
+
+---
+
+# P0-20 · Un parent sans adresse e-mail — décision de Loms du 5 août 2026
+
+> *« Si un parent n'a pas de mail, on utilise WhatsApp. »*
+
+C'est une décision, pas une proposition. Elle vient de Loms, elle s'applique.
+Ce document dit **ce que le navigateur ne peut plus faire aujourd'hui**, et
+**ce qu'il lui faut de toi**. Le mécanisme dans la base est ton choix : je ne
+le conçois pas, je le servirai tel que tu l'auras arrêté.
+
+## 1. Ce qui l'empêche aujourd'hui — vérifié dans tes migrations
+
+Trois verrous, tous dans `20260804233228_require_email_for_school_accounts.sql`
+et `20260804233449_require_email_in_preinscription_rpc.sql` :
+
+```sql
+alter table public.users alter column email set not null;
+alter table public.users add constraint users_email_key unique (email);
+alter table public.users add constraint users_email_normalized_check
+  check (email ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$');
+
+alter table public.preinscriptions add constraint preinscriptions_email_required_check
+  check (email is not null and email ~ '…');
+```
+
+Et dans `save_school_user_profile` :
+
+```sql
+if v_email is null … then
+  return jsonb_build_object('ok', false, 'code', 'VALIDATION_ERROR', 'field', 'email');
+end if;
+```
+
+**Conséquence exacte, mesurable :** un parent sans adresse ne peut pas exister.
+La Direction remplit la fiche, appuie sur Enregistrer, et le serveur refuse.
+La famille n'a aucun compte — donc aucun lien à recevoir, ni par courriel ni
+par WhatsApp.
+
+## 2. Le point qui décide de tout, et que je ne veux pas laisser dans l'ombre
+
+**WhatsApp est un moyen de LIVRAISON, pas une IDENTITÉ.**
+
+Le lien que P0-19 fabrique passe par `supabase.auth.admin.generateLink()`. Cette
+fonction fabrique un lien **pour une identité qui existe dans `auth.users`**.
+Livrer ce lien par WhatsApp au lieu du courriel ne change rien à ce fait : il
+faut d'abord que la personne ait une identité.
+
+Donc la vraie question n'est pas « comment livrer », elle est :
+
+> **Qu'est-ce qui identifie un parent qui n'a pas d'adresse e-mail ?**
+
+Cette question est la tienne. Je ne connais pas assez ce que Supabase Auth
+accepte comme identité pour trancher, et **je ne veux pas le deviner** — le
+5 août, une déduction présentée comme un fait a envoyé Loms chercher au mauvais
+endroit, et j'ai promis de ne plus recommencer.
+
+## 3. Ce dont le navigateur a besoin — la liste précise
+
+Quelle que soit ta réponse à la question ci-dessus, il me faut ces six choses.
+Chacune est écrite avec **ce que l'écran en fait** — si un point te paraît
+inutile, dis-le et je retire l'écran correspondant.
+
+**a. Créer un compte parent avec un téléphone et sans adresse.**
+`save_school_user_profile` doit l'accepter. Il me faut le **code de refus** quand
+la fiche n'a **ni** adresse **ni** téléphone — un parent injoignable ne sert à
+personne. Je propose `CONTACT_REQUIRED` ; garde le nom que tu veux, mais donne-le
+moi, sinon l'écran affichera « le serveur a refusé » sans dire quoi corriger.
+
+**b. Savoir, à la lecture, comment ce parent est joint.**
+La liste des parents doit afficher « accès par WhatsApp » au lieu de proposer
+« renvoyer l'invitation par courriel » — un bouton qui ne peut pas aboutir est
+un mensonge poli, et j'en ai déjà livré un cette semaine.
+Si `email` devient nullable, `email is null` me suffit et je n'ai besoin de
+rien. **Mais si tu choisis une adresse technique fabriquée** (point 5b), alors
+`email` ne sera jamais nul et je ne saurai plus distinguer : il me faudra un
+champ explicite. **Je ne l'inventerai pas** — dis-moi son nom et ses valeurs.
+
+**c. `lien-acces` (P0-19) doit aboutir pour un tel compte.**
+Le contrat que je t'ai proposé prévoit un refus `NO_EMAIL`. Il a été écrit quand
+l'adresse était obligatoire. Pour un parent WhatsApp, ce refus ne doit **plus**
+tomber : la fonction doit rendre un lien. Sinon le bouton, déjà écrit et publié,
+répondra « ce parent n'a pas d'adresse » à celui-là même pour qui il a été fait.
+
+**d. Le téléphone devient un identifiant — il lui faut une forme unique.**
+Aujourd'hui **le navigateur enregistre le numéro tel qu'il est tapé**. Vérifié :
+le seul contrôle est `/^[+]?[0-9\s\-()+]{9,15}$/`, il n'y a **aucune
+normalisation et aucun contrôle d'unicité**. Donc `+243 810 000 111`,
+`0810000111` et `243-810-000-111` sont trois valeurs différentes pour le même
+parent.
+Si le numéro sert à identifier ou à fabriquer une adresse, **c'est le serveur qui
+doit poser la forme canonique** — pas le navigateur, pour la même raison que le
+solde ne se calcule pas dans le navigateur. Dis-moi la forme que tu retiens
+(E.164 `+243810000111` ?) et le code de refus si le numéro est déjà pris
+(`PHONE_IN_USE` ?), et je ferai la saisie qui la respecte.
+
+**e. Le jour où ce parent obtient enfin une adresse.**
+C'est le cas courant : l'école aide la famille à créer une boîte quelques mois
+plus tard. Aujourd'hui `save_school_user_profile` répond
+`AUTH_EMAIL_CHANGE_REQUIRED` dès qu'on change l'adresse d'un compte déjà rattaché
+à Auth. Il me faut le chemin : est-ce une RPC dédiée, une Edge Function, ou rien
+du tout ? Tant que je ne sais pas, l'écran doit refuser la modification — et le
+dire clairement plutôt que d'échouer en silence.
+
+**f. La préinscription depuis le site.**
+`preinscriptions_email_required_check` interdit une demande sans adresse. Une
+famille qui n'a pas de boîte ne peut donc pas préinscrire son enfant en ligne.
+La décision de Loms vaut là aussi. **Si tu lèves cette contrainte**, dis-moi ce
+que le formulaire public doit exiger à la place, et je le change.
+
+## 4. Ce que je NE fais pas avant ta réponse
+
+- Je ne touche à aucune contrainte, colonne, fonction ou migration.
+- Je n'invente aucun champ, et je ne déduis « ce parent est WhatsApp » d'aucun
+  indice côté navigateur.
+- Je n'appelle rien que tu n'aies pas ouvert. La leçon du 5 août est encore
+  chaude : j'appelais `prepare_account_invitation` en direct alors qu'elle
+  m'était fermée, et chaque invitation était refusée en silence pendant des
+  jours.
+
+## 5. Deux mécanismes que le navigateur sait servir — **ton choix, pas le mien**
+
+Je ne les propose que pour que tu voies ce qui est déjà écrit côté écran. Prends
+l'un, l'autre, ou un troisième auquel je n'ai pas pensé.
+
+**a. `users.email` redevient nullable, le téléphone porte l'identité.**
+Le plus propre à lire : `email is null` dit tout, sans champ supplémentaire.
+Ce que je ne sais pas et qui t'appartient : ce que Supabase Auth accepte comme
+identité téléphonique, et si `generateLink()` sait travailler dessus **sans
+qu'aucun SMS ne parte** — l'école ne paiera pas un fournisseur SMS, le lien part
+par WhatsApp.
+
+**b. Une adresse technique fabriquée depuis le numéro**, du genre
+`243810000111@…`, invisible pour la famille, qui ne sert qu'à Auth.
+Avantage : **rien de ce que tu as déjà construit ne bouge** —
+`invite-school-account`, `generateLink`, `lien-acces` continuent tels quels.
+Contrainte pour moi : `email` n'étant jamais nul, il me faut le champ du
+point **3b**, sinon l'écran proposera d'envoyer un courriel à une boîte qui
+n'existe pas.
+
+**Le point 3d vaut dans les deux cas** : dès que le numéro identifie, il lui faut
+une forme unique posée par le serveur.
+
+## 6. Ce que je livre dès que tu réponds
+
+L'écran de création d'un parent avec deux voies affichées côté Direction —
+**adresse e-mail** ou **téléphone WhatsApp** — la liste qui dit par où chaque
+parent est joint, et le bouton de lien qui s'adapte. Tout est déjà écrit à part
+la partie qui dépend de ta réponse. **Je n'appellerai rien avant.**
