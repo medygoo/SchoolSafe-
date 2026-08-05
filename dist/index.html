@@ -2282,6 +2282,7 @@ window.NAV = {
       {id:'scanner_exit',i:'🚪',l:{fr:'Scanner Sortie',en:'Exit Scan'}},
       {id:'scan_log',i:'📜',l:{fr:'Historique portail',en:'Gate Log'}},
       {s:{fr:'Mon compte',en:'My Account'}},
+      {id:'ma_paie',i:'💼',l:{fr:'Ma paie',en:'My Pay'}},
       {id:'mes_primes',i:'💎',l:{fr:'Mes primes',en:'My Bonuses'}},
       {id:'mes_absences',i:'🏖️',l:{fr:'Mes absences',en:'My Absences'}},
       {id:'profil_enseignant',i:'👤',l:{fr:'Mon profil',en:'My Profile'}},
@@ -2311,6 +2312,7 @@ window.NAV = {
       {id:'alert_urgent',i:'🚨',l:'Alerte Urgence'},
       {id:'notifications',i:'🔔',l:'Alertes'},
       {s:'Mon compte'},
+      {id:'ma_paie',i:'💼',l:'Ma paie'},
       {id:'profil_gardien',i:'👤',l:'Mon profil'},
     ],
     bn:[
@@ -2391,6 +2393,7 @@ window.NAV = {
       {id:'absences',i:'📝',l:'Justifications'},
       {id:'calendar',i:'📅',l:'Calendrier'},
       {id:'notifications',i:'🔔',l:'Notifications'},
+      {id:'ma_paie',i:'💼',l:'Ma paie'},
       {s:'Sécurité Portail'},
       {id:'scan_log',i:'📜',l:'Historique scans'},
       {id:'alert_urgent',i:'🚨',l:'Alerte Urgence'},
@@ -2435,6 +2438,7 @@ window.NAV = {
       {id:'cantine',i:'🍽️',l:'Cantine Scolaire'},
       {s:'Infos'},
       {id:'notifications',i:'🔔',l:'Notifications'},
+      {id:'ma_paie',i:'💼',l:'Ma paie'},
       {s:'Mon compte'},
       {id:'profil_caisse',i:'👤',l:'Mon profil'},
     ],
@@ -2762,6 +2766,10 @@ window.ROLE_LOAD = {
     modules: {
       pedagogie:      ['attendance','devoirs','grades','appreciations','conduct','cahier_prep'],
       eleves:         ['approbations','aps','scan_log'],
+      // Direction 2 n'administre PAS la paie — décision de Loms, 5 août
+      // 2026 — mais il est payé comme les autres et voit la sienne.
+      personnel:      [_T('salaries', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||'')),
+                       _T('advances', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||''))],
       communication:  ['messages','events'],
       // Direction 2 ne voit JAMAIS le montant ni la devise d'un document, même
       // si une ligne mal classée passait la RLS.
@@ -2799,7 +2807,13 @@ window.ROLE_LOAD = {
       eleves:        [_T('scan_log','select='+_COLS_SCAN+'&order=time.desc&limit=500'),
                       _T('aps','select=id,sid,name,relation,photo,active,phone,approval_status,valid_until')],
       communication: ['messages','events'],
-      personnel:     ['teacher_absences','direct_primes'],
+      // Chacun voit SA paie — Loms, 5 août 2026. L'onglet Finances de son
+      // profil lisait déjà `salaries` et `advances` : elles n'étaient pas
+      // déclarées ici, donc il lisait « Aucun salaire enregistré » le jour
+      // même où il avait été payé.
+      personnel:     ['teacher_absences','direct_primes',
+                      _T('salaries', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||'')),
+                      _T('advances', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||''))],
     },
   },
 
@@ -2841,7 +2855,12 @@ window.ROLE_LOAD = {
     // Le Gardien passe par les RPC scanner : get_scanner_students et
     // get_scanner_aps. Il ne tire jamais la table students entière.
     rpc: ['get_scanner_students', 'get_scanner_aps'],
-    modules: {},
+    // Le gardien est payé comme tout le monde, et n'avait aucun moyen de
+    // le voir — il n'était même pas notifié.
+    modules: {
+      personnel: [_T('salaries', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||'')),
+                  _T('advances', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||''))],
+    },
   },
 };
 
@@ -2860,6 +2879,7 @@ window.PAGE_MODULE = {
   etat_financier:'finance', tresorerie:'finance', comptabilite:'finance', fee_types:'finance',
   recus_parent:'finance',
   paie:'personnel', mes_primes:'personnel', mes_absences:'personnel', teacher_activity:'personnel',
+  ma_paie:'personnel',
   cantine:'activites', cantine_parent:'activites', activites:'activites', activites_parent:'activites',
   documents_admin:'administration', audit_log:'administration', statistiques:'administration',
 };
@@ -2883,7 +2903,15 @@ const safe = (r, cur) => {
 };
 
 window._chargerSources = async (sources) => {
-  const liste = (sources||[]).map(x => typeof x === 'string' ? _T(x, 'select=*') : x);
+  // Une requête peut être une FONCTION : elle est évaluée au chargement, une
+  // fois `S.user` connu. C'est ce qui permet à un enseignant, un gardien ou
+  // Direction 2 de ne tirer que SA propre fiche de paie.
+  //
+  // ⚠️ Ce filtre est un confort de trafic, PAS une sécurité : il vit dans le
+  // navigateur. C'est la RLS qui doit garantir que personne ne lit la paie
+  // d'un autre — demandé à ChatGPT, P0-16.
+  const liste = (sources||[]).map(x => typeof x === 'string' ? _T(x, 'select=*') : x)
+    .map(x => ({ t: x.t, q: typeof x.q === 'function' ? x.q() : x.q }));
   _lectFail = 0;
   const res = await Promise.all(liste.map(x => _get(x.t, x.q)));
   liste.forEach((x, i) => { DB[x.t] = safe(res[i], DB[x.t]); });
@@ -9964,6 +9992,9 @@ window.saveUser = async () => {
 // Rattacher les enfants cochés — après que le serveur a accepté le profil,
 // jamais avant : un lien vers un parent refusé serait un lien orphelin.
 window._rattacherEnfants = (pid) => {
+  // Exposée globalement, et elle écrit : elle porte sa garde. Cacher le
+  // formulaire ne protège rien — la console reste ouverte à tout le monde.
+  if(!S.user||!['direction','direction2'].includes(S.user.role)) return;
   const cbs = document.querySelectorAll('.usr_kid_cb');
   if (!cbs.length) return;
   const voulus = new Set([...cbs].filter(c => c.checked).map(c => c.dataset.sid));
@@ -24668,6 +24699,81 @@ window.deleteEvent = (eid) => {
 };
 
 // ── MES PRIMES (ENSEIGNANT) ──
+// ═══════════════════════════════════════════════════════════════════════════
+//  MA PAIE — le même écran pour tous ceux que l'école paie
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Loms, 5 août 2026 : chacun voit sa propre paie. Le gardien, la caissière
+//  et Direction 2 n'avaient AUCUN moyen de savoir ce qu'ils avaient touché —
+//  le gardien n'était même pas notifié d'un versement.
+//
+//  L'enseignant, lui, avait un onglet Finances dans son profil qui lisait
+//  `DB.salaries` et `DB.advances` : deux tables que son rôle ne chargeait
+//  pas. Il lisait donc « Aucun salaire enregistré » le jour même où il
+//  avait été payé. C'est le défaut du champ lu et jamais écrit, dans l'autre
+//  sens : la table lue et jamais chargée.
+R.ma_paie = () => {
+  const u = S.user; if (!u) return '';
+  const mes = (DB.salaries||[]).filter(s => window._paieQui(s) === u.id)
+    .sort((a,b) => (b.month||'').localeCompare(a.month||''));
+  const avances = (DB.advances||[]).filter(a => a.teacher_id === u.id)
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const netDe = s => Number(s.net != null ? s.net : (s.amount||0)) || 0;
+  const verse = mes.filter(s => s.paid).reduce((t,s) => t + netDe(s), 0);
+  const attente = mes.filter(s => !s.paid).reduce((t,s) => t + netDe(s), 0);
+  const moisLib = m => { if(!m) return '—'; const [y,mo]=m.split('-');
+    return (['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][+mo-1]||m)+' '+y; };
+
+  return `<div style="padding:12px">
+  <div class="ww-toolbar"><span style="font-size:16px;font-weight:700">💼 Ma paie</span></div>
+  <div class="hbento" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px">
+    <div class="htile" style="background:linear-gradient(135deg,#1f9d6b,#2fbf8f);color:#fff;padding:14px 10px">
+      <div style="font-size:19px">✅</div><div class="hbig" style="font-size:23px">${_cur()}${verse}</div><div class="hsub">reçu</div>
+    </div>
+    <div class="htile" style="background:linear-gradient(135deg,#d98a2b,#f0b355);color:#fff;padding:14px 10px">
+      <div style="font-size:19px">⏳</div><div class="hbig" style="font-size:23px">${_cur()}${attente}</div><div class="hsub">en attente</div>
+    </div>
+  </div>
+  ${!mes.length ? `<div style="text-align:center;padding:50px 20px;color:var(--text-muted)">
+      <div style="font-size:46px;margin-bottom:12px">💼</div>
+      Aucune fiche de paie enregistrée pour l'instant.
+      <div style="font-size:12px;margin-top:6px">Elles apparaîtront ici dès que la Direction en aura établi une.</div>
+    </div>` : `
+  <div style="display:flex;flex-direction:column;gap:10px">
+    ${mes.map(s => {
+      const net = netDe(s);
+      const primes = (Number(s.bonus)||0);
+      const retenues = (Number(s.deductions)||0);
+      return `<div class="premium-section" style="margin-bottom:0;border-left:4px solid ${s.paid?'#1f9d6b':'#d98a2b'};padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:15px">${moisLib(s.month)}</div>
+            <div style="font-size:11.5px;color:var(--text-muted)">${s.paid?`Versé le ${s.paid_date||'—'}${s.payment_method?' · '+esc(s.payment_method):''}`:'En attente de versement'}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:20px;font-weight:800;color:${s.paid?'#1f9d6b':'#d98a2b'}">${_cur()}${net}</div>
+            <span class="pill" style="background:${s.paid?'#d8f3e6':'#fdeccd'};color:${s.paid?'#065f46':'#92400e'};font-size:10px;font-weight:700">${s.paid?'✅ Payé':'⏳ En attente'}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--border);font-size:11.5px">
+          <span style="background:var(--bg);border-radius:8px;padding:3px 9px">Base ${_cur()}${Number(s.amount)||0}</span>
+          ${primes?`<span style="background:#f0e9fa;color:#5e3a92;border-radius:8px;padding:3px 9px">+ Primes ${_cur()}${primes}</span>`:''}
+          ${retenues?`<span style="background:#fee2e2;color:#991b1b;border-radius:8px;padding:3px 9px">− Retenues ${_cur()}${retenues}</span>`:''}
+        </div>
+        ${s.notes?`<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;font-style:italic">${esc(s.notes)}</div>`:''}
+      </div>`;
+    }).join('')}
+  </div>`}
+  ${avances.length?`<div class="premium-section" style="margin-top:14px">
+    <div class="premium-section-title">💸 Mes avances</div>
+    ${avances.map(a=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <span>${a.date||a.month||'—'}${a.reason?` · <span style="color:var(--text-muted)">${esc(a.reason)}</span>`:''}</span>
+      <strong style="color:#dc2626">− ${_cur()}${Number(a.amount)||0}</strong>
+    </div>`).join('')}
+  </div>`:''}
+  </div>`;
+};
+
 R.mes_primes = () => {
   const u=S.user;
   const myRats=(DB.rattrapages||[]).filter(r=>r.teacher_id===u.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
@@ -28585,6 +28691,49 @@ window._getDirectPrimesTotal = (teacherId, month) => {
   return (DB.direct_primes||[]).filter(p=>p.teacher_id===teacherId&&(p.month||(p.date||'').slice(0,7))===month).reduce((s,p)=>s+(Number(p.amount)||0),0);
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  QUI EST SUR LA PAIE — une seule réponse
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Loms, 5 août 2026 : « les paies du personnel ne concernent pas les
+//  parents. Tous les comptes qui restent les concernent. »
+//
+//  Avant, la liste était bâtie sur `role === 'enseignant'`. Le gardien, la
+//  caissière, Direction 2 et la Direction elle-même n'y figuraient pas : il
+//  fallait retaper leur nom À LA MAIN, en texte libre, sans aucun lien avec
+//  leur compte. Deux conséquences qui se voyaient :
+//    · une faute de frappe et la personne n'était jamais notifiée ;
+//    · le gardien était en plus EXCLU de la notification par une condition
+//      explicite — il n'apprenait jamais qu'il avait été payé.
+//
+//  Un compte désactivé sort de la paie du mois courant, mais ses fiches
+//  passées restent : ce sont des pièces comptables, pas des références
+//  vivantes.
+window._PAIE_HORS_PERSONNEL = ['parent'];
+window._personnelPaye = () => (DB.users||[])
+  .filter(u => u && !window._PAIE_HORS_PERSONNEL.includes(_roleUI(u.role)) && u.status !== 'inactive')
+  .sort((a,b) => (a.name||'').localeCompare(b.name||'', 'fr'));
+
+// Le compte que cette fiche paie.
+//
+// La colonne s'appelle `teacher_id` parce qu'elle est née quand seuls les
+// enseignants étaient payés. Elle porte un identifiant de compte, pas un
+// rôle : l'élargir n'invente rien. `user_id` est demandé à ChatGPT (P0-15)
+// pour que le nom dise ce que la colonne contient ; on lit déjà les deux,
+// on n'écrit que celle qui existe.
+window._paieQui = (sal) => (sal && (sal.user_id || sal.teacher_id)) || null;
+
+// Le nom porté par une fiche : le compte s'il est rattaché, sinon le texte
+// libre des anciennes saisies.
+window._paieNom = (sal) => {
+  const u = window._paieQui(sal) ? gu(window._paieQui(sal)) : null;
+  return u ? u.name : (sal && sal.person_name) || 'Personnel';
+};
+window._paieFonction = (sal) => {
+  const u = window._paieQui(sal) ? gu(window._paieQui(sal)) : null;
+  return u ? (ROLE_META[_roleUI(u.role)]?.label || u.role) : ((sal && sal.person_role) || 'Personnel');
+};
+
 R.salaires = () => {
   const teachers=(DB.users||[]).filter(u=>u.role==='enseignant');
   const sals=DB.salaries||[];
@@ -28694,8 +28843,9 @@ R.salaires = () => {
 //  paiement rapide, gestion des postes — 4 onglets
 // ══════════════════════════════════════════════════════════════
 window.quickPayTeacher = (teacherId, month) => {
-  if(!S.user||S.user.role!=='direction'){toast('Accès non autorisé','error');return;}
-  const sal=(DB.salaries||[]).find(s2=>s2.teacher_id===teacherId&&s2.month===month);
+  // Direction 1 fixe le montant ; Direction 1 ET la Caisse le versent.
+  if(!S.user||!['direction','direction3'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
+  const sal=(DB.salaries||[]).find(s2=>window._paieQui(s2)===teacherId&&s2.month===month);
   if(!sal||!(sal.amount>0)){
     toast('Entrez d\'abord le salaire de base via ✏️','warning');
     openSalaireForm(teacherId,month);
@@ -28789,17 +28939,22 @@ R.paie = () => {
 
   // ── Onglet 1 : Paiements (liste unifiée ordonnée) ───────────
   if (tab === 'paiements') {
-    const nonTeach = sals.filter(s2=>!s2.teacher_id&&s2.person_name&&s2.month===selMonth);
+    // Les fiches d'avant, saisies en texte libre, sans compte rattaché : on
+    // les garde à l'écran, ce sont des pièces comptables.
+    const nonTeach = sals.filter(s2=>!window._paieQui(s2)&&s2.person_name&&s2.month===selMonth);
     const rows = [];
-    teachers.forEach(u2=>{
-      const sal2 = sals.find(x=>x.teacher_id===u2.id&&x.month===selMonth)||null;
+    // TOUT LE PERSONNEL, plus seulement les enseignants — Loms, 5 août 2026.
+    window._personnelPaye().forEach(u2=>{
+      const sal2 = sals.find(x=>window._paieQui(x)===u2.id&&x.month===selMonth)||null;
+      // Les rattrapages n'existent que chez les enseignants : ailleurs, 0.
       const ratPrime = _getRatPrime(u2.id,selMonth).prime;
       const dpTotal = _getDirectPrimesTotal(u2.id,selMonth);
       const advTotal = _getAdvancesTotal(u2.id,selMonth);
       const net = sal2 ? (sal2.amount||0)+(sal2.bonus||0)+ratPrime+dpTotal-(sal2.deductions||0)-advTotal : 0;
       const totalPrimes = (sal2?.bonus||0)+ratPrime+dpTotal;
       const totalDeduct = (sal2?.deductions||0)+advTotal;
-      rows.push({kind:'t',id:u2.id,name:u2.name,sub:'👨‍🏫 Enseignant',net,paid:!!(sal2&&sal2.paid),hasSal:!!(sal2&&sal2.amount>0),hasRec:!!sal2,base:sal2?.amount||0,bonus:totalPrimes,deduct:totalDeduct});
+      const _m = ROLE_META[_roleUI(u2.role)]||{label:u2.role,icon:'👤'};
+      rows.push({kind:'t',id:u2.id,name:u2.name,sub:_m.icon+' '+_m.label,net,paid:!!(sal2&&sal2.paid),hasSal:!!(sal2&&sal2.amount>0),hasRec:!!sal2,base:sal2?.amount||0,bonus:totalPrimes,deduct:totalDeduct});
     });
     nonTeach.forEach(r2=>{
       rows.push({kind:'p',id:r2.id,name:r2.person_name,sub:'👔 '+(r2.person_role||'Personnel'),net:(r2.net!=null?r2.net:(r2.amount||0)),paid:!!r2.paid,hasSal:true,hasRec:true,base:r2.amount||0,bonus:r2.bonus||0,deduct:r2.deductions||0});
@@ -28834,7 +28989,7 @@ R.paie = () => {
       <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
         ${CHIPS.map(c2=>`<button onclick="window._paieFilter='${c2.id}';render()" style="flex-shrink:0;padding:6px 14px;border-radius:16px;border:1.5px solid ${filt===c2.id?'#1f9d6b':'var(--border-color)'};cursor:pointer;font-size:11px;font-weight:700;background:${filt===c2.id?'#d8f3e6':'var(--bg-card)'};color:${filt===c2.id?'#065f46':'var(--text-secondary)'}">${c2.l}</button>`).join('')}
       </div>
-      ${canEdit?`<button class="btn btn-primary btn-sm" onclick="openPersonnelSalaireForm(null,'${selMonth}')">➕ Ajouter du personnel</button>`:''}
+      ${isDir1?`<button class="btn btn-primary btn-sm" onclick="openPersonnelSalaireForm(null,'${selMonth}')">➕ Ajouter du personnel</button>`:''}
     </div>
     ${filtered.length===0?`<div class="premium-section" style="text-align:center;color:var(--text-muted);padding:24px;font-size:13px">Aucun membre du personnel dans ce filtre pour ${monthLabel}.</div>`:''}
     ${filtered.map((p2,i)=>{
@@ -28844,8 +28999,9 @@ R.paie = () => {
       const borderCol=p2.paid?(isT?'#1f9d6b':'#2563eb'):(p2.hasSal?(isT?'#f59e0b':'#9b6fd4'):'#d1d5db');
       const cardBg=p2.paid?(isT?'linear-gradient(120deg,#f0fdf4 0%,#d8f3e6 100%)':'linear-gradient(120deg,#eff6ff 0%,#dbeafe 100%)'):(p2.hasSal?(isT?'linear-gradient(120deg,#fffbeb 0%,#fef3c7 100%)':'linear-gradient(120deg,#faf5ff 0%,#f0e9fa 100%)'):'var(--bg-card)');
       const pill=p2.paid?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:#065f46;background:#d8f3e6;padding:2px 8px;border-radius:10px">✅ Payé</span>`:(p2.hasSal?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:#92400e;background:#fdeccd;padding:2px 8px;border-radius:10px">⏳ Non payé</span>`:`<span style="font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:10px">✏️ À saisir</span>`);
-      const payBtn=(!p2.paid&&p2.hasSal&&((isT&&isDir1)||(!isT&&canEdit)))?`<button class="btn btn-sm" style="background:#1f9d6b;color:#fff;border:none;font-weight:700;padding:6px 12px" onclick="${isT?`quickPayTeacher('${p2.id}','${selMonth}')`:`quickPayPersonnel('${p2.id}')`}">✅ Payer</button>`:'';
-      const editBtn=((isT&&isDir1)||(!isT&&canEdit))?`<button class="btn btn-outline btn-sm" onclick="${isT?`openSalaireForm('${p2.id}','${selMonth}')`:`openPersonnelSalaireForm('${p2.id}','${selMonth}')`}">✏️</button>`:'';
+      // Direction 1 fixe le montant, la Caisse verse — Loms, 5 août 2026.
+      const payBtn=(!p2.paid&&p2.hasSal&&canEdit)?`<button class="btn btn-sm" style="background:#1f9d6b;color:#fff;border:none;font-weight:700;padding:6px 12px" onclick="${isT?`quickPayTeacher('${p2.id}','${selMonth}')`:`quickPayPersonnel('${p2.id}')`}">✅ Payer</button>`:'';
+      const editBtn=isDir1?`<button class="btn btn-outline btn-sm" onclick="${isT?`openSalaireForm('${p2.id}','${selMonth}')`:`openPersonnelSalaireForm('${p2.id}','${selMonth}')`}">✏️</button>`:'';
       const pdfBtn=p2.hasSal?`<button class="btn btn-outline btn-sm" onclick="${isT?`printFichePaie('${p2.id}','${selMonth}')`:`printPersonnelFichePaie('${p2.id}')`}">💾</button>`:'';
       const delBtn=(isDir1&&p2.hasRec)?`<button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626" onclick="${isT?`deleteSalaire('${p2.id}','${selMonth}')`:`deletePersonnelSalaire('${p2.id}')`}">🗑️</button>`:'';
       const avBtn=(isT&&isDir1)?`<button class="btn btn-outline btn-sm" title="Avance sur salaire" onclick="openAvanceForm('${p2.id}','${selMonth}')">💸</button>`:'';
@@ -29231,7 +29387,9 @@ window.psalCalcNet = () => {
   }
 };
 window.savePersonnelSalaire = (salId) => {
-  if(!S.user||!['direction','direction3'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
+  // Le MONTANT est fixé par Direction 1 seule — Loms, 5 août 2026.
+  // La Caisse verse (`quickPayPersonnel`), elle ne décide pas de la somme.
+  if(!S.user||S.user.role!=='direction'){toast('Seule la Direction 1 fixe un salaire','error');return;}
   const person_name=($('psal_name')?.value||'').trim();
   if(!person_name){toast('Le nom est obligatoire','error');return;}
   const person_role=($('psal_role')?.value||'').trim();
@@ -29245,7 +29403,7 @@ window.savePersonnelSalaire = (salId) => {
   const payment_method=$('psal_pay')?.value||'Espèces';
   const notes=($('psal_notes')?.value||'').trim()||null;
   if(!DB.salaries) DB.salaries=[];
-  const id=salId||(DB.salaries.find(s=>!s.teacher_id&&s.person_name===person_name&&s.month===month)||{}).id||('psal'+Date.now());
+  const id=salId||(DB.salaries.find(s=>!window._paieQui(s)&&s.person_name===person_name&&s.month===month)||{}).id||_uid('psal_');
   const idx=salId?DB.salaries.findIndex(s=>s.id===salId):-1;
   const obj={id, teacher_id:null, person_name, person_role, month,
     amount, bonus, deductions, net, paid, paid_date:paid?today():null,
@@ -29253,8 +29411,13 @@ window.savePersonnelSalaire = (salId) => {
   if(idx>=0) DB.salaries[idx]=obj; else DB.salaries.push(obj);
   pushSync('salaries','upsert',obj);
   if(paid) {
-    const notifTgt=(DB.users||[]).find(u=>(u.name||'').toLowerCase()===person_name.toLowerCase()&&u.role!=='parent'&&u.role!=='gardien');
-    if(notifTgt) { const n={id:'n'+Date.now(),uid:notifTgt.id,msg:`💰 Paiement enregistré : ${_cur()}${net} (${month}) — ${person_role}`,time:nowTime(),date:today(),read:false,type:'info'}; DB.notifs.unshift(n);pushSync('notifs','post',n); }
+    // La notification cherchait la personne par le NOM TAPÉ, et excluait le
+    // gardien par une condition explicite : une faute de frappe, ou le fait
+    // d'être gardien, et personne n'apprenait qu'il avait été payé.
+    // Elle suit maintenant le compte rattaché — le seul lien qui ne se
+    // trompe pas — et n'exclut personne.
+    const notifTgt = obj.teacher_id ? gu(obj.teacher_id) : null;
+    if(notifTgt) pushNotif(notifTgt.id, `💰 Salaire de ${month} versé : NET ${_cur()}${net}`);
     // Écriture OHADA : reconstruite automatiquement par _getJournalAll depuis DB.salaries — pas de double écriture ici
     logAudit('salaire',`${person_name} (${person_role}) — ${_cur()}${net} (${month})`);
   }
