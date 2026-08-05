@@ -4603,9 +4603,11 @@ async function _tryLoginInner() {
     }
     $('PM').textContent='Nom ou code incorrect'; $('LP').value=''; setTimeout(()=>$('PM').textContent='',2000); return;
   }
-  if (!u.pin_hashed) { u.pin=hash; u.pin_hashed=true; pushSync('users','patch',{pin:hash,pin_hashed:true},'id=eq.'+u.id); }
-  // Migration transparente V1 (SHA-256 nu) → V2 (salé par uid) au login réussi
-  if (u.pin_hashed && !u.pin_hashed_v2 && hashV2) { u.pin=hashV2; u.pin_hashed=true; u.pin_hashed_v2=true; pushSync('users','patch',{pin:hashV2,pin_hashed:true,pin_hashed_v2:true},'id=eq.'+u.id); }
+  // Les deux migrations de hachage qui se trouvaient ici écrivaient dans
+  // users.pin, pin_hashed et pin_hashed_v2 — TROIS COLONNES QUI N'EXISTENT
+  // PAS. Elles partaient donc à chaque connexion réussie pour être refusées.
+  // Ce chemin est de toute façon celui de l'ancienne connexion par code, que
+  // Supabase Auth remplace : il ne sert plus qu'au cache hors ligne.
   saveToCrypt(); // snapshot synchrone → credentials de cet user dans le cache offline
   DB.users.forEach(x => { delete x.pin; delete x.pin_hashed; delete x.pin_hashed_v2; }); // purge mémoire post-auth
   const _lkOk=(u.name||'').toLowerCase().slice(0,20); const _lsOk=_loadLoginState(); _lsOk.fails[_lkOk]=0; delete _lsOk.lockUntil[_lkOk]; _saveLoginState(_lsOk);
@@ -4876,25 +4878,25 @@ window.openProfile = () => {
   <button class="btn btn-primary" onclick="saveProfile()">💾 ${t('Enregistrer','Save')}</button>`);
 };
 window.saveProfile = async () => {
-  const u=S.user, op=$('oldPin').value, np=$('newPin').value, cp=$('confirmPin').value;
-  if (!op&&!np&&!cp) { closeModal(); return; }
-  if (!op) { toast('Entrez votre code actuel','error'); return; }
-  const opHash = await _hashPin(op);
-  const opHashV2 = await _hashPinSalted(op, u.id);
-  const currentMatch = u.pin_hashed_v2 ? u.pin===opHashV2 : (u.pin_hashed ? u.pin===opHash : u.pin===op);
-  if (!currentMatch) { toast('Code actuel incorrect','error'); return; }
-  if (_isDirRole(u.role)) {
-    if (!np||np.length<6) { toast('Mot de passe : minimum 6 caractères','error'); return; }
-  } else {
-    if (!np||np.length!==6||!/^\d{6}$/.test(np)) { toast('Code PIN : exactement 6 chiffres','error'); return; }
-  }
-  if (np!==cp) { toast('Les codes ne correspondent pas','error'); return; }
-  const npHash = await _hashPinSalted(np, u.id);
-  u.pin = npHash; u.pin_hashed = true; u.pin_hashed_v2 = true;
-  pushSync('users','patch',{pin:npHash,pin_hashed:true,pin_hashed_v2:true},'id=eq.'+u.id);
-  await _initAESKeyFromPIN(np); // re-dériver la clé PBKDF2 avec le nouveau PIN
-  saveToCrypt();
-  toast('PIN mis à jour ✅','success'); closeModal();
+  // CHANGER SON MOT DE PASSE PASSE PAR AUTH — Loms, 4 août 2026.
+  //
+  // Cette fonction comparait un code au hachage stocké dans `users.pin`, puis
+  // écrivait le nouveau dans trois colonnes QUI N'EXISTENT PAS : l'écran
+  // annonçait « PIN mis à jour ✅ » et rien ne partait. Pire, elle re-dérivait
+  // la clé du cache chiffré à partir du nouveau code — donc en cas de succès
+  // apparent, les données hors ligne devenaient illisibles.
+  //
+  // Le mot de passe appartient à Supabase Auth, et à personne d'autre.
+  const np = $('newPin')?.value || '', cp = $('confirmPin')?.value || '';
+  if (!np && !cp) { closeModal(); return; }
+  if (!window._authClient) { toast('Application non reliée au serveur — reconnectez-vous', 'error'); return; }
+  if (np.length < 8) { toast('Choisissez au moins 8 caractères', 'error'); return; }
+  if (np !== cp) { toast('Les deux mots de passe ne sont pas identiques', 'error'); return; }
+  const { error } = await window._authClient.auth.updateUser({ password: np });
+  if (error) { toast(_authErrorMessage(error), 'error'); return; }
+  logAudit('mot_de_passe_change', `${S.user.name} a changé son mot de passe`, S.user.id);
+  toast('Mot de passe mis à jour', 'success');
+  closeModal();
 };
 
 // ── ROLE GUARD ──
@@ -9660,11 +9662,14 @@ window._simpleList = (role, icon, gradient) => {
         </div>
         ${role==='enseignant'?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">📚 ${DB.classes.filter(c=>c.teacher_id===u.id||c.teacher_id_en===u.id).map(c=>esc(c.name)).join(', ')||'Aucune classe assignée'}</div>`:''}
         <div style="display:flex;gap:6px;align-items:center">
-          <span class="pill pill-blue" style="font-family:monospace">${_isDirRole(u.role)?'Mdp':'PIN'}: ${u.pin_hashed?'••••••':u.pin}</span>
+          ${(()=>{const a=(u.email||'').trim();
+            return a
+              ? `<span class="pill" style="background:#d8f3e6;color:#065f46" title="${esc(a)}">✉️ ${esc(a.length>26?a.slice(0,24)+'…':a)}</span>`
+              : `<span class="pill" style="background:#fef3c7;color:#92400e" title="Sans adresse, cette personne ne peut pas se connecter">⚠️ Sans accès</span>`;})()}
           <span style="flex:1"></span>
           ${u.phone?waBtn(u.phone,u.name):''}
           <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
-          <button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')">🔑 Code</button>
+          <button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')">🔑 Accès</button>
           <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
         </div>
       </div>
@@ -9708,33 +9713,86 @@ ${photoOpts}
 <div class="form-row">
   <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="usr_phone" value="${u&&u.phone?esc(u.phone):''}" placeholder="+243 8XX XXX XXX"></div>
   <div class="form-group">
-    ${(()=>{const isDir=_isDirRole(role);const lbl=isDir?'Mot de passe':'PIN (6 chiffres)';const ph=u?'Laisser vide pour garder':(isDir?'Min. 6 caractères':'••••••');const ml=isDir?'64':'6';const im=isDir?'text':'numeric';return`<label class="form-label">${lbl}${u?' — vide = conserver':' <span class="req">*</span>'}</label><input class="form-input" id="usr_pin" type="password" inputmode="${im}" maxlength="${ml}" placeholder="${ph}" autocomplete="new-password">`;})()}
-    ${pinDisplay}
+    <label class="form-label">Adresse e-mail${u?'':' <span class="req">*</span>'}</label>
+    <input class="form-input" id="usr_email" type="email" autocomplete="off"
+           value="${u&&u.email?esc(u.email):''}" placeholder="prenom.nom@exemple.com">
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:5px">
+      ${u&&u.email
+        ? "L'invitation part à cette adresse. La personne choisit elle-même son mot de passe."
+        : "L'invitation partira à cette adresse. La personne choisit elle-même son mot de passe — l'école ne le connaît jamais."}
+    </div>
   </div>
 </div>
 ${classOpts}`,
 `<button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveUser()">💾 ${u?'Mettre à jour':'Ajouter'}</button>`);
 };
 
+// L'INVITATION — ce qui transforme un profil en compte qui se connecte.
+//
+// Parcours arrêté par Loms le 4 août 2026, et déjà construit par ChatGPT :
+//
+//   création du profil → enregistrement de l'e-mail → invitation envoyée
+//   → la personne crée SON mot de passe.
+//
+//   mot de passe perdu → « mot de passe oublié » → lien à l'e-mail enregistré
+//   → nouveau mot de passe → LE MÊME PROFIL est conservé.
+//
+// Ce dernier point est le plus important, et c'est celui qu'on rate : une
+// réinitialisation ne doit pas créer un second compte. Le profil, ses
+// classes, son historique et ses documents restent attachés à la même
+// personne. C'est `prepare_account_invitation` qui garantit cela côté
+// serveur — il relie l'adresse au profil EXISTANT, et refuse si l'adresse
+// appartient déjà à quelqu'un d'autre (EMAIL_IN_USE).
+window._inviterCompte = async (userId, courriel, nom) => {
+  if (!courriel) return { ok:false, code:'PAS_D_ADRESSE' };
+  const r = await _rpc('prepare_account_invitation', {
+    p_actor_auth_user_id: (window._authClient
+      ? (await window._authClient.auth.getSession()).data?.session?.user?.id : null) || null,
+    p_app_user_id: userId,
+    p_email: courriel,
+  });
+  if (!r.ok) return r;
+  // Le serveur a préparé l'invitation ; l'envoi du courriel lui appartient.
+  // On ne prétend donc pas qu'elle est « reçue » — seulement qu'elle est
+  // partie. Une nuance qui évite à la Direction d'attendre en silence.
+  logAudit('compte_invitation', `${nom} — invitation préparée pour ${courriel} par ${window._acteur()}`, userId);
+  return r;
+};
+
 window.saveUser = async () => {
   if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
-  // Read all form values safely
-  const nameEl=$('usr_name'); const pinEl=$('usr_pin'); const idEl=$('usr_id'); const roleEl=$('usr_role');
-  if(!nameEl||!pinEl||!idEl||!roleEl){toast('Erreur formulaire — réouvrez la fenêtre','error');return;}
+  // L'ÉCOLE NE CHOISIT PLUS LE MOT DE PASSE — Loms, 4 août 2026 :
+  //
+  //   « Création du profil → enregistrement de l'e-mail → invitation envoyée
+  //     → la personne crée son mot de passe.
+  //     Mot de passe perdu → lien envoyé à l'e-mail enregistré → nouveau mot
+  //     de passe → le même profil est conservé. »
+  //
+  // Ce formulaire demandait un mot de passe ou un PIN à six chiffres, que la
+  // Direction tapait POUR la personne. Trois choses en découlaient :
+  // l'école connaissait le mot de passe de chacun, il circulait à l'oral, et
+  // les colonnes qui le portaient — users.pin, pin_hashed, pin_hashed_v2 —
+  // N'EXISTENT PAS dans la base. Chaque enregistrement de compte partait donc
+  // pour être refusé en bloc, mot de passe compris.
+  //
+  // Désormais : la Direction enregistre un NOM et une ADRESSE. Le serveur
+  // envoie l'invitation, et la personne choisit son mot de passe elle-même.
+  const nameEl=$('usr_name'); const idEl=$('usr_id'); const roleEl=$('usr_role');
+  if(!nameEl||!idEl||!roleEl){toast('Erreur formulaire — réouvrez la fenêtre','error');return;}
   const name=(nameEl.value||'').trim();
   if(!name){markFieldError('usr_name','Nom requis');return;}
   const uid=idEl.value;
   const role=roleEl.value;
   if(S.user.role==='direction2' && ['direction','direction2','direction3'].includes(role)){toast('Accès non autorisé','error');return;}
-  const isDir=_isDirRole(role);
-  const pinRaw=(pinEl.value||'').trim();
-  const pinInput=isDir?pinRaw:pinRaw.replace(/\D/g,'');
-  if(isDir){
-    if(!uid && (!pinInput||pinInput.length<6)){markFieldError('usr_pin','Mot de passe requis : minimum 6 caractères');return;}
-    if(pinInput && pinInput.length<6){markFieldError('usr_pin','Minimum 6 caractères');return;}
-  } else {
-    if(!uid && (!pinInput||pinInput.length!==6)){markFieldError('usr_pin','PIN requis : exactement 6 chiffres');return;}
-    if(pinInput && pinInput.length!==6){markFieldError('usr_pin','Exactement 6 chiffres');return;}
+  const courriel=($('usr_email')?.value||'').trim().toLowerCase();
+  if(courriel && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courriel)){
+    markFieldError('usr_email','Adresse e-mail invalide'); return;
+  }
+  // Un compte SANS adresse ne peut pas se connecter : la seule voie d'entrée
+  // est l'invitation. On le dit à la création plutôt que de le laisser
+  // découvrir à quelqu'un qui essaie d'ouvrir l'application en septembre.
+  if(!uid && !courriel){
+    markFieldError('usr_email','Adresse e-mail requise — c\'est par elle que part l\'invitation'); return;
   }
   const initials=($('usr_init')?.value||'').trim()||ini(name);
   // La photo ne part en base que si le rôle la rend utile à autrui.
@@ -9743,14 +9801,8 @@ window.saveUser = async () => {
   const users=DB.users||[];
   const existingUser=uid?users.find(x=>x.id===uid):null;
   if(uid && !existingUser){toast('Utilisateur introuvable — rechargez','error');return;}
-  const newId=uid||_uid('u_'); // SEC-04 : id fixé AVANT le hash — le sel V2 doit être l'id réel du compte
-  // Le code ne figure dans l'écriture QUE s'il vient d'être saisi. Le
-  // reconstruire depuis la mémoire est impossible : elle est purgée après
-  // chaque connexion, et l'on y écrivait donc une chaîne vide.
-  const _credentials = pinInput
-    ? {pin: await _hashPinSalted(pinInput,newId), pin_hashed:true, pin_hashed_v2:true}
-    : null;
-  if(!uid && !_credentials){toast('Code requis pour un nouveau compte','error');return;}
+  const newId=uid||_uid('u_');
+  const _avaitCourriel = !!(existingUser && existingUser.email);
   const phoneRaw=($('usr_phone')?.value||'').trim();
   if(phoneRaw && !/^[+]?[0-9\s\-()+]{9,15}$/.test(phoneRaw)){markFieldError('usr_phone','Format invalide — ex: +243 8XX XXX XXX');return;}
   const phone=phoneRaw||null;
@@ -9790,7 +9842,7 @@ window.saveUser = async () => {
       photo = null;
     }
   }
-  const data={name,role,initials,phone,...(_credentials||{}),...(photo?{photo_url:photo}:{})};
+  const data={name,role,initials,phone,...(courriel?{email:courriel}:{}),...(photo?{photo_url:photo}:{})};
   window._userPhoto=null;
 
   if(uid){
@@ -9828,7 +9880,22 @@ window.saveUser = async () => {
       });
       changedClasses.forEach(c=>pushSync('classes','upsert',c));
     }
-    pushSync('users','patch',data,'id=eq.'+uid);
+    const _res = await _rpc('save_school_user_profile', { p_user: { id: uid, ...data } });
+    if (!_res.ok) {
+      const _m = _codeMsg(_res.code);
+      if (_res.code === 'EMAIL_IN_USE') markFieldError('usr_email', _m);
+      else if (_res.code === 'AUTH_EMAIL_CHANGE_REQUIRED') markFieldError('usr_email', _m);
+      else toast(_m, 'error');
+      return;
+    }
+    if (_res.data && _res.data.user) Object.assign(existingUser, _res.data.user);
+    // Une adresse ajoutée à un profil qui n'en avait pas : l'invitation part.
+    if (courriel && !_avaitCourriel) {
+      const _inv = await window._inviterCompte(uid, courriel, name);
+      toast(_inv.ok ? `Invitation envoyée à ${courriel}`
+                    : 'Profil mis à jour, mais l\'invitation n\'est pas partie — ' + _codeMsg(_inv.code),
+            _inv.ok ? 'success' : 'warning');
+    }
     logAudit('user_edit', `${name} — ${role}${_deloges.length?' · remplace '+_deloges.join(', '):''}`, uid);
     toast(`${name} mis à jour`,'success');
     // Signalé après coup plutôt que bloquant : la direction sait ce qu'elle
@@ -9853,8 +9920,22 @@ window.saveUser = async () => {
       });
       changedClasses.forEach(c=>pushSync('classes','upsert',c));
     }
-    pushSync('users','upsert',ns);
+    // Le serveur décide, et sa réponse fait foi — comme pour un élève.
+    const _res = await _rpc('save_school_user_profile', { p_user: ns });
+    if (!_res.ok) {
+      const _m = _codeMsg(_res.code);
+      if (_res.code === 'EMAIL_IN_USE') markFieldError('usr_email', _m);
+      else if (_res.code === 'DUPLICATE_USER') markFieldError('usr_name', _m);
+      else toast(_m, 'error');
+      return;
+    }
+    if (_res.data && _res.data.user) Object.assign(ns, _res.data.user);
     logAudit('user_add', `${name} — ${role}`, ns.id);
+    if (courriel) {
+      const _inv = await window._inviterCompte(ns.id, courriel, name);
+      if (!_inv.ok) toast('Compte créé, mais l\'invitation n\'est pas partie — ' + _codeMsg(_inv.code), 'warning');
+      else toast(`Invitation envoyée à ${courriel}`, 'success');
+    }
     if(S.user.role==='direction2'){const _rl=ROLE_META[role]?.label||role;(DB.users||[]).filter(u=>u.role==='direction').forEach(u=>pushNotif(u.id,`📋 ${S.user.name} (Dir.2) a ajouté ${_rl} : ${name}`));}
     toast(`🎉 ${name} ajouté`,'success');
   }
@@ -9875,38 +9956,54 @@ window.previewUserPhoto = input => {
 // ne peut plus se connecter et rien ne le distingue à l'écran. Cette
 // fonction rend à la Direction le moyen de le rouvrir sans passer par la
 // base — et sert aussi au cas ordinaire du code oublié.
+// L'ÉCOLE NE REMET PLUS DE CODE EN MAIN PROPRE — Loms, 4 août 2026.
+//
+// Cet écran faisait choisir un mot de passe à la Direction, avec la consigne
+// « communiquez-le à la personne ». Trois choses en découlaient : l'école
+// connaissait le mot de passe de chacun, il circulait à l'oral ou par
+// message, et les colonnes qui le portaient n'existent pas dans la base —
+// l'enregistrement partait pour être refusé.
+//
+// À la place, la seule voie que Loms a fixée : on RENVOIE l'invitation.
+// La personne reçoit un lien à son adresse et choisit son mot de passe.
+// Le profil, ses classes et son historique ne bougent pas.
 window.resetUserPin = (uid) => {
   if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
   const u=(DB.users||[]).find(x=>x.id===uid); if(!u){toast('Compte introuvable','error');return;}
   if(S.user.role==='direction2' && _isDirRole(u.role)){toast('Accès non autorisé','error');return;}
-  const dir=_isDirRole(u.role);
-  openM(`🔑 Nouveau code — ${esc(u.name)}`,`
-  <div style="font-size:13px;color:var(--text-secondary);padding:10px 12px;background:var(--bg);border-radius:10px;margin-bottom:14px">
-    ${dir?'Mot de passe : au moins 6 caractères.':'Code PIN : exactement 6 chiffres.'}
-    Communiquez-le à ${esc(u.name)} — il remplace l'ancien immédiatement.
+  const a = (u.email||'').trim();
+  openM(`🔑 Accès de ${esc(u.name)}`, a ? `
+  <div style="font-size:13.5px;line-height:1.6;padding:12px 14px;background:var(--bg);border-radius:10px;margin-bottom:14px">
+    Un lien va être envoyé à <strong>${esc(a)}</strong>.<br>
+    ${esc(u.name)} choisira un nouveau mot de passe — <strong>l'école ne le connaît pas</strong>,
+    et c'est ce qui le rend sûr.
   </div>
-  <div class="form-group"><label class="form-label">Nouveau code *</label>
-    <input class="form-input" id="rst_pin" type="${dir?'text':'tel'}" inputmode="${dir?'text':'numeric'}" autocomplete="off" placeholder="${dir?'6 caractères minimum':'6 chiffres'}">
+  <div style="font-size:12.5px;color:var(--text-muted)">
+    Le profil est conservé : classes, historique et documents restent attachés à la même personne.
+  </div>` : `
+  <div style="font-size:13.5px;line-height:1.6;padding:12px 14px;background:#fef3c7;border-radius:10px;color:#92400e">
+    <strong>Ce profil n'a pas d'adresse e-mail.</strong><br>
+    Sans adresse, aucune invitation ne peut partir et la personne ne peut pas se connecter.
+    Ouvrez « Modifier » et enregistrez son adresse : l'invitation partira aussitôt.
   </div>`,
-  `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
-   <button class="btn btn-primary" onclick="doResetUserPin('${uid}')">Enregistrer le code</button>`);
+  a ? `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+       <button class="btn btn-primary" onclick="renvoyerInvitation('${uid}')">Envoyer le lien</button>`
+    : `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`);
 };
 
-window.doResetUserPin = async (uid) => {
+window.renvoyerInvitation = async (uid) => {
   if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
   const u=(DB.users||[]).find(x=>x.id===uid); if(!u) return;
   if(S.user.role==='direction2' && _isDirRole(u.role)){toast('Accès non autorisé','error');return;}
-  const dir=_isDirRole(u.role);
-  const raw=($('rst_pin')?.value||'').trim();
-  const pin=dir?raw:raw.replace(/\D/g,'');
-  if(dir && pin.length<6){toast('Mot de passe : 6 caractères minimum','error');return;}
-  if(!dir && !/^\d{6}$/.test(pin)){toast('Code PIN : exactement 6 chiffres','error');return;}
-  const hash=await _hashPinSalted(pin,uid);
-  u.pin=hash; u.pin_hashed=true; u.pin_hashed_v2=true;
-  pushSync('users','patch',{pin:hash,pin_hashed:true,pin_hashed_v2:true},'id=eq.'+uid);
-  logAudit('user_pin_reset',`${u.name} — code réinitialisé`,uid);
-  closeModal(); saveToCrypt();
-  toast(`Code de ${u.name} remplacé — communiquez-le-lui`,'success');
+  const a = (u.email||'').trim();
+  if(!a){toast('Ce profil n\'a pas d\'adresse e-mail','error');return;}
+  const _fin = _btnBusy('.modal-footer .btn-primary');
+  try {
+    const r = await window._inviterCompte(uid, a, u.name);
+    if (!r.ok) { toast(_codeMsg(r.code), 'error'); return; }
+    closeModal();
+    toast(`Lien envoyé à ${a} — ${u.name} choisira son mot de passe`, 'success');
+  } finally { if (typeof _fin === 'function') _fin(); }
 };
 
 window.deleteUser = (uid) => {
@@ -26847,18 +26944,25 @@ window.autoActivatePaid = () => {
   else toast('Tous les élèves à jour sont déjà activés','info');
 };
 
-window.resetParentPin = (uid) => {
+window.resetParentPin = async (uid) => {
   if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
   const u=DB.users.find(x=>x.id===uid); if(!u||u.role!=='parent') return;
-  const newPin=Math.floor(100000+Math.random()*900000).toString();
-  u.pin=newPin; u.pin_hashed=false;
-  pushSync('users','patch',{pin:newPin,pin_hashed:false},'id=eq.'+uid);
+  // LE PARENT REÇOIT UN LIEN, PAS UN CODE — Loms, 4 août 2026.
+  //
+  // Cet écran tirait un PIN à six chiffres au hasard, l'écrivait dans des
+  // colonnes inexistantes, et l'affichait en gros caractères pour qu'on le
+  // dicte au parent. Un code dicté est un code partagé.
+  if (!(u.email||'').trim()) {
+    openM('🔑 Accès du parent', `<div style="font-size:13.5px;line-height:1.6;padding:12px 14px;background:#fef3c7;border-radius:10px;color:#92400e">
+      <strong>${esc(u.name)} n'a pas d'adresse e-mail enregistrée.</strong><br>
+      Sans adresse, aucun lien ne peut partir. Ouvrez sa fiche et enregistrez-la.
+    </div>`, `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`);
+    return;
+  }
+  const _r = await window._inviterCompte(uid, u.email.trim(), u.name);
+  if (!_r.ok) { toast(_codeMsg(_r.code), 'error'); return; }
+  toast(`Lien envoyé à ${u.email.trim()} — ${u.name} choisira son mot de passe`, 'success');
   saveToCrypt(); render();
-  openM('🔑 Nouveau PIN parent',`<div style="text-align:center;padding:20px 0">
-    <div style="font-size:14px;margin-bottom:8px;color:var(--text-secondary)">Nouveau code pour <strong>${esc(u.name)}</strong></div>
-    <div style="font-size:42px;font-weight:900;letter-spacing:12px;color:#205fae;font-family:monospace;padding:18px;background:#dbeafe;border-radius:16px;margin:10px auto">${newPin}</div>
-    <div style="font-size:12px;color:var(--text-muted);margin-top:10px">Communiquez ce code au parent. Il sera masqué dès la première connexion.</div>
-  </div>`,`<button class="btn btn-primary" onclick="closeModal()">OK</button>`);
 };
 
 // ── RECHERCHE GLOBALE ──
@@ -27200,8 +27304,11 @@ window.importCSVConfirm = () => {
         parent=(DB.users||[]).find(u=>u.role==='parent'&&u.name.toLowerCase().trim()===(parentName||'').toLowerCase().trim());
       }
       if(!parent&&parentName){
-        const genPin6=()=>Math.floor(100000+Math.random()*900000).toString();
-        const newParent={id:'u'+Date.now()+Math.random().toString(36).slice(2,5),role:'parent',name:parentName,phone:parentPhone||null,pin:genPin6(),pin_hashed:false,initials:ini(parentName)};
+        // Aucun code n'est tiré ici : un parent se connecte par l'invitation
+        // envoyée à son adresse. L'import ne connaît pas les adresses, donc le
+        // compte est créé SANS accès — la Direction l'ouvre en enregistrant
+        // l'adresse depuis la fiche du parent.
+        const newParent={id:_uid('u_'),role:'parent',name:parentName,phone:parentPhone||null,initials:ini(parentName)};
         DB.users.push(newParent);pushSync('users','upsert',newParent);pid=newParent.id;
       } else if(parent){pid=parent.id;}
     }
