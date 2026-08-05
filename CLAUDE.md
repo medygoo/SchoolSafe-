@@ -448,6 +448,38 @@ appelle. Quand deux générations de code emploient des noms différents, on
 réconcilie **à la lecture** plutôt que de reprendre les écritures d'une
 application en service.
 
+**Dans ce dépôt-ci, la formule était recopiée NEUF fois** — trouvé le 5 août
+2026 en réparant `verif-coherence`, qui réclamait un `_classer` inexistant ici.
+Les neuf copies divergeaient sur six points, et chacun se voit par une famille :
+
+| | |
+|---|---|
+| conduite absente | **0 %** sur cinq écrans, **75 %** sur trois autres — 51 au palmarès, 62 sur la fiche du même enfant |
+| élève archivé | compté dans **tous** les classements de l'année en cours |
+| ex æquo | présent dans **une** copie sur neuf |
+| trimestre | le Top 10 lisait `currentTrimestre` à côté d'un palmarès qui écoutait l'écran |
+| coefficients | le rapport de fin d'année les **ignorait** — coeff 3 pesait comme coeff 1 |
+| `cid` absent | deux tableaux de bord filtrent le podium dessus : **« Top palmarès » était vide en permanence** |
+
+Trois normaliseurs en sont sortis : `_classer` (9 appelants), `_totalSection`
+(3), `_prepLire` (6). Et deux leçons qui valent au-delà :
+
+1. **Le rang IMPRIMÉ doit venir du même code que le rang affiché.** Deux des
+   neuf copies vivaient dans les bulletins PDF. Quand le papier contredit
+   l'écran, c'est le papier qui reste dans la famille.
+2. **Un normaliseur ne sert à rien tant que les écrans ne l'appellent pas.**
+   Le faire passer l'audit prend dix minutes ; router les neuf appelants prend
+   le reste. C'est la deuxième moitié qu'on abandonne.
+
+`cahier_prep` a donné la même panne dans une autre pièce, et elle vaut d'être
+retenue à part : **l'écran de navigation écrit `content/date_prevue/by/status`,
+le studio du profil écrit `titre/date_lesson/teacher_id/statut`.** Les colonnes
+des deux existent, donc rien n'est rejeté — mais chaque écran ne lisait que la
+moitié de sa table. Une fiche remplie dans le studio n'arrivait jamais au suivi
+de la Direction, et là où la date manquait, « Invalid Date » s'imprimait.
+**Deux vocabulaires qui coexistent ne produisent aucune erreur : ils produisent
+une absence, et une absence ne se remarque pas.**
+
 ### Un champ mort, et son symétrique
 
 **Avant de lire un champ, vérifier qu'une écriture le renseigne.** Des champs
@@ -571,6 +603,50 @@ Un lecteur correct accepte « 12,50 », « 1 200 », « 1.200,50 » et **refuse*
 Et une seule porte d'entrée pour l'argent : reçu, recette et écriture comptable
 partent ensemble, ou rien ne part. Un encaissement qui contournait cette porte
 n'apparaissait dans aucun total.
+
+### Un repli qui ne peut pas réussir est un mensonge poli
+
+**5 août 2026.** Loms : *« je tape le mail et le code pour me connecter, ça
+marche pas »*. La cause n'était pas là où elle se plaignait.
+
+`tryLogin` avait deux chemins. Client Supabase présent → adresse + mot de
+passe. **Sinon → nom + code PIN**, comparé à `users.pin`, `pin_hashed`,
+`pin_hashed_v2` — trois colonnes qui **n'existent pas**. PostgREST refuse une
+lecture qui nomme une colonne inconnue : la requête échouait en entier, et la
+comparaison rendait toujours faux.
+
+Donc dès que le client d'authentification ne se créait pas — CDN filtré, réseau
+qui bloque, appareil hors ligne — l'application basculait **en silence** sur ce
+chemin et répondait « Nom ou code incorrect » à une adresse et un mot de passe
+parfaitement justes. Rien ne disait qu'on ne parlait même pas au serveur.
+
+> **Un repli vers un chemin qui ne peut plus aboutir est pire que pas de repli
+> du tout** : il transforme une panne d'infrastructure en accusation contre
+> l'utilisateur. Quand la seule porte n'est pas joignable, on le DIT.
+
+Trois familles de défauts trouvées en tirant ce fil, et elles se répètent
+partout ailleurs :
+
+1. **Quatre pannes portaient le même message.** « Compte non autorisé ou
+   désactivé » couvrait : aucun profil rattaché à cette identité · compte
+   désactivé · rôle inconnu · lecture échouée. Celui qui le lit ne peut ni le
+   corriger ni le décrire, et celui qui dépanne ne sait pas quoi chercher.
+2. **Trois boutons ne faisaient rien.** « Mot de passe oublié » et « Première
+   connexion » sortaient en silence quand le client était absent — `if (!x)
+   return;`. On appuie, rien ne se passe, on croit l'application cassée. **Un
+   `return` muet dans un gestionnaire de clic est toujours un défaut.**
+3. **Une panne de réseau n'est pas un mot de passe refusé.** Les confondre
+   envoie quelqu'un ressaisir vingt fois un mot de passe correct.
+
+Et une règle de sécurité qui se perd facilement : **le message de récupération
+doit être le MÊME que l'adresse existe ou non.** Sinon on découvre, une adresse
+à la fois, qui a un compte dans cette école.
+
+**Ce qui reste ouvert, et qui n'est pas de notre côté :** `save_school_user_profile`
+exige d'être **déjà** Direction pour créer un compte, et la connexion cherche le
+profil par `users.auth_user_id`. Tant qu'il n'existe pas une Direction active
+avec son identité Auth rattachée, personne ne peut entrer — et aucune correction
+du navigateur n'y changera rien. C'est P0-10 dans `DEMANDES_A_CHATGPT.md`.
 
 ### Les gardes de rôle
 
