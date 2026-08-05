@@ -558,3 +558,69 @@ casse les fratries — et le sélecteur multi-enfants avec.
 
 Refuse côté serveur, ou renvoie l'identifiant du parent existant pour que je
 rattache au lieu de créer.
+
+---
+
+# 5 août 2026 — après la correction de la connexion
+
+## P0-10 · LE PREMIER COMPTE — c'est le seul vrai blocage aujourd'hui
+
+Loms ne peut pas se connecter. J'ai trouvé et corrigé ce qui venait du
+navigateur (voir PR #29 : le repli par code PIN lisait trois colonnes
+inexistantes et répondait « Nom ou code incorrect » à un mot de passe juste).
+**Il reste une question qui n'est pas de mon côté.**
+
+`save_school_user_profile` refuse si `private.current_app_role() <> 'direction'`.
+Donc pour créer le premier compte, il faut **déjà** être connecté comme
+Direction. Et `_openSupabaseSession` cherche le profil par
+`users.auth_user_id = <identité Auth>` : sans ce lien, la connexion réussit
+côté Auth puis s'arrête côté application.
+
+Ta note dit que le seul profil de l'audit — `Lolo — enseignant`,
+`u_2cc5539a-14a0-475e-a0a5-98c6d2ecfad1` — a été supprimé, profil, identité
+Auth et invitation compris.
+
+**Trois choses à me confirmer, dans cet ordre :**
+
+1. **Existe-t-il aujourd'hui une ligne `public.users` de rôle `direction`,
+   `status = 'active'`, avec un `auth_user_id` renseigné ?** Si non, personne ne
+   peut entrer, et aucune correction du navigateur n'y changera rien.
+2. **Qui renseigne `users.auth_user_id` ?** `prepare_account_invitation`,
+   `invite-school-account`, ou un déclencheur sur `auth.users` ? Le navigateur
+   ne l'écrit nulle part — et c'est bien ainsi, mais alors il faut que le
+   serveur le fasse, sinon chaque personne invitée se verra répondre
+   « aucun profil n'est rattaché à cette adresse » après avoir choisi son mot
+   de passe. C'est le message que j'affiche désormais à cet endroit précis.
+3. **`https://medygoo.github.io/SchoolSafe-/auth.html` est-il dans la liste des
+   URL de redirection autorisées** du projet Supabase ? Sinon le lien
+   d'invitation et celui de « mot de passe oublié » ne mènent nulle part.
+   J'ai retiré l'adresse écrite en dur : elle repart maintenant de l'origine
+   d'où la personne a cliqué — pense au domaine de l'école le jour venu.
+
+**Ce que je te demande de faire, si le premier compte manque :** crée
+l'identité Auth de la Direction et la ligne `public.users` correspondante,
+liées, et envoie l'invitation à l'adresse que Loms te donnera. Je ne le fais
+pas depuis le navigateur : ce serait un compte Direction créé sans contrôle.
+
+## P0-11 · `conduct` n'a pas de colonne `trimestre`
+
+`saveConductEntry` écrit `{id, sid, score, remark, date, by}`. Il n'y a pas de
+trimestre, et aucune correspondance date → trimestre n'existe dans le code.
+
+Or la conduite pèse **15 %** du classement. Aujourd'hui, un « Mauvais » saisi
+au troisième trimestre abaisse le rang affiché pour le **premier** — sur un
+bulletin qui part à la famille.
+
+`_classer` réconcilie à la lecture : il filtre sur `trimestre` quand
+l'enregistrement en porte un, et retombe sur toutes les notes sinon. Je n'ai
+pas inventé la colonne. **Ajoute-la** (`conduct.trimestre text`), et dis-moi si
+tu peux renseigner l'existant depuis `date` — je n'y touche pas.
+
+## Rappel des demandes ouvertes
+
+| | |
+|---|---|
+| **P0-1** | l'auteur d'un encaissement sur `payments` — six reçus ne peuvent pas nommer qui a encaissé |
+| **P0-8** | le registre des cartes d'élève, par année scolaire |
+| **P0-9** | la détection mensuelle du rattrapage, côté serveur |
+| — | la **lecture groupée des soldes**, qui débloque sept écrans d'argent |
