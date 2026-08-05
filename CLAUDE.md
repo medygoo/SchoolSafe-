@@ -195,6 +195,22 @@ Celle-ci l'est.
 
 L'année scolaire congolaise court de **septembre à août**.
 
+### DEUX cycles, pas trois — maternelle et primaire
+
+**Dit par Loms le 4 août 2026.** L'école s'arrête à la **sixième primaire** et
+prépare l'**ENAFEP**. Il n'y a **ni secondaire, ni humanités, ni EXETAT**.
+
+Le site les annonçait tous les trois, et le formulaire de préinscription
+proposait six classes du secondaire : une famille pouvait demander une place
+en 3ᵉ humanités dans une école qui n'a pas de secondaire. Retiré du site le
+même jour.
+
+**L'application, elle, les porte encore** — le cycle `secondaire`, l'option
+`humanites`, l'écran EXETAT, le rapport SECOPE. Ce n'est pas une erreur à
+effacer d'un trait : le cycle sert aussi aux horaires du portail et aux
+gabarits de cartes. À reprendre écran par écran, en demandant à Loms ce qu'on
+garde — une école peut ouvrir un secondaire l'an prochain.
+
 ### La palette : gris · blanc · or
 
 **Le gris de l'école est un GRIS BLEUTÉ** — teinte 207°, saturation 14 % :
