@@ -910,3 +910,75 @@ Voici votre lien pour créer votre mot de passe SchoolSafe :
 Il est valable 1 heure et ne fonctionne qu'une fois.
 Ne le transmettez à personne.
 ```
+
+---
+
+# Compte rendu du 5 août 2026 — ce que j'ai corrigé, et ce que ça change pour toi
+
+**Le détail complet est dans l'issue [#42](https://github.com/medygoo/SchoolSafe-/issues/42)**, au format
+de compte rendu convenu (`docs/notes/collaboration.md`). Résumé ici pour que ce
+document reste le seul qu'on ait à ouvrir.
+
+## Impact base de données : AUCUN
+
+Rien n'a été ajouté, modifié ni supprimé côté serveur : pas de table, pas de
+colonne, pas de vue, pas de fonction, pas de trigger, pas d'index, pas de
+migration, pas de politique RLS, pas d'Edge Function, pas de secret. Uniquement
+`dist/index.html` et de la documentation.
+
+## Les trois corrections qui te concernent
+
+**1. J'appelais une fonction qui m'est fermée — et c'est ma faute (PR #32).**
+`prepare_account_invitation` porte `revoke … from authenticated`. Je l'appelais
+quand même, en direct depuis le navigateur. PostgREST refusait en silence :
+**chaque invitation était perdue pendant des jours.** Je passe désormais par
+`invite-school-account`, l'Edge Function que tu avais indiquée. Je n'appellerai
+plus rien que tu aies fermé.
+
+**2. La session se chargeait avant de savoir qui se connecte (PR #35).**
+`loadFromSupabase()` lit `S.user.role` pour choisir la matrice `ROLE_LOAD`, et
+elle était appelée avant que `S.user` soit posé. Elle rendait `false` : mot de
+passe accepté, réseau parfait, et l'écran répondait « Données indisponibles »
+puis déconnectait. **Personne ne pouvait entrer, quel que soit l'état de la
+base.**
+
+**3. Une lecture qui ÉCHOUE n'est pas une lecture qui ne trouve RIEN (PR #40).**
+`_get` rend `null` pour tout échec, et la connexion traitait ce `null` comme un
+tableau vide. Mesuré au navigateur, **mot de passe bon dans les cinq cas** :
+
+| ce qui se passait vraiment | ce que l'écran répondait |
+|---|---|
+| aucun profil rattaché | « aucun profil n'est rattaché à cette adresse » |
+| jeton expiré (401) | *le même, mot pour mot* |
+| RLS refuse (403) | *le même* |
+| serveur en panne (500) | *le même* |
+| réseau muet | *le même* |
+
+…et la personne était déconnectée à chaque fois. L'information manquante était
+déjà là : **`_noteReadState` relevait le statut HTTP** depuis ton contrat
+`ROLE_LOAD`, avec le commentaire qui dit pourquoi — *« Seul le statut HTTP le
+dit. »* Il n'était pas lu ici. Désormais chaque cas se nomme, la lecture est
+réessayée trois fois sur les seules pannes passagères, et **une panne
+d'infrastructure ne déconnecte plus**.
+
+**Ce que ça change concrètement pour toi :** si ta RLS refuse la lecture de
+`users` (403), l'écran le dira maintenant en clair au lieu d'accuser le mot de
+passe. Le diagnostic remonte jusqu'à toi au lieu de s'arrêter sur l'utilisateur.
+
+## Ce que j'attends, par ordre d'urgence
+
+**P0-10** (le premier compte — le seul vrai blocage) · **P0-18** (le vrai SMTP,
+et : quand `invite-school-account` répond `ok:true`, le courriel est-il PARTI ?)
+· **P0-19** (`lien-acces` — le bouton WhatsApp est écrit, testé, publié, et
+n'appelle rien d'autre) · puis P0-1, P0-12, P0-13, P0-14, P0-15, P0-16, P0-17.
+
+## Preuve, pas affirmation
+
+Les **9 audits passent**. La connexion est éprouvée dans les deux sens : avant,
+cinq pannes → un seul message et déconnexion à chaque fois ; après, cinq
+messages distincts, le 500 réessayé trois fois, le 401 et le 403 non réessayés,
+et un hoquet réseau laisse entrer quand même. `audit-schema` : **aucun écart sur
+49 tables** contre tes 29 migrations.
+
+**Ce que je n'ai pas pu vérifier :** je ne lis pas la base d'ici. Les six
+situations sont jouées contre un serveur simulé, pas contre ton projet Supabase.
