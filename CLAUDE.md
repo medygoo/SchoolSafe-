@@ -66,6 +66,31 @@ passer par l'Edge Function que ChatGPT avait indiquée, je l'appelais quand mêm
 en direct. Chaque invitation était refusée en silence. **Obéir au contrat aurait
 évité la panne ; le contourner l'a créée.**
 
+### La méthode de travail — fixée par Loms, 5 août 2026
+
+On avance **fonctionnalité par fonctionnalité**, jamais en vrac. Pour chacune,
+le même cycle, dans cet ordre :
+
+1. **Je propose** une fonctionnalité et je dis pourquoi celle-là.
+2. **Je décris ce qui EXISTE**, dans **tous les profils** — qui voit quoi, qui
+   peut quoi, comment l'écran se présente et comment il réagit. Pas ce qu'on
+   pourrait faire : ce qui est là.
+3. **Je liste les problèmes que j'ai vérifiés**, et séparément **ce que je n'ai
+   pas pu vérifier**. Les deux, toujours.
+4. **Je pose les questions dont la réponse change le travail.** Courtes.
+5. **Loms décide.**
+6. **Je code la partie navigateur.**
+7. **Ce qui touche la base part dans `coordination/DEMANDES_A_CHATGPT.md`.**
+   Je n'y touche pas moi-même. *« Tu laisses les instructions à ChatGPT, il le
+   fera. »*
+8. Je fusionne, je publie, **et je vérifie que la publication a réussi.**
+
+**Le point qui décide de tout, en étape 7 :** un contrôle serveur qui refuse
+n'est pas un obstacle à contourner. Le 5 août, `prepare_account_invitation`
+était fermée au navigateur ; je l'ai appelée quand même, et chaque invitation
+a été refusée en silence pendant des jours. **Obéir au contrat aurait évité la
+panne.**
+
 ### Les règles qui ne se discutent pas
 
 1. Ne pas recommencer le projet à zéro ; conserver l'existant.
