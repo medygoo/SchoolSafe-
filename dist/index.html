@@ -27735,6 +27735,14 @@ window._envoyerLienWhatsApp = async (uid) => {
         TARGET_NOT_PARENT:'Le serveur refuse cet accès pour ce profil — signalez-le à la Direction',
         TARGET_ROLE_MISMATCH:'Le serveur refuse cet accès pour ce profil — signalez-le à la Direction',
         FORBIDDEN_TARGET_ROLE:'La Direction 2 ne gère que les enseignants, les gardiens et les parents',
+        // Quatre refus apparus avec la version 3 de `prepare_parent_phone_access`
+        // (contrat P0-22). Trouvés en LISANT sa migration, pas en attendant
+        // qu'un jour d'école les révèle : un code inconnu s'affiche « raison
+        // inconnue », et celui qui le lit ne peut ni le corriger ni le décrire.
+        TARGET_NOT_PHONE_ACCOUNT:'Ce profil ne peut pas recevoir d’accès téléphone — signalez-le à la Direction',
+        PHONE_LOGIN_DISABLED:`La connexion par téléphone est désactivée pour ${u.name} — signalez-le à la Direction`,
+        CONTACT_SETUP_INCOMPLETE:`La fiche de ${u.name} est incomplète — il lui faut une adresse e-mail ET un numéro`,
+        EMAIL_IN_USE:'Cette adresse est déjà rattachée à un autre accès — vérifiez la fiche',
         ORIGIN_NOT_ALLOWED:'Cette adresse du site n’est pas autorisée par le serveur — signalez-le',
         // Le compte a bougé côté Auth mais le serveur n'a pas pu conclure.
         // ChatGPT est formel : ne JAMAIS montrer ni envoyer le code dans ce cas.
