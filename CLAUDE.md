@@ -784,12 +784,25 @@ dernier. En deçà, la classe paraît avec ses chiffres et aucun nom.
 **6 août 2026.** Le téléphone est devenu ce qui **identifie** un compte —
 décision de Loms, livrée côté serveur par ChatGPT.
 
-**L'état final de cette journée est P0-22 : chaque compte porte une adresse
-e-mail ET un téléphone, et les deux ouvrent LE MÊME compte.** Les deux règles
-précédentes de la même journée — « e-mail ou téléphone » (P0-20), puis
-« téléphone pour tous sauf Direction 1 » (P0-21) — sont **remplacées**. Elles
-ne sont pas rappelées ici pour être discutées : elles le sont pour qu'on
-reconnaisse un vieux code qui les suit encore.
+**L'état final de cette journée est P0-24 : un compte porte une adresse e-mail
+OU un téléphone — au moins l'un des deux, jamais zéro — et quand les deux sont
+là, les DEUX ouvrent le même compte.**
+
+Trois règles l'ont précédée dans la même journée, toutes **remplacées** :
+« e-mail ou téléphone » (P0-20), « téléphone pour tous sauf Direction 1 »
+(P0-21), « e-mail ET téléphone obligatoires » (P0-22). Elles ne sont pas
+rappelées ici pour être discutées : elles le sont pour qu'on **reconnaisse un
+vieux code qui les suit encore**.
+
+Ce que P0-22 a apporté et que P0-24 **garde** : les deux identifiants ouvrent
+le même compte, et la connexion passe par le relais `school-login`. Seule
+l'**obligation** d'avoir les deux est tombée — un parent de Kinshasa n'a pas
+toujours d'adresse, et le compte de Direction 1 n'a pas de numéro.
+
+**Et ce n'est pas symétrique**, c'est ce qui se perd le plus vite : le numéro
+ouvre le code par WhatsApp, l'adresse ouvre l'invitation par courriel. Une
+fiche sans numéro n'est pas « incomplète » — elle n'a simplement pas cette
+voie-là. L'écran doit le dire ainsi, pas comme un reproche.
 
 Tant qu'il ne servait qu'à appeler, `+243 810 000 111`, `0810000111` et
 `243-810-000-111` étaient trois écritures du même numéro et personne n'en
@@ -811,11 +824,12 @@ Deux leçons, et la seconde est la vraie :
    l'outil tombe. **Deux normalisations qui divergent ne produisent aucune
    erreur : elles produisent un compte introuvable.**
 
-### Une règle peut changer trois fois dans la journée — l'écran suit, il ne discute pas
+### Une règle peut changer quatre fois dans la journée — l'écran suit, il ne discute pas
 
-Le 6 août, la règle d'accès a changé **trois fois** : e-mail ou téléphone, puis
-téléphone sauf Direction 1, puis les deux pour tout le monde. Chaque fois,
-ChatGPT avait déjà déployé la base avant que je lise sa livraison.
+Le 6 août, la règle d'accès a changé **quatre fois** : e-mail ou téléphone, puis
+téléphone sauf Direction 1, puis les deux obligatoires, puis l'un des deux au
+choix. Trois fois sur quatre, ChatGPT avait déjà déployé la base avant que je
+lise sa livraison.
 
 Deux réflexes en sont sortis, et ils valent au-delà de ce jour-là :
 
@@ -831,6 +845,14 @@ Deux réflexes en sont sortis, et ils valent au-delà de ce jour-là :
 Et une conséquence pour ce fichier : **une leçon périmée est plus dangereuse
 qu'une leçon absente.** On ne l'efface pas — on écrit ce qui la remplace, juste
 au-dessus, pour reconnaître un vieux code qui la suit encore.
+
+3. **Quand c'est LOMS qui change la règle, le canal passe avant le code.** Sur
+   P0-24, j'ai déposé la demande à ChatGPT — les cinq contrôles à ouvrir,
+   relevés ligne par ligne dans ses fichiers — **avant** d'écrire une ligne
+   d'écran. Puis j'ai libéré le formulaire tout en disant, sur le champ refusé,
+   que **le serveur ne l'accepte pas ENCORE**. Ce n'est pas la même chose que
+   « vous avez mal rempli », et c'est la différence entre une attente et une
+   accusation.
 
 ### Un état qui n'existe plus continue de s'afficher
 
