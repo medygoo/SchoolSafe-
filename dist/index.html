@@ -10007,7 +10007,7 @@ window._simpleList = (role, icon, gradient) => {
           ${u.phone?waBtn(u.phone,u.name):''}
           ${window._boutonAcces(u)}
           <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
-          ${_roleUI(u.role)==='direction'?`<button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')">🔑 Accès</button>`:''}
+          ${(u.email||'').trim()?`<button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')" title="Envoyer l'invitation ou le lien par courriel">🔑 Accès</button>`:''}
           <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
         </div>
       </div>
@@ -10030,6 +10030,20 @@ window._simpleList = (role, icon, gradient) => {
 //
 // On s'aligne sur le serveur, sans discuter : une liste d'écran plus large que
 // ce que la base accepte ne fait qu'inviter à un refus.
+// Le serveur exige encore les DEUX coordonnées (contrat P0-22). Loms a tranché
+// le 6 août qu'une seule suffit — c'est la demande P0-24, elle n'est pas encore
+// servie. Tant qu'elle ne l'est pas, un enregistrement à une seule coordonnée
+// est refusé par un `VALIDATION_ERROR` qui nomme le champ manquant mais pas la
+// raison. On la donne : « le serveur ne l'accepte pas ENCORE » n'est pas la
+// même chose que « vous avez mal rempli ».
+window._msgChampManquant = (champ, courriel, phone) => {
+  if (champ === 'email' && !courriel && phone)
+    return 'Le serveur exige encore une adresse e-mail en plus du numéro — c’est la demande P0-24 à ChatGPT. En attendant, renseignez les deux.';
+  if (champ === 'phone' && !phone && courriel)
+    return 'Le serveur exige encore un numéro en plus de l’adresse — c’est la demande P0-24 à ChatGPT. En attendant, renseignez les deux.';
+  return null;
+};
+
 window._D2_AUTORISE = ['enseignant', 'gardien', 'parent'];
 window._d2PeutToucher = (role) => window._D2_AUTORISE.includes(_roleUI(role));
 
@@ -10104,15 +10118,25 @@ ${photoOpts}
   <div class="form-group"><label class="form-label">Initiales</label><input class="form-input" id="usr_init" maxlength="3" value="${u&&u.initials?u.initials:''}" placeholder="JK"></div>
 </div>
 <div class="form-row">
-  <div class="form-group"><label class="form-label">Téléphone <span class="req">*</span></label>
+  <div class="form-group"><label class="form-label">Téléphone</label>
     <input class="form-input" id="usr_phone" value="${u&&u.phone?esc(u.phone):''}" placeholder="0810000111 ou +243810000111" oninput="window._telApercu('usr_phone','usr_phone_vu')">
     <div id="usr_phone_vu" style="font-size:11.5px;margin-top:5px;color:var(--text-muted)"></div>
   </div>
   <div class="form-group">
-    <label class="form-label">Adresse e-mail <span class="req">*</span></label>
+    <label class="form-label">Adresse e-mail</label>
     <input class="form-input" id="usr_email" type="email" autocomplete="off"
            value="${u&&u.email?esc(u.email):''}" placeholder="prenom.nom@exemple.com">
   </div>
+</div>
+<!-- Décision de Loms du 6 août 2026 : « ce n'est pas obligé de mettre les deux.
+     C'est soit numéro, soit mail. » Un parent de Kinshasa n'a pas toujours
+     d'adresse ; lui en faire créer une pour remplir une case ne sert personne.
+     Mais chaque coordonnée ouvre UNE voie d'accès, et l'écran doit le dire :
+     sans numéro pas de code WhatsApp, sans adresse pas d'invitation. -->
+<div style="font-size:12px;color:var(--text-secondary);background:var(--bg);border-radius:10px;padding:9px 12px;margin:-4px 0 12px">
+  <strong>L'un des deux suffit.</strong> Le numéro sert à envoyer un code par
+  WhatsApp ; l'adresse à envoyer une invitation par courriel. Les deux
+  renseignés, les deux fonctionnent — et ouvrent le même compte.
 </div>
 <!-- Décision de Loms du 6 août 2026 : chaque compte porte LES DEUX, et les
      deux ouvrent le MÊME compte. Le canal ci-dessous ne ferme pas l'autre
@@ -10214,13 +10238,9 @@ window.saveUser = async () => {
   if(courriel && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courriel)){
     markFieldError('usr_email','Adresse e-mail invalide'); return;
   }
-  // Contrat P0-22 : LES DEUX coordonnées, pour tous les profils, sans
-  // exception. Le serveur refuse l'enregistrement si l'une manque — autant le
-  // dire ici, sur le champ concerné, plutôt que de renvoyer un
-  // « VALIDATION_ERROR » que personne ne peut corriger.
-  if(!courriel){
-    markFieldError('usr_email','Adresse e-mail requise — chaque compte porte les deux coordonnées'); return;
-  }
+  // Décision de Loms du 6 août 2026 : l'un des deux suffit. On exige donc
+  // AU MOINS UN — jamais zéro, un compte injoignable ne sert à personne et ne
+  // pourra jamais recevoir d'accès.
   const initials=($('usr_init')?.value||'').trim()||ini(name);
   // La photo ne part en base que si le rôle la rend utile à autrui.
   let photo = window._userPhoto || null;
@@ -10236,8 +10256,11 @@ window.saveUser = async () => {
   // `users_phone_e164_check`, avec un VALIDATION_ERROR qui ne dit pas quel champ.
   const phoneRaw=($('usr_phone')?.value||'').trim();
   const phone=phoneRaw?window._telE164(phoneRaw):null;
-  if(!phoneRaw){markFieldError('usr_phone','Téléphone requis — chaque compte porte les deux coordonnées');return;}
-  if(!phone){markFieldError('usr_phone','Numéro non reconnu — écrivez 0810000111, 810000111 ou +243810000111');return;}
+  if(phoneRaw && !phone){markFieldError('usr_phone','Numéro non reconnu — écrivez 0810000111, 810000111 ou +243810000111');return;}
+  if(!courriel && !phone){
+    markFieldError('usr_phone','Renseignez au moins un numéro OU une adresse e-mail — sinon cette personne ne pourra jamais se connecter');
+    return;
+  }
   // Deux comptes ne peuvent pas partager un numéro : c'est ce qui les identifie.
   if(phone){
     const _dejaTel=(DB.users||[]).find(x=>x.id!==uid && x.phone && window._telE164(x.phone)===phone);
@@ -10282,7 +10305,12 @@ window.saveUser = async () => {
   // `access_channel` dit par où part l'accès — il ne ferme PAS l'autre voie
   // de connexion (contrat P0-22). Direction 1 reçoit par courriel par défaut.
   const canal=($('usr_canal')?.value==='email')?'email':'phone_whatsapp';
-  const data={name,role,initials,phone,email:courriel,access_channel:canal,...(photo?{photo_url:photo}:{})};
+  // Le canal principal ne peut pas désigner une coordonnée absente : le
+  // serveur refuse (`users_primary_contact_available_check`). On le corrige
+  // ici plutôt que de laisser passer une fiche qui sera rejetée.
+  const canalReel = (canal==='email' && !courriel) ? 'phone_whatsapp'
+                  : (canal==='phone_whatsapp' && !phone) ? 'email' : canal;
+  const data={name,role,initials,phone,email:courriel,access_channel:canalReel,...(photo?{photo_url:photo}:{})};
   window._userPhoto=null;
 
   if(uid){
@@ -10326,7 +10354,8 @@ window.saveUser = async () => {
       if (_res.code === 'EMAIL_IN_USE' || _res.code === 'AUTH_EMAIL_CHANGE_REQUIRED') markFieldError('usr_email', _m);
       else if (_res.code === 'PHONE_IN_USE' || _res.code === 'AUTH_PHONE_CHANGE_REQUIRED') markFieldError('usr_phone', _m);
       else if (_res.code === 'VALIDATION_ERROR' && _res.raw && _res.raw.field)
-        markFieldError('usr_' + (_res.raw.field === 'email' ? 'email' : _res.raw.field === 'phone' ? 'phone' : 'name'), _m);
+        markFieldError('usr_' + (_res.raw.field === 'email' ? 'email' : _res.raw.field === 'phone' ? 'phone' : 'name'),
+                       window._msgChampManquant(_res.raw.field, courriel, phone) || _m);
       else toast(_m, 'error');
       return;
     }
@@ -10335,7 +10364,7 @@ window.saveUser = async () => {
     // Une adresse ajoutée à un profil qui n'en avait pas, et qui reçoit par
     // courriel : l'invitation part. Si son canal est WhatsApp, on ne lance
     // pas une seconde création en parallèle.
-    if (courriel && !_avaitCourriel && canal === 'email' && !existingUser.auth_user_id) {
+    if (courriel && !_avaitCourriel && canalReel === 'email' && !existingUser.auth_user_id) {
       const _inv = await window._inviterCompte(uid, courriel, name);
       toast(_inv.ok ? `Invitation envoyée à ${courriel}`
                     : 'Profil mis à jour, mais l\'invitation n\'est pas partie — ' + _codeMsg(_inv.code),
@@ -10373,7 +10402,8 @@ window.saveUser = async () => {
       else if (_res.code === 'PHONE_IN_USE' ) markFieldError('usr_phone', _m);
       else if (_res.code === 'DUPLICATE_USER') markFieldError('usr_name', _m);
       else if (_res.code === 'VALIDATION_ERROR' && _res.raw && _res.raw.field)
-        markFieldError('usr_' + (_res.raw.field === 'email' ? 'email' : _res.raw.field === 'phone' ? 'phone' : 'name'), _m);
+        markFieldError('usr_' + (_res.raw.field === 'email' ? 'email' : _res.raw.field === 'phone' ? 'phone' : 'name'),
+                       window._msgChampManquant(_res.raw.field, courriel, phone) || _m);
       else toast(_m, 'error');
       return;
     }
@@ -10383,7 +10413,7 @@ window.saveUser = async () => {
     // UNE seule ouverture d'accès à la fois — ChatGPT est formel : « ne pas
     // lancer les deux créations en parallèle ». Deux demandes concurrentes,
     // ce sont deux identités pour une seule personne.
-    if (canal === 'email') {
+    if (canalReel === 'email') {
       const _inv = await window._inviterCompte(ns.id, courriel, name);
       if (!_inv.ok) toast('Compte créé, mais l\'invitation n\'est pas partie — ' + _codeMsg(_inv.code), 'warning');
       else toast(`Invitation envoyée à ${courriel}`, 'success');
@@ -27652,12 +27682,17 @@ window._etatAccesCompte = (u) => {
   // plus « un choix de canal » : c'est un dossier incomplet, et il se voit.
   const _mail = (u.email||'').trim();
   const _tel  = window._telE164(u.phone||'');
+  // Décision de Loms du 6 août 2026 : une seule coordonnée suffit. Avoir
+  // l'adresse SANS le numéro n'est donc plus un défaut à signaler — c'est un
+  // choix. Une pastille qui gronde là où il n'y a rien à corriger apprend à
+  // ignorer les pastilles, y compris celles qui comptent.
+  //
+  // Ce qui reste un vrai manque, c'est ZÉRO coordonnée : la personne ne peut
+  // recevoir d'accès par aucune voie.
   if (!_mail && !_tel)
-    return { cle:'sans_contact', texte:'⚠️ Sans coordonnées', titre:'Ni adresse ni numéro : cette personne ne peut pas se connecter', bg:'#fef3c7', fg:'#92400e' };
-  if (!_tel)
-    return { cle:'sans_tel', texte:'⚠️ Téléphone manquant', titre:'Chaque compte porte une adresse ET un numéro — complétez la fiche', bg:'#fef3c7', fg:'#92400e' };
-  if (!_mail)
-    return { cle:'sans_mail', texte:'⚠️ Adresse manquante', titre:'Chaque compte porte une adresse ET un numéro — complétez la fiche', bg:'#fef3c7', fg:'#92400e' };
+    return { cle:'sans_contact', texte:'⚠️ Sans coordonnées',
+             titre:'Ni adresse ni numéro : cette personne ne pourra jamais se connecter',
+             bg:'#fef3c7', fg:'#92400e' };
   // ═══════════════════════════════════════════════════════════════════════
   //  UNE INVITATION EN VOL N'EST PAS « RIEN D'OUVERT »
   // ═══════════════════════════════════════════════════════════════════════
@@ -27695,9 +27730,12 @@ window._pastilleAcces = (u) => {
 window._boutonAcces = (u) => {
   if (!S.user || !window._peutOuvrirAcces(S.user.role, u.role)) return '';
   const e = window._etatAccesCompte(u);
-  // Une fiche incomplète ne peut pas recevoir de code : le serveur refuserait.
-  // On n'affiche donc pas le bouton — la pastille dit déjà quoi corriger.
-  if (['sans_contact','sans_mail','sans_tel'].includes(e.cle)) return '';
+  // Sans aucune coordonnée, aucune voie n'aboutit : le serveur refuserait.
+  if (e.cle === 'sans_contact') return '';
+  // Le code WhatsApp demande un numéro. Sans numéro, ce bouton-là ne peut pas
+  // aboutir — et un bouton qui ne peut pas réussir est un mensonge poli.
+  // L'invitation par courriel reste, elle, accessible par « 🔑 Accès ».
+  if (!window._telE164(u.phone||'')) return '';
   // Une invitation en vol : le bouton ne DISPARAÎT pas — la Direction doit
   // pouvoir basculer sur WhatsApp quand le courriel n'arrive pas, c'est tout
   // l'intérêt d'avoir deux voies. Mais il ne s'appuie plus par distraction :

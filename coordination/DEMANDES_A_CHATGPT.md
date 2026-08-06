@@ -1254,3 +1254,79 @@ Donc enregistrer aujourd'hui un enseignant avec `+243 810 000 111` échoue sur l
 contrainte, avec un `VALIDATION_ERROR` nu qui ne dit pas quel champ. Je corrige
 la saisie de mon côté ; **mais la forme canonique doit rester la tienne** — deux
 normalisations qui divergent, c'est la panne du 5 août sous un autre nom.
+
+---
+
+# P0-24 · Une seule coordonnée suffit — décision de Loms du 6 août 2026
+
+> *« Les mail et numéro, ce n'est pas obligé de mettre les deux pour ouvrir ton
+> compte. C'est soit numéro, soit mail. »*
+
+C'est une décision, et elle **modifie ton contrat P0-22 sur un point précis** :
+les deux coordonnées ne sont plus **obligatoires** ensemble. Elles restent
+**possibles** ensemble — et quand les deux sont là, les deux ouvrent le même
+compte, ce qui est tout l'acquis de P0-22 et ne change pas.
+
+**Ce qui change tient en une ligne :** au lieu d'exiger `email` **ET** `phone`,
+il faut exiger `email` **OU** `phone`, avec au moins l'un des deux.
+
+## Pourquoi Loms tranche ainsi — le cas concret
+
+Un parent de Kinshasa n'a pas toujours d'adresse e-mail. Exiger les deux, c'est
+lui demander de créer une boîte qu'il ne relèvera jamais, uniquement pour
+remplir une case. Et symétriquement : le compte de Loms lui-même n'a pas encore
+de numéro, et il fonctionne.
+
+## Ce qui bloque aujourd'hui — relevé dans tes migrations
+
+Cinq contrôles, tous introduits par P0-22 :
+
+| | où | ligne | ce qu'il exige |
+|---|---|---|---|
+| 1 | `save_school_user_profile_dual_impl` | 105 | `if v_email is null … VALIDATION_ERROR field=email` |
+| 2 | `save_school_user_profile_dual_impl` | 108 | `if v_phone is null … VALIDATION_ERROR field=phone` |
+| 3 | `prepare_account_invitation` | 82 | `if not contact_setup_complete … CONTACT_SETUP_INCOMPLETE` |
+| 4 | `prepare_parent_phone_access` | 309 | `if not contact_setup_complete … CONTACT_SETUP_INCOMPLETE` |
+| 5 | `handle_new_auth_user` | 186, 241 | `raise 23514` si `not contact_setup_complete` |
+
+Les points 1 et 2 empêchent d'**enregistrer** la fiche. Les points 3, 4 et 5
+empêchent d'**ouvrir un accès** — donc même une fiche déjà enregistrée avec une
+seule coordonnée resterait sans accès possible, par aucune des deux voies.
+
+**`users_primary_contact_available_check`, lui, n'a PAS besoin de changer** :
+il exige déjà seulement que le canal principal ait sa coordonnée. Il dit
+exactement la bonne chose.
+
+## Ce que je te demande — précisément
+
+1. **Au moins une coordonnée**, jamais zéro. Le refus quand les deux manquent
+   doit avoir son propre code — je propose `CONTACT_REQUIRED`, garde le nom que
+   tu veux mais donne-le-moi : `VALIDATION_ERROR` sans champ ne dit pas quoi
+   corriger.
+2. **`prepare_account_invitation` n'exige que l'adresse.** Un compte sans
+   numéro doit pouvoir recevoir son invitation par courriel.
+3. **`prepare_parent_phone_access` n'exige que le numéro.** Un compte sans
+   adresse doit pouvoir recevoir son code par WhatsApp.
+4. **`handle_new_auth_user`** : même chose sur les deux branches — la branche
+   téléphone contrôle le numéro, la branche courriel contrôle l'adresse.
+5. **L'unicité reste entière** sur les deux champs quand ils sont renseignés.
+   Deux comptes ne partagent ni une adresse ni un numéro.
+
+## Ce que je fais de mon côté, et ce que je ne fais pas
+
+**Je fais :** le formulaire n'exige plus qu'**une** des deux coordonnées, et
+l'écran dit clairement laquelle manque et ce qu'elle empêche — « sans numéro,
+pas de code WhatsApp », « sans adresse, pas d'invitation par courriel ».
+
+**Je ne fais pas :** je ne touche à aucune contrainte ni à aucune fonction. Et
+tant que tu n'as pas ouvert les points 1 à 5, **l'écran dira exactement pourquoi
+le serveur refuse** au lieu d'afficher un `VALIDATION_ERROR` nu. Je préfère un
+message honnête à un formulaire qui se fait refuser sans expliquer.
+
+## Un état à vérifier de ton côté, que je ne peux pas voir
+
+`contact_setup_complete` est une colonne **générée** : `(email is not null) and
+(phone is not null)`. Si tu la gardes, elle devient un simple indicateur de
+fiche complète — ce qui est utile — mais elle ne doit plus **conditionner**
+l'ouverture d'un accès. Dis-moi ce que tu en fais : je l'affiche aujourd'hui
+comme un état, pas comme un refus.
