@@ -183,12 +183,6 @@ body{font-family:'DM Sans',-apple-system,sans-serif;background:var(--bg);color:v
 /* Le placeholder porte le nom du champ : c'est du texte, il se mesure. */
 .login-input::placeholder{color:rgba(255,255,255,.68)}
 .login-input.pin{letter-spacing:6px;font-size:18px}
-/* Le choix de la voie d'entrée. Deux formes, pas deux couleurs : l'onglet
-   choisi est PLEIN, l'autre est nu. Un état qui ne tient qu'à une nuance de
-   blanc ne se voit pas sur une photographie. */
-.login-seg{display:flex;gap:4px;padding:4px;margin-bottom:12px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14)}
-.login-seg-btn{flex:1;min-width:0;padding:10px 8px;border:0;border-radius:12px;background:none;font-family:inherit;font-size:13.5px;font-weight:700;color:rgba(255,255,255,.72);cursor:pointer;transition:background .2s,color .2s;display:flex;align-items:center;justify-content:center;gap:6px}
-.login-seg-btn.on{background:rgba(255,255,255,.9);color:#1a1206}
 .btn-login{width:100%;padding:16px;font-size:16px;font-weight:800;border:0;border-radius:16px;cursor:pointer;color:#1a1206;background:linear-gradient(100deg,var(--login-accent,var(--gold)),#f3c768);box-shadow:0 14px 30px rgba(217,164,58,.35);position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px;font-family:inherit}
 .btn-login:hover{transform:translateY(-2px);box-shadow:0 20px 40px rgba(217,164,58,.45)}
 .btn-login:active{transform:translateY(0)}
@@ -1205,20 +1199,20 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
     </div>
     <h1 class="login-title">Bienvenue 👋</h1>
     <p class="login-subtitle">Connectez-vous à votre espace sécurisé</p>
-    <div class="login-seg" role="tablist" aria-label="Voie de connexion">
-      <button type="button" class="login-seg-btn on" id="SEG_TEL" role="tab" aria-selected="true" onclick="window._voieConnexion('tel')">📱 Téléphone</button>
-      <button type="button" class="login-seg-btn" id="SEG_MAIL" role="tab" aria-selected="false" onclick="window._voieConnexion('mail')">✉️ Adresse e-mail</button>
-    </div>
+    <!-- UN SEUL CHAMP — Loms, 6 août 2026 : « ça devient pour numéro et mail ».
+         Les deux identifiants ouvrent le même compte (contrat P0-22) : demander
+         d'abord « par quelle porte ? » posait une question dont la réponse ne
+         change rien. L'application reconnaît ce qui est tapé et le montre. -->
     <div class="login-field">
       <svg class="lfi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20c0-3.3 3.6-5.5 8-5.5s8 2.2 8 5.5"/><circle cx="12" cy="8" r="4"/></svg>
-      <input class="login-input" id="LN" type="tel" placeholder="Numéro de téléphone" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <input class="login-input" id="LN" type="text" inputmode="email" placeholder="Numéro ou adresse e-mail" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
     </div>
     <div id="LN_VU" style="font-size:11.5px;color:rgba(255,255,255,.72);text-align:center;margin:-6px 0 8px;min-height:15px"></div>
     <div class="login-field" style="margin-bottom:4px">
       <svg class="lfi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
       <input class="login-input" id="LP" placeholder="Mot de passe" type="password" autocomplete="current-password">
     </div>
-    <div id="LP_HINT" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;margin-bottom:12px;min-height:16px">Votre numéro et le code reçu par WhatsApp, ou votre code personnel.</div>
+    <div id="LP_HINT" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;margin-bottom:12px;min-height:16px">Votre numéro ou votre adresse, puis votre mot de passe.</div>
     <div class="pin-message" id="PM"></div>
     <button class="btn-login" id="LOGIN_BUTTON" onclick="tryLogin()">Se connecter</button>
     <div class="login-links">
@@ -1328,30 +1322,26 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
 <!-- Écran blocage (suspendu / expiré) -->
 <!-- licence-block removed -->
 
-<!-- ── Écran configuration Supabase (premier lancement ou reconfiguration) ── -->
-<div id="supaSetup" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#0f172a,#1e293b);z-index:10000;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;overflow-y:auto">
-  <div style="font-size:48px;margin-bottom:12px">🗄️</div>
-  <div style="font-size:20px;font-weight:800;color:#f1f5f9;margin-bottom:6px">Connexion à la base de données</div>
-  <div style="font-size:13px;color:#94a3b8;margin-bottom:28px;max-width:340px;line-height:1.6">Entrez les informations de votre projet Supabase pour connecter SchoolSafe.</div>
-  <div style="width:100%;max-width:360px;text-align:left">
-    <div style="margin-bottom:14px">
-      <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">URL du projet Supabase</label>
-      <input id="ss_url" type="url" placeholder="https://xxxx.supabase.co" style="width:100%;padding:13px 16px;border-radius:12px;border:2px solid #1e3a5f;background:#0f172a;color:#f1f5f9;font-size:14px;outline:none;transition:border .2s" onfocus="this.style.borderColor='#2f7bd6'" onblur="this.style.borderColor='#1e3a5f'">
-    </div>
-    <div style="margin-bottom:14px">
-      <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Clé Anon (publique)</label>
-      <input id="ss_key" type="password" placeholder="eyJhbGciOiJIUzI1NiIs…" style="width:100%;padding:13px 16px;border-radius:12px;border:2px solid #1e3a5f;background:#0f172a;color:#f1f5f9;font-size:13px;font-family:monospace;outline:none;transition:border .2s" onfocus="this.style.borderColor='#2f7bd6'" onblur="this.style.borderColor='#1e3a5f'">
-      <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:#64748b;cursor:pointer"><input type="checkbox" onchange="document.getElementById('ss_key').type=this.checked?'text':'password'" style="accent-color:#2f7bd6"> Afficher la clé</label>
-    </div>
-    <div id="ss_error" style="font-size:12px;color:#f87171;margin-bottom:12px;min-height:18px;text-align:center"></div>
-    <button id="ss_btn" onclick="connectSupabaseFromSetup()" style="width:100%;padding:14px;background:#2f7bd6;color:#fff;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:16px">🔌 Tester et connecter</button>
-    </div>
-  </div>
-  <div style="margin-top:28px;background:#0f172a;border-radius:14px;padding:14px 20px;max-width:360px;width:100%;text-align:left">
-    <div style="font-size:11px;color:#475569;margin-bottom:6px;font-weight:600">OÙ TROUVER CES INFORMATIONS ?</div>
-    <div style="font-size:12px;color:#64748b;line-height:1.7">Tableau de bord Supabase → <strong style="color:#94a3b8">Project Settings</strong> → <strong style="color:#94a3b8">API</strong><br>Copiez <em>Project URL</em> et <em>anon public key</em>.</div>
-  </div>
-</div>
+<!-- ═══════════════════════════════════════════════════════════════════════
+     L'ÉCRAN DE CONFIGURATION SUPABASE A ÉTÉ RETIRÉ — 6 août 2026
+     ═══════════════════════════════════════════════════════════════════════
+     Il demandait l'URL du projet et la clé anon, avec un encadré « OÙ TROUVER
+     CES INFORMATIONS ? → Tableau de bord Supabase → Project Settings → API ».
+
+     Deux raisons de le supprimer, et la seconde est celle qui piquait :
+
+     1. SchoolSafe est livré À UNE ÉCOLE. Les identifiants sont dans le
+        fichier. Un écran qui demande une clé de projet appartient au modèle
+        multi-écoles retiré le 3 août ; `showSupaSetup()` était d'ailleurs
+        déjà neutralisée par un `return;` en première ligne.
+
+     2. UNE BALISE FERMANTE ÉTAIT MAL PLACÉE. `</div>` refermait `#supaSetup`
+        AVANT l'encadré d'aide : celui-ci était donc un enfant direct de
+        `<body>`, que `display:none` n'atteignait jamais. Il s'affichait sur
+        l'écran de connexion, à chaque ouverture, chez tout le monde.
+        C'est le « message de serveur qui bloque » signalé par Loms.
+        Mesuré au navigateur : un bloc de 360×87 px, visible, sans identifiant.
+     ═══════════════════════════════════════════════════════════════════════ -->
 
 <!-- ── Crop Modal Photo ── -->
 <div id="cropModal" onclick="if(event.target===this)closeCropModal()">
@@ -4800,41 +4790,49 @@ window._completePasswordSetup = async function() {
 //  Le téléphone est donc l'onglet par défaut — c'est le cas de presque tout le
 //  monde. Le choix est mémorisé sur l'appareil : on ne le refait pas chaque
 //  matin.
-window._VOIE_STORE = '_schoolsafe_voie';
-window._voieCourante = () =>
-  (localStorage.getItem(window._VOIE_STORE) === 'mail') ? 'mail' : 'tel';
-
-window._voieConnexion = (voie) => {
-  const v = (voie === 'mail') ? 'mail' : 'tel';
-  try { localStorage.setItem(window._VOIE_STORE, v); } catch (_) {}
-  const segT = $('SEG_TEL'), segM = $('SEG_MAIL'), ln = $('LN'), hint = $('LP_HINT'), vu = $('LN_VU');
-  if (segT) { segT.classList.toggle('on', v === 'tel');  segT.setAttribute('aria-selected', v === 'tel'); }
-  if (segM) { segM.classList.toggle('on', v === 'mail'); segM.setAttribute('aria-selected', v === 'mail'); }
-  if (ln) {
-    ln.type = (v === 'tel') ? 'tel' : 'email';
-    ln.placeholder = (v === 'tel') ? 'Numéro de téléphone' : 'Adresse e-mail';
-    ln.inputMode = (v === 'tel') ? 'tel' : 'email';
+// ═══════════════════════════════════════════════════════════════════════════
+//  UN SEUL CHAMP — l'application reconnaît ce qu'on tape
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Loms, 6 août 2026 : « ça devient pour numéro et mail ».
+//
+//  Il y avait deux onglets. Or les deux identifiants ouvrent LE MÊME compte :
+//  la question « par quelle porte entrez-vous ? » avait une réponse qui ne
+//  changeait rien pour celui qui la posait, et deux façons de se tromper —
+//  taper son numéro dans le champ de l'adresse, et lire « e-mail incorrect ».
+//
+//  La règle de reconnaissance tient en une ligne et ne peut pas se tromper :
+//  une adresse contient une arobase, un numéro n'en contient jamais.
+window._voieDe = (saisie) => {
+  const v = String(saisie == null ? '' : saisie).trim();
+  if (v === '') return { voie: null, valeur: null };
+  if (v.includes('@')) {
+    const m = v.toLowerCase();
+    return { voie: 'mail', valeur: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m) ? m : null };
   }
-  if (hint) hint.textContent = (v === 'tel')
-    ? 'Votre numéro et le code reçu par WhatsApp, ou votre code personnel.'
-    : 'Votre adresse e-mail et votre mot de passe.';
-  if (vu) vu.textContent = '';
-  if ($('PM')) $('PM').textContent = '';
+  return { voie: 'tel', valeur: window._telE164(v) };
 };
 
-// Ce qu'on affiche sous le champ pendant qu'on tape un numéro : la forme
-// exacte sous laquelle le serveur le connaît. Un numéro tapé « 08 10 00 01 11 »
-// et cherché « +243810000111 » ne se rejoignent jamais — et l'écran répondrait
-// « identifiants incorrects » à quelqu'un qui a tout bon.
+// Ce qu'on affiche sous le champ pendant la frappe : la forme exacte sous
+// laquelle le serveur connaît cet identifiant. Un numéro tapé
+// « 08 10 00 01 11 » et cherché « +243810000111 » ne se rejoignent jamais —
+// et l'écran répondrait « identifiants incorrects » à quelqu'un qui a tout bon.
 window._telApercuConnexion = () => {
   const ln = $('LN'), vu = $('LN_VU');
   if (!ln || !vu) return;
-  if (window._voieCourante() !== 'tel') { vu.textContent = ''; return; }
   const brut = (ln.value || '').trim();
   if (!brut) { vu.textContent = ''; return; }
-  const n = window._telE164(brut);
-  vu.textContent = n ? ('Connexion au numéro ' + n) : 'Numéro non reconnu — 0810000111 ou +243810000111';
-  vu.style.color = n ? 'rgba(255,255,255,.82)' : '#ffc9c9';
+  const { voie, valeur } = window._voieDe(brut);
+  if (valeur) {
+    vu.textContent = (voie === 'tel') ? ('Connexion au numéro ' + valeur)
+                                      : ('Connexion à l’adresse ' + valeur);
+    vu.style.color = 'rgba(255,255,255,.82)';
+  } else {
+    vu.textContent = (voie === 'tel')
+      ? 'Numéro non reconnu — 0810000111 ou +243810000111'
+      : 'Adresse e-mail incomplète';
+    vu.style.color = '#ffc9c9';
+  }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4939,21 +4937,19 @@ window.tryLogin = async () => {
 async function _tryLoginInner() {
   const rawLogin = ($('LN')?.value || '').trim();
   const rawSecret = $('LP')?.value || '';
-  const voie = window._voieCourante();
 
   if (window._authClient) {
-    if (!rawLogin) { $('PM').textContent = (voie === 'tel') ? 'Entrez votre numéro de téléphone' : 'Entrez votre adresse e-mail'; return; }
-    let identifiant;
-    if (voie === 'tel') {
-      // Le numéro part sous la forme que le serveur connaît, ou il ne part pas.
-      identifiant = window._telE164(rawLogin);
-      if (!identifiant) { $('PM').textContent = 'Numéro non reconnu — écrivez 0810000111 ou +243810000111'; return; }
-    } else {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawLogin)) { $('PM').textContent = 'Adresse e-mail invalide'; return; }
-      identifiant = rawLogin.toLowerCase();
+    if (!rawLogin) { $('PM').textContent = 'Entrez votre numéro ou votre adresse e-mail'; return; }
+    // L'identifiant part sous la forme que le serveur connaît, ou il ne part pas.
+    const { voie, valeur } = window._voieDe(rawLogin);
+    if (!valeur) {
+      $('PM').textContent = (voie === 'tel')
+        ? 'Numéro non reconnu — écrivez 0810000111 ou +243810000111'
+        : 'Adresse e-mail incomplète';
+      return;
     }
-    if (!rawSecret) { $('PM').textContent = (voie === 'tel') ? 'Entrez votre code' : 'Entrez votre mot de passe'; return; }
-    await _loginWithSupabaseAuth(identifiant, rawSecret, voie);
+    if (!rawSecret) { $('PM').textContent = 'Entrez votre mot de passe'; return; }
+    await _loginWithSupabaseAuth(valeur, rawSecret, voie);
     return;
   }
 
@@ -8098,53 +8094,30 @@ let schoolImg = new Image();
 // inverse de audit-logo.mjs a refusé ma première version — il a eu raison.
 if (window.SCHOOL_LOGO) schoolImg.src = window.SCHOOL_LOGO;
 
-// ── License ──
-// ── CONFIGURATION SUPABASE ──
-function showSupaSetup() { return; // Supabase supprimé
-  const el = document.getElementById('supaSetup');
-  if(!el) return;
-  // Pré-remplir avec valeur existante si reconfiguration
-  if(SUPA_URL) document.getElementById('ss_url').value = SUPA_URL;
-  el.style.display = 'flex';
-}
-function hideSupaSetup() {
-  const el = document.getElementById('supaSetup');
-  if(el) el.style.display = 'none';
-}
-window.showSupaSetup = showSupaSetup;
-window.hideSupaSetup = hideSupaSetup;
-
-window.connectSupabaseFromSetup = async () => {
-  const url = (document.getElementById('ss_url')?.value||'').trim().replace(/\/$/,'');
-  const key = (document.getElementById('ss_key')?.value||'').trim();
-  const err = document.getElementById('ss_error');
-  const btn = document.getElementById('ss_btn');
-  if(!url||!key){ if(err) err.textContent='Entrez l\'URL et la clé.'; return; }
-  if(err) err.textContent='';
-  if(btn){ btn.textContent='⏳ Test en cours…'; btn.disabled=true; }
-  try {
-    const ctrl=new AbortController();
-    setTimeout(()=>ctrl.abort(),8000);
-    const r=await fetch(url+'/rest/v1/users?select=id&limit=1',{
-      headers:{'apikey':key,'Authorization':'Bearer '+key},signal:ctrl.signal
-    });
-    // 200 = OK, 406 = table exists but no RLS match — tous bons, connexion réussie
-    if(!r.ok && r.status!==406 && r.status!==400) throw new Error('HTTP '+r.status);
-    window._updateSupabase(url,key);
-    localStorage.setItem('_school_supa_url',SUPA_URL);
-    localStorage.setItem('_school_supa_key',SUPA_KEY);
-    if(btn){ btn.textContent='✅ Connecté !'; }
-    hideSupaSetup();
-    toast('✅ Supabase connecté — chargement des données…','success');
-    const ok=await loadFromSupabase();
-    if(!ok){ await loadFromCrypt(); }
-    showLogin();
-  } catch(e){
-    if(btn){ btn.textContent='🔌 Tester et connecter'; btn.disabled=false; }
-    if(err) err.textContent='❌ Connexion impossible — vérifiez l\'URL et la clé.';
-  }
-};
-
+// ── LA CONFIGURATION SUPABASE NE SE FAIT PLUS DANS L'APPLICATION ──
+//
+// `showSupaSetup`, `hideSupaSetup` et `connectSupabaseFromSetup` demandaient
+// l'URL et la clé d'un projet, puis les écrivaient dans `localStorage`.
+// C'est le modèle multi-écoles, retiré le 3 août 2026 : SchoolSafe est livré
+// à UNE école et porte ses identifiants.
+//
+// `showSupaSetup` était déjà morte — un `return;` en première ligne. Mais
+// elle restait APPELÉE au démarrage :
+//
+//     if(!window._supaConfigured()) showSupaSetup();
+//     else if(!(await _showPendingPasswordSetup(false))) showLogin();
+//
+// Donc quand le script Supabase n'arrivait pas — réseau filtré, connexion
+// coupée, CDN injoignable — on entrait dans la première branche, qui ne
+// faisait RIEN : l'écran de démarrage ne se retirait jamais et l'application
+// restait bloquée dessus. Appuyer ne changeait rien.
+//
+// Mesuré au navigateur, Supabase hors d'atteinte : `#SPLASH` toujours
+// visible, 390×844, après le clic. C'est l'autre moitié du « ça bloque à
+// l'ouverture ».
+//
+// Il n'y a plus de branche : on montre TOUJOURS l'écran de connexion, et
+// c'est lui qui dit que le serveur n'est pas joignable.
 
 // ── Crop Photo ──
 let _cropMode = 'student';
@@ -24285,16 +24258,18 @@ R.settings = () => {
     <button class="btn btn-primary" style="width:100%" onclick="go('mon_site')">🌐 Gérer mon site web →</button>
   </div>` : ''}
 
-  <!-- ══ CONNEXION SUPABASE ══ -->
+  <!-- ══ ÉTAT DU SERVEUR ══
+       « Reconfigurer la connexion » a été retiré : l'école n'a qu'un serveur,
+       et pouvoir en changer depuis l'écran ne servait qu'au modèle
+       multi-écoles. Reste ce qui est utile un jour de panne : est-ce que ça
+       répond, oui ou non. -->
   ${S.user?.role==='direction' ? `
   <div class="premium-section" style="border-left:4px solid #6366f1">
-    <div class="premium-section-title">🗄️ Base de données (Supabase)</div>
-    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Connexion active de cette installation SchoolSafe.</div>
-    <div class="premium-item" style="margin-bottom:12px">
-      <span class="pi-icon">🔗</span>
-      <span class="pi-title" style="font-family:monospace;font-size:12px;word-break:break-all">${SUPA_URL ? SUPA_URL.replace(/^https?:\/\/([^.]+).*/, 'https://$1…supabase.co') : '⚠️ Non configuré'}</span>
+    <div class="premium-section-title">🗄️ Serveur de l'école</div>
+    <div class="premium-item">
+      <span class="pi-icon">${window.DB_ONLINE ? '🟢' : '🔴'}</span>
+      <span class="pi-title">${window.DB_ONLINE ? 'Connecté — les données se synchronisent' : 'Injoignable — l’application travaille sur les données de l’appareil'}</span>
     </div>
-    <button class="btn btn-outline" style="width:100%" onclick="showSupaSetup()">⚙️ Reconfigurer la connexion</button>
   </div>` : ''}
 
   <!-- ══ ANNÉE SCOLAIRE ══ -->
@@ -30348,7 +30323,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // la frappe : personne ne doit découvrir après coup que son numéro n'est pas
   // écrit comme le serveur le connaît.
   if(ln) ln.addEventListener('input', window._telApercuConnexion);
-  window._voieConnexion(window._voieCourante());
   if(np) np.addEventListener('keydown', e=>{ if(e.key==='Enter' && cp) cp.focus(); });
   if(cp) cp.addEventListener('keydown', e=>{ if(e.key==='Enter') window._completePasswordSetup(); });
 
@@ -30360,8 +30334,11 @@ document.addEventListener('DOMContentLoaded', () => {
     window._splashTransitionBusy=true;
     window._splashGone=true;
     try {
-      if(!window._supaConfigured()) showSupaSetup();
-      else if(!(await window._showPendingPasswordSetup(false))) showLogin();
+      // Une seule issue : l'écran de connexion. Quoi qu'il arrive, il
+      // s'affiche — c'est LUI qui dit si le serveur est joignable. La branche
+      // qui menait à l'écran de configuration laissait l'application bloquée
+      // sur le démarrage quand le script Supabase n'arrivait pas.
+      if(!(await window._showPendingPasswordSetup(false))) showLogin();
     } catch(error) {
       console.warn('[AUTH CALLBACK]', error?.message || error);
       showLogin();

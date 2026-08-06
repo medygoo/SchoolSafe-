@@ -76,12 +76,8 @@ const pied        = regle('.login-foot-item');
 const bouton      = regle('.btn-login');
 const titre       = regle('.login-title');
 const hint        = /id="LP_HINT"[^>]*style="([^"]*)"/.exec(HTML)?.[1] || (manques.push('#LP_HINT'), '');
-// Le choix de la voie d'entrée — téléphone ou adresse. L'onglet ACTIF est un
-// aplat blanc à texte d'encre ; l'INACTIF est du blanc translucide sur la
-// carte. Les deux se mesurent : un onglet qu'on ne lit pas fait taper son
-// numéro dans le champ de l'adresse.
-const segRegle    = regle('.login-seg-btn');
-const segActif    = regle('.login-seg-btn.on');
+// L'aperçu sous le champ : il montre le numéro ou l'adresse tels que le
+// serveur les connaît. C'est du texte, il se mesure.
 const apercuTel   = /id="LN_VU"[^>]*style="([^"]*)"/.exec(HTML)?.[1] || (manques.push('#LN_VU'), '');
 
 // Une règle CSS porte plusieurs couleurs : le fond, la bordure, l'ombre. Les
@@ -110,10 +106,7 @@ const VOILE = arretsVoile.length
 const [cChamp, aChamp] = rgba(declaration(champRegle, 'background', '.login-input'), '.login-input — fond');
 const OR = hex((/--gold:(#[0-9a-f]{6})/i.exec(HTML) || [, '#e0a83b'])[1]);
 const ENCRE = hex((/color:(#[0-9a-f]{6})/i.exec(bouton) || [, '#1a1206'])[1]);
-const ENCRE_SEG = hex((/color:(#[0-9a-f]{6})/i.exec(segActif) || [, '#1a1206'])[1]);
-// Le fond de la rangée d'onglets, et l'aplat de l'onglet choisi.
-const [cSeg, aSeg] = rgba(declaration(segRegle ? regle('.login-seg') : '', 'background', '.login-seg'), '.login-seg — fond');
-const [cSegOn, aSegOn] = rgba(declaration(segActif, 'background', '.login-seg-btn.on'), '.login-seg-btn.on — aplat');
+
 
 const TEXTES = [
   ['titre',                      BLANC, 1,                                   taillePx(titre, '.login-title'),      'carte'],
@@ -121,9 +114,7 @@ const TEXTES = [
   ['nom du champ (placeholder)', BLANC, alpha(placeholder, '::placeholder'), taillePx(champRegle, '.login-input'), 'champ'],
   ['valeur saisie',              BLANC, 1,                                   taillePx(champRegle, '.login-input'), 'champ'],
   ['indice mot de passe',        BLANC, alpha(hint, '#LP_HINT'),             taillePx(hint, '#LP_HINT'),           'carte'],
-  ['onglet non choisi',          BLANC, alpha(segRegle, '.login-seg-btn'),   taillePx(segRegle, '.login-seg-btn'),  'onglets'],
-  ['aperçu du numéro',           BLANC, alpha(apercuTel, '#LN_VU'),          taillePx(apercuTel, '#LN_VU'),         'carte'],
-  ["onglet choisi — encre",      ENCRE_SEG, 1,                               taillePx(segRegle, '.login-seg-btn'),  'onglet_actif'],
+  ['aperçu de l’identifiant',    BLANC, alpha(apercuTel, '#LN_VU'),          taillePx(apercuTel, '#LN_VU'),         'carte'],
   ['lien secondaire',            BLANC, alpha(lien, '.login-link'),          taillePx(lien, '.login-link'),        'carte'],
   ['séparateur des liens',       BLANC, alpha(separateur, '.login-sep'),     taillePx(separateur, '.login-sep'),   'carte'],
   ['pied de page',               BLANC, alpha(pied, '.login-foot-item'),     taillePx(pied, '.login-foot-item'),   'carte'],
@@ -147,13 +138,7 @@ for (const [nomPhoto, photo] of Object.entries(PHOTOS)) {
     const fondCarte = sur(CARTE[0], CARTE[1], sur(cv, av, photo));
     const fondChamp = sur(cChamp, aChamp, fondCarte);
     for (const [quoi, couleur, a, taille, ou] of TEXTES) {
-      const fondSeg    = sur(cSeg, aSeg, fondCarte);
-      const fondSegOn  = sur(cSegOn, aSegOn, fondSeg);
-      const fond = ou === 'champ' ? fondChamp
-                 : ou === 'or' ? OR
-                 : ou === 'onglets' ? fondSeg
-                 : ou === 'onglet_actif' ? fondSegOn
-                 : fondCarte;
+      const fond = ou === 'champ' ? fondChamp : ou === 'or' ? OR : fondCarte;
       const r = ratio(sur(couleur, a, fond), fond);
       const seuil = taille >= 24 ? 3 : 4.5;   // le gras n'est pas réclamé : seuil strict
       const ok = r >= seuil; if (!ok) echecs++; mesures++;
