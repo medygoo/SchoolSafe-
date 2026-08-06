@@ -779,6 +779,63 @@ Même principe pour un tableau d'honneur : sous un certain effectif, « les troi
 premiers » **est** le classement complet — publier reviendrait à publier qui est
 dernier. En deçà, la classe paraît avec ses chiffres et aucun nom.
 
+### Un champ qui change de métier change de règles
+
+**6 août 2026.** Le téléphone est devenu ce qui **identifie** un compte —
+décision de Loms, livrée côté serveur par ChatGPT (P0-20, puis P0-21 pour tous
+les postes sauf Direction 1, qui garde l'adresse e-mail).
+
+Tant qu'il ne servait qu'à appeler, `+243 810 000 111`, `0810000111` et
+`243-810-000-111` étaient trois écritures du même numéro et personne n'en
+souffrait. Devenu identifiant, **trois écritures deviennent trois comptes, ou un
+compte introuvable.**
+
+Deux leçons, et la seconde est la vraie :
+
+1. **Quand un champ change de métier, tout ce qui l'écrit et tout ce qui le lit
+   change de règles.** Ici : deux formulaires de saisie, l'écran de connexion,
+   le bouton WhatsApp, et une contrainte `CHECK` qui refusait désormais ce que
+   l'application envoyait depuis toujours — avec un `VALIDATION_ERROR` nu qui ne
+   dit même pas quel champ.
+2. **La forme canonique appartient au serveur, jamais au navigateur.** Même
+   raison que pour le solde. Le navigateur en tient une transcription — pour
+   MONTRER ce qui sera enregistré avant d'envoyer — et `audit-telephone.mjs`
+   confronte les deux : il extrait les règles littérales du SQL de ChatGPT et
+   vérifie qu'elles sont toutes dans le JS. Si le serveur change une règle,
+   l'outil tombe. **Deux normalisations qui divergent ne produisent aucune
+   erreur : elles produisent un compte introuvable.**
+
+### Un état qui n'existe plus continue de s'afficher
+
+Trouvé le même jour, dans la liste du personnel : la pastille
+**« PIN : •••••• »**. Les codes PIN avaient été retirés la veille — 125 lignes
+qui comparaient la saisie à trois colonnes inexistantes. L'affichage, lui, était
+resté.
+
+Trois listes posaient la même question — *où en est l'accès de cette personne ?*
+— et y répondaient chacune à sa façon : une adresse, un PIN fantôme, rien du
+tout. `_pastilleAcces` et `_boutonAcces` les servent désormais toutes les trois.
+
+**Une pastille qui ment sur un état envoie chercher au mauvais endroit** le jour
+où quelqu'un n'arrive pas à entrer — et c'est ce jour-là qu'on la croit.
+
+### Ce que le serveur refuse tant qu'un code temporaire n'est pas remplacé
+
+Le contrat de ChatGPT fait rendre `NULL` à `current_app_role()` tant que la
+personne n'a pas remplacé le code reçu par WhatsApp. La RLS ne laisse alors voir
+**aucune ligne** — pas même son propre profil.
+
+Donc l'état d'accès (`get_my_access_state`) se demande **AVANT** de lire `users`.
+Lire d'abord aurait rendu un tableau vide, donc « aucun profil n'est rattaché à
+cette adresse » : **une accusation portée contre quelqu'un qui a fait exactement
+ce qu'il fallait.** C'est la leçon de la lecture qui échoue, appliquée d'avance.
+
+Et son corollaire : **`updateUser({password})` qui réussit ne suffit pas.**
+Le serveur doit CONSTATER le changement (`confirm_parent_phone_password_change`,
+qui compare l'empreinte du hash Auth). Sans cet appel, `must_change_password`
+reste vrai : la personne croit avoir terminé et ne voit toujours rien. Un écran
+qui félicite pendant que le serveur bloque est la pire des réponses.
+
 ---
 
 ## Les outils
@@ -798,6 +855,7 @@ npm run audit        # tout d'un coup
 | `audit-charte.mjs` | gris · blanc · or sur les documents (`--detail`) |
 | `audit-contraste-site.mjs` | les 17 couples texte/fond du site, **mesurés** (`--preuve`) |
 | `audit-contraste-connexion.mjs` | l'écran de connexion — texte sur **photographie**, pire cas (`--preuve`) |
+| `audit-telephone.mjs` | le numéro écrit **exactement** comme le serveur l'écrira (`--preuve`) |
 | `audit-signature.mjs` | quel document se signe, et lequel ne se signe pas (`--preuve`) |
 | `audits.mjs` | **les lance tous**, même quand l'un échoue — `npm run audit` |
 | `verif-coherence.mjs` | la chaîne de calcul, **exécutée** |
