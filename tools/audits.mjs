@@ -30,6 +30,7 @@ const OUTILS = [
   ['signature',   'audit-signature.mjs',       'quel document se signe'],
   ['contraste',   'audit-contraste-site.mjs',  'les contrastes du site, mesurés'],
   ['connexion',   'audit-contraste-connexion.mjs', "l'écran de connexion, sur photographie"],
+  ['telephone',   'audit-telephone.mjs',       'le numéro écrit comme le serveur l’écrit'],
 ];
 
 const detail = process.argv.includes('--detail');

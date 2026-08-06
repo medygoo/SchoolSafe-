@@ -183,6 +183,12 @@ body{font-family:'DM Sans',-apple-system,sans-serif;background:var(--bg);color:v
 /* Le placeholder porte le nom du champ : c'est du texte, il se mesure. */
 .login-input::placeholder{color:rgba(255,255,255,.68)}
 .login-input.pin{letter-spacing:6px;font-size:18px}
+/* Le choix de la voie d'entrée. Deux formes, pas deux couleurs : l'onglet
+   choisi est PLEIN, l'autre est nu. Un état qui ne tient qu'à une nuance de
+   blanc ne se voit pas sur une photographie. */
+.login-seg{display:flex;gap:4px;padding:4px;margin-bottom:12px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14)}
+.login-seg-btn{flex:1;min-width:0;padding:10px 8px;border:0;border-radius:12px;background:none;font-family:inherit;font-size:13.5px;font-weight:700;color:rgba(255,255,255,.72);cursor:pointer;transition:background .2s,color .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+.login-seg-btn.on{background:rgba(255,255,255,.9);color:#1a1206}
 .btn-login{width:100%;padding:16px;font-size:16px;font-weight:800;border:0;border-radius:16px;cursor:pointer;color:#1a1206;background:linear-gradient(100deg,var(--login-accent,var(--gold)),#f3c768);box-shadow:0 14px 30px rgba(217,164,58,.35);position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px;font-family:inherit}
 .btn-login:hover{transform:translateY(-2px);box-shadow:0 20px 40px rgba(217,164,58,.45)}
 .btn-login:active{transform:translateY(0)}
@@ -1199,15 +1205,20 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
     </div>
     <h1 class="login-title">Bienvenue 👋</h1>
     <p class="login-subtitle">Connectez-vous à votre espace sécurisé</p>
+    <div class="login-seg" role="tablist" aria-label="Voie de connexion">
+      <button type="button" class="login-seg-btn on" id="SEG_TEL" role="tab" aria-selected="true" onclick="window._voieConnexion('tel')">📱 Téléphone</button>
+      <button type="button" class="login-seg-btn" id="SEG_MAIL" role="tab" aria-selected="false" onclick="window._voieConnexion('mail')">✉️ Adresse e-mail</button>
+    </div>
     <div class="login-field">
       <svg class="lfi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20c0-3.3 3.6-5.5 8-5.5s8 2.2 8 5.5"/><circle cx="12" cy="8" r="4"/></svg>
-      <input class="login-input" id="LN" type="email" placeholder="Adresse e-mail" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <input class="login-input" id="LN" type="tel" placeholder="Numéro de téléphone" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
     </div>
+    <div id="LN_VU" style="font-size:11.5px;color:rgba(255,255,255,.72);text-align:center;margin:-6px 0 8px;min-height:15px"></div>
     <div class="login-field" style="margin-bottom:4px">
       <svg class="lfi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
       <input class="login-input" id="LP" placeholder="Mot de passe" type="password" autocomplete="current-password">
     </div>
-    <div id="LP_HINT" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;margin-bottom:12px;min-height:16px">Utilisez l’e-mail invité et votre mot de passe.</div>
+    <div id="LP_HINT" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;margin-bottom:12px;min-height:16px">Votre numéro et le code reçu par WhatsApp, ou votre code personnel.</div>
     <div class="pin-message" id="PM"></div>
     <button class="btn-login" id="LOGIN_BUTTON" onclick="tryLogin()">Se connecter</button>
     <div class="login-links">
@@ -1423,6 +1434,60 @@ window._rebuildIdx = () => {
 };
 window.gc = id => DB._idx?.classesById?.get(id) ?? (DB.classes||[]).find(c=>c.id===id);
 window.gu = id => DB._idx?.usersById?.get(id) ?? (DB.users||[]).find(u=>u.id===id);
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  LE NUMÉRO DE TÉLÉPHONE EST DEVENU UN IDENTIFIANT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Tant qu'il ne servait qu'à appeler, `+243 810 000 111`, `0810000111` et
+//  `243-810-000-111` étaient trois écritures du même numéro et personne n'en
+//  souffrait. Depuis le lot P0-20 de ChatGPT, c'est ce qui identifie un compte :
+//  trois écritures deviennent trois comptes, ou un compte introuvable.
+//
+//  La base pose `users_phone_e164_check` — `^\+[1-9][0-9]{7,14}$`. La saisie
+//  du navigateur acceptait espaces et tirets : l'enregistrement serait refusé
+//  par un `VALIDATION_ERROR` nu qui ne dit même pas quel champ.
+//
+//  Cette fonction est la TRANSCRIPTION EXACTE de `private.normalize_phone_e164`
+//  (migration 20260805223000). Elle ne décide de rien : la forme canonique
+//  appartient au serveur. Elle sert à MONTRER, avant d'envoyer, ce qui sera
+//  enregistré — pour que personne ne découvre après coup que son numéro n'a
+//  pas été accepté.
+//
+//  Deux normalisations qui divergeraient, ce serait la panne du 5 août sous un
+//  autre nom : deux moitiés du code qui ne parlent pas de la même chose.
+//  → `tools/audit-telephone.mjs` compare les deux, ligne à ligne, sur 40 cas.
+window._telE164 = (raw) => {
+  const brut = String(raw == null ? '' : raw).trim();
+  if (brut === '') return null;
+  let c = brut.replace(/[\s().-]/g, '');
+  if (c.slice(0, 2) === '00') c = '+' + c.slice(2);
+  if (c[0] === '+') {
+    const d = c.slice(1);
+    return /^[1-9][0-9]{7,14}$/.test(d) ? '+' + d : null;
+  }
+  if (!/^[0-9]+$/.test(c)) return null;
+  let r;
+  if (/^0[0-9]{9}$/.test(c))        r = '+243' + c.slice(1);
+  else if (/^243[0-9]{9}$/.test(c)) r = '+' + c;
+  else if (/^[89][0-9]{8}$/.test(c))r = '+243' + c;
+  else return null;
+  return /^\+[1-9][0-9]{7,14}$/.test(r) ? r : null;
+};
+
+// Ce que la personne verra sous le champ pendant qu'elle tape. Un numéro
+// refusé APRÈS l'enregistrement oblige à rouvrir la fiche ; refusé pendant la
+// saisie, il se corrige en deux secondes.
+window._telApercu = (champId, vuId) => {
+  const el = document.getElementById(champId), vu = document.getElementById(vuId);
+  if (!el || !vu) return;
+  const brut = (el.value || '').trim();
+  if (!brut) { vu.textContent = ''; vu.style.color = 'var(--text-muted)'; return; }
+  const n = window._telE164(brut);
+  if (n) { vu.textContent = 'Enregistré ainsi : ' + n; vu.style.color = '#1f9d6b'; }
+  else   { vu.textContent = 'Numéro non reconnu — 0810000111, 810000111 ou +243810000111';
+           vu.style.color = '#dc2626'; }
+};
 
 // ── WhatsApp helpers ──
 window.waLink = (phone, msg) => {
@@ -2738,7 +2803,7 @@ window.ROLE_LOAD = {
     bootstrap: [
       _T('classes',  'select=*'),
       _T('students', 'select=id,name,mat,cid,pid,photo,access_blocked,blocked,access_parent,archived,may_leave_alone,leave_alone_until&archived=eq.false'),
-      _T('users',    'select=id,name,role,initials,phone,photo_url,email,status,created_at'),
+      _T('users',    'select=id,name,role,initials,phone,photo_url,email,status,created_at,auth_user_id,access_channel,must_change_password'),
       _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
       // Les demandes de préinscription arrivent du site public. Direction 1
       // seule les voit et les valide — décision de Loms, 4 août 2026.
@@ -2759,7 +2824,11 @@ window.ROLE_LOAD = {
     bootstrap: [
       _T('classes',  'select=id,name,cycle,teacher_id,teacher_id_en,titulaire_id,option,card_color,card_color_soft,card_color_dark'),
       _T('students', 'select=id,name,mat,cid,pid,dob,photo,adresse,nom_papa,nom_maman,access_blocked,blocked,access_parent,archived,created_at,lieu_naissance,num_inscription,may_leave_alone,leave_alone_until&archived=eq.false'),
-      _T('users',    'select=id,name,role,initials,phone,photo_url,status'),
+      // `auth_user_id` et `access_channel` disent si un compte a déjà un accès
+      // et par quelle voie : sans eux, Direction 2 ne peut pas savoir s'il faut
+      // OUVRIR un accès ou le RÉINITIALISER, et le bouton se tromperait de
+      // demande. Ce ne sont pas des données personnelles, seulement un état.
+      _T('users',    'select=id,name,role,initials,phone,photo_url,status,auth_user_id,access_channel,must_change_password'),
       _T('matieres', 'select=id,cid,name,lang,active'),
       _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
     ],
@@ -4265,9 +4334,21 @@ window.showLogin = () => {
 // avec la connexion par code. On ne garde pas du code mort qui hache un
 // mot de passe : le prochain lecteur croirait qu'il sert encore.
 const _isDirRole = r => r==='direction'||r==='direction2'||r==='direction3';
-function _authErrorMessage(error) {
+function _authErrorMessage(error, voie) {
   const msg = String(error?.message || '').toLowerCase();
-  if (msg.includes('invalid login credentials')) return 'E-mail ou mot de passe incorrect';
+  // Le message doit nommer ce qu'on vient de taper. Dire « e-mail incorrect »
+  // à quelqu'un qui a saisi un numéro l'envoie corriger ce qu'il n'a pas écrit.
+  if (msg.includes('invalid login credentials')) {
+    return voie === 'tel'
+      ? 'Numéro ou code incorrect — le code reçu par WhatsApp ne sert qu’une fois'
+      : 'E-mail ou mot de passe incorrect';
+  }
+  // Le fournisseur Phone n'est pas activé dans Supabase : ce n'est pas la
+  // faute de la personne, et aucune ressaisie ne le corrigera. C'est le
+  // réglage que Loms doit poser (§ P0-20 de ChatGPT).
+  if (msg.includes('phone') && (msg.includes('disabled') || msg.includes('not enabled') || msg.includes('unsupported') || msg.includes('provider'))) {
+    return 'La connexion par téléphone n’est pas encore activée sur le serveur — signalez-le à la Direction';
+  }
   if (msg.includes('email not confirmed')) return 'Confirmez d’abord votre adresse e-mail';
   if (msg.includes('too many requests') || msg.includes('rate limit')) return 'Trop de tentatives — attendez quelques minutes';
   if (msg.includes('different from the old')) return 'Choisissez un mot de passe différent de l’ancien';
@@ -4347,6 +4428,54 @@ window._diagnosticProfil = (etat) => ({
   sortir: false,
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  OÙ EN EST CET ACCÈS — contrat `get_my_access_state` de ChatGPT (P0-20)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Trois réponses seulement décident de quelque chose : ACCESS_READY,
+//  TEMPORARY_PASSWORD_MUST_CHANGE, TEMPORARY_PASSWORD_EXPIRED.
+//
+//  Et un cas qu'il faut traiter à part : la fonction PAS ENCORE DÉPLOYÉE.
+//  Un compte par adresse e-mail — Direction 1 — n'a jamais de code temporaire ;
+//  bloquer sa connexion parce qu'une fonction manque reviendrait à fermer
+//  l'école pour une raison qui ne la concerne pas. On laisse donc passer, et
+//  on le dit dans la console plutôt que de faire comme si de rien n'était.
+window._ABSENTE = /PGRST202|404|does not exist|could not find/i;
+window._etatAcces = async () => {
+  const r = await _rpc('get_my_access_state', {});
+  if (r.ok) return { ok: true, code: r.data.code, data: r.data };
+  if (window._ABSENTE.test(String(r.code || ''))) {
+    console.warn('[ACCES] get_my_access_state absente du serveur — on continue comme avant (P0-20 non déployé).');
+    return { ok: true, code: 'ACCESS_READY', absente: true };
+  }
+  // Un refus qu'on ne comprend pas ne doit pas fermer la porte à quelqu'un
+  // dont le mot de passe vient d'être accepté. On note et on continue : la
+  // RLS reste le vrai contrôle, elle ne dépend pas de cet appel.
+  console.warn('[ACCES]', r.code);
+  return { ok: false, code: 'ACCESS_READY', refus: r.code };
+};
+
+// L'écran « créez votre code personnel ». Ce n'est pas la même chose que
+// l'écran d'invitation par courriel : ici la personne est DÉJÀ connectée avec
+// un code que la Direction lui a remis, et elle ne verra rien tant qu'elle ne
+// l'aura pas remplacé — c'est le serveur qui l'impose, pas l'écran.
+window._exigerCodePersonnel = (acces) => {
+  window._codeTemporaire = true;
+  const sp=$('SPLASH'), ls=$('LS'), loginForm=$('login-form'), setup=$('PASSWORD_SETUP');
+  if(sp){ sp.style.transition='none'; sp.style.opacity='0'; sp.style.pointerEvents='none'; sp.style.display='none'; }
+  if(ls){ ls.style.transition='none'; ls.style.display='flex'; ls.style.opacity='1'; ls.style.pointerEvents=''; ls.classList.remove('hidden'); }
+  if(loginForm) loginForm.style.display='none';
+  if(setup) setup.style.display='';
+  if($('PASSWORD_SETUP_TITLE')) $('PASSWORD_SETUP_TITLE').textContent = 'Créez votre code personnel';
+  if($('INVITE_EMAIL')) $('INVITE_EMAIL').textContent = (acces?.data?.phone) || 'votre compte';
+  if($('NEW_PASSWORD')) { $('NEW_PASSWORD').value=''; $('NEW_PASSWORD').placeholder='Nouveau code personnel'; }
+  if($('CONFIRM_PASSWORD')) { $('CONFIRM_PASSWORD').value=''; $('CONFIRM_PASSWORD').placeholder='Confirmer le code'; }
+  if($('SET_PASSWORD_BUTTON')) $('SET_PASSWORD_BUTTON').textContent='Enregistrer mon code';
+  _setAuthMessage('SET_PASSWORD_MESSAGE',
+    'Le code reçu par WhatsApp ne sert qu’une fois. Choisissez le vôtre — personne d’autre ne le connaîtra.');
+  window._startLoginHeroRotation&&window._startLoginHeroRotation();
+};
+
 async function _openSupabaseSession(session, password, messageId) {
   const target = messageId || 'PM';
   const authUser = session?.user;
@@ -4357,6 +4486,35 @@ async function _openSupabaseSession(session, password, messageId) {
 
   window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY, session.access_token);
   window.DB_ONLINE = true;
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  L'ÉTAT D'ACCÈS SE DEMANDE AVANT TOUT LE RESTE
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  //  Tant qu'un code temporaire n'a pas été remplacé, `current_app_role()` de
+  //  ChatGPT rend NULL : la RLS ne laisse voir AUCUNE ligne, pas même son
+  //  propre profil. Si on lisait `users` d'abord, on obtiendrait un tableau
+  //  vide et on annoncerait « aucun profil n'est rattaché à cette adresse » —
+  //  une accusation, alors que la personne a fait exactement ce qu'il fallait.
+  //
+  //  C'est la leçon de ce matin appliquée d'avance : ne jamais confondre
+  //  « je n'ai rien trouvé » avec « je n'avais pas encore le droit de chercher ».
+  const acces = await window._etatAcces();
+  if (acces.code === 'TEMPORARY_PASSWORD_MUST_CHANGE') {
+    window._pendingAuthSession = session;
+    window._exigerCodePersonnel(acces);
+    return false;
+  }
+  if (acces.code === 'TEMPORARY_PASSWORD_EXPIRED') {
+    await window._authClient.auth.signOut();
+    _setAuthMessage(target, 'Ce code temporaire a expiré — demandez-en un nouveau à la Direction');
+    return false;
+  }
+  if (acces.code === 'ACCOUNT_DISABLED') {
+    await window._authClient.auth.signOut();
+    _setAuthMessage(target, 'Ce compte est désactivé — adressez-vous à la Direction');
+    return false;
+  }
 
   const { rows, etat } = await window._lireMonProfil(authUser.id);
   const user = Array.isArray(rows) ? rows[0] : null;
@@ -4562,6 +4720,34 @@ window._completePasswordSetup = async function() {
       return;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  CHANGER LE MOT DE PASSE NE SUFFIT PAS — le serveur doit le CONSTATER
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    //  ChatGPT est formel : « N'ouvrir l'espace qu'après ACCESS_READY. Un
+    //  simple succès de updateUser ne suffit pas. » Sa fonction compare
+    //  l'empreinte du hash Auth avant et après — c'est ainsi qu'elle refuse
+    //  qu'on « change » son code temporaire pour le même code.
+    //
+    //  Sans cet appel, `must_change_password` resterait vrai : la personne
+    //  croirait avoir terminé, et ne verrait toujours rien. Un écran qui
+    //  félicite pendant que le serveur bloque, c'est la pire des réponses.
+    if (window._codeTemporaire) {
+      const c = await _rpc('confirm_parent_phone_password_change', {});
+      if (!c.ok && !window._ABSENTE.test(String(c.code||''))) {
+        const dit = {
+          PASSWORD_NOT_CHANGED:       'Choisissez un code DIFFÉRENT de celui reçu par WhatsApp',
+          TEMPORARY_PASSWORD_EXPIRED: 'Ce code temporaire a expiré — demandez-en un nouveau à la Direction',
+          ACCESS_REQUEST_NOT_FOUND:   'Le serveur ne retrouve pas votre demande d’accès — demandez un nouveau code',
+          PROFILE_NOT_LINKED:         'Aucun profil n’est rattaché à ce compte — signalez-le à la Direction',
+          AUTH_REQUIRED:              'Session expirée — reconnectez-vous',
+        }[c.code] || ('Le serveur n’a pas confirmé le changement — ' + (c.code || 'raison inconnue'));
+        _setAuthMessage('SET_PASSWORD_MESSAGE', dit);
+        return;
+      }
+      window._codeTemporaire = false;
+    }
+
     const refreshed = (await window._authClient.auth.getSession()).data?.session || session;
     localStorage.setItem(_passwordReadyKey(session.user.id), '1');
     window._pendingAuthSession = refreshed;
@@ -4578,10 +4764,63 @@ window._completePasswordSetup = async function() {
   }
 };
 
-async function _loginWithSupabaseAuth(email, password) {
-  const { data, error } = await window._authClient.auth.signInWithPassword({ email, password });
+// ═══════════════════════════════════════════════════════════════════════════
+//  DEUX VOIES D'ENTRÉE — la décision de Loms du 6 août 2026
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  « Pour les professeurs et Direction 2 et tous les postes, ça reste sur
+//   téléphone, sauf Direction 1 sur adresse mail. »
+//
+//  Direction 1 garde l'adresse parce que c'est la seule voie de secours qui ne
+//  dépend de personne : si tous les comptes passaient par un code remis à la
+//  main, plus personne ne rouvrirait l'école le jour où la Direction perd son
+//  téléphone.
+//
+//  Le téléphone est donc l'onglet par défaut — c'est le cas de presque tout le
+//  monde. Le choix est mémorisé sur l'appareil : on ne le refait pas chaque
+//  matin.
+window._VOIE_STORE = '_schoolsafe_voie';
+window._voieCourante = () =>
+  (localStorage.getItem(window._VOIE_STORE) === 'mail') ? 'mail' : 'tel';
+
+window._voieConnexion = (voie) => {
+  const v = (voie === 'mail') ? 'mail' : 'tel';
+  try { localStorage.setItem(window._VOIE_STORE, v); } catch (_) {}
+  const segT = $('SEG_TEL'), segM = $('SEG_MAIL'), ln = $('LN'), hint = $('LP_HINT'), vu = $('LN_VU');
+  if (segT) { segT.classList.toggle('on', v === 'tel');  segT.setAttribute('aria-selected', v === 'tel'); }
+  if (segM) { segM.classList.toggle('on', v === 'mail'); segM.setAttribute('aria-selected', v === 'mail'); }
+  if (ln) {
+    ln.type = (v === 'tel') ? 'tel' : 'email';
+    ln.placeholder = (v === 'tel') ? 'Numéro de téléphone' : 'Adresse e-mail';
+    ln.inputMode = (v === 'tel') ? 'tel' : 'email';
+  }
+  if (hint) hint.textContent = (v === 'tel')
+    ? 'Votre numéro et le code reçu par WhatsApp, ou votre code personnel.'
+    : 'Votre adresse e-mail et votre mot de passe.';
+  if (vu) vu.textContent = '';
+  if ($('PM')) $('PM').textContent = '';
+};
+
+// Ce qu'on affiche sous le champ pendant qu'on tape un numéro : la forme
+// exacte sous laquelle le serveur le connaît. Un numéro tapé « 08 10 00 01 11 »
+// et cherché « +243810000111 » ne se rejoignent jamais — et l'écran répondrait
+// « identifiants incorrects » à quelqu'un qui a tout bon.
+window._telApercuConnexion = () => {
+  const ln = $('LN'), vu = $('LN_VU');
+  if (!ln || !vu) return;
+  if (window._voieCourante() !== 'tel') { vu.textContent = ''; return; }
+  const brut = (ln.value || '').trim();
+  if (!brut) { vu.textContent = ''; return; }
+  const n = window._telE164(brut);
+  vu.textContent = n ? ('Connexion au numéro ' + n) : 'Numéro non reconnu — 0810000111 ou +243810000111';
+  vu.style.color = n ? 'rgba(255,255,255,.82)' : '#ffc9c9';
+};
+
+async function _loginWithSupabaseAuth(identifiant, password, voie) {
+  const creds = (voie === 'tel') ? { phone: identifiant, password } : { email: identifiant, password };
+  const { data, error } = await window._authClient.auth.signInWithPassword(creds);
   if (error || !data?.session || !data?.user) {
-    $('PM').textContent = _authErrorMessage(error);
+    $('PM').textContent = _authErrorMessage(error, voie);
     $('LP').value = '';
     return;
   }
@@ -4611,12 +4850,21 @@ window.tryLogin = async () => {
 async function _tryLoginInner() {
   const rawLogin = ($('LN')?.value || '').trim();
   const rawSecret = $('LP')?.value || '';
+  const voie = window._voieCourante();
 
   if (window._authClient) {
-    if (!rawLogin) { $('PM').textContent = 'Entrez votre adresse e-mail'; return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawLogin)) { $('PM').textContent = 'Adresse e-mail invalide'; return; }
-    if (!rawSecret) { $('PM').textContent = 'Entrez votre mot de passe'; return; }
-    await _loginWithSupabaseAuth(rawLogin.toLowerCase(), rawSecret);
+    if (!rawLogin) { $('PM').textContent = (voie === 'tel') ? 'Entrez votre numéro de téléphone' : 'Entrez votre adresse e-mail'; return; }
+    let identifiant;
+    if (voie === 'tel') {
+      // Le numéro part sous la forme que le serveur connaît, ou il ne part pas.
+      identifiant = window._telE164(rawLogin);
+      if (!identifiant) { $('PM').textContent = 'Numéro non reconnu — écrivez 0810000111 ou +243810000111'; return; }
+    } else {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawLogin)) { $('PM').textContent = 'Adresse e-mail invalide'; return; }
+      identifiant = rawLogin.toLowerCase();
+    }
+    if (!rawSecret) { $('PM').textContent = (voie === 'tel') ? 'Entrez votre code' : 'Entrez votre mot de passe'; return; }
+    await _loginWithSupabaseAuth(identifiant, rawSecret, voie);
     return;
   }
 
@@ -9692,14 +9940,12 @@ window._simpleList = (role, icon, gradient) => {
         </div>
         ${role==='enseignant'?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">📚 ${DB.classes.filter(c=>c.teacher_id===u.id||c.teacher_id_en===u.id).map(c=>esc(c.name)).join(', ')||'Aucune classe assignée'}</div>`:''}
         <div style="display:flex;gap:6px;align-items:center">
-          ${(()=>{const a=(u.email||'').trim();
-            return a
-              ? `<span class="pill" style="background:#d8f3e6;color:#065f46" title="${esc(a)}">✉️ ${esc(a.length>26?a.slice(0,24)+'…':a)}</span>`
-              : `<span class="pill" style="background:#fef3c7;color:#92400e" title="Sans adresse, cette personne ne peut pas se connecter">⚠️ Sans accès</span>`;})()}
+          ${window._pastilleAcces(u)}
           <span style="flex:1"></span>
           ${u.phone?waBtn(u.phone,u.name):''}
+          ${window._boutonAcces(u)}
           <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
-          <button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')">🔑 Accès</button>
+          ${_roleUI(u.role)==='direction'?`<button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')">🔑 Accès</button>`:''}
           <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
         </div>
       </div>
@@ -9794,7 +10040,10 @@ ${photoOpts}
   <div class="form-group"><label class="form-label">Initiales</label><input class="form-input" id="usr_init" maxlength="3" value="${u&&u.initials?u.initials:''}" placeholder="JK"></div>
 </div>
 <div class="form-row">
-  <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="usr_phone" value="${u&&u.phone?esc(u.phone):''}" placeholder="+243 8XX XXX XXX"></div>
+  <div class="form-group"><label class="form-label">Téléphone</label>
+    <input class="form-input" id="usr_phone" value="${u&&u.phone?esc(u.phone):''}" placeholder="0810000111 ou +243810000111" oninput="window._telApercu('usr_phone','usr_phone_vu')">
+    <div id="usr_phone_vu" style="font-size:11.5px;margin-top:5px;color:var(--text-muted)"></div>
+  </div>
   <div class="form-group">
     <label class="form-label">Adresse e-mail${u?'':' <span class="req">*</span>'}</label>
     <input class="form-input" id="usr_email" type="email" autocomplete="off"
@@ -9906,9 +10155,18 @@ window.saveUser = async () => {
   if(uid && !existingUser){toast('Utilisateur introuvable — rechargez','error');return;}
   const newId=uid||_uid('u_');
   const _avaitCourriel = !!(existingUser && existingUser.email);
+  // Le numéro identifie désormais un compte : il part sous la forme exacte que
+  // le serveur enregistrera, ou il ne part pas. L'ancien contrôle laissait
+  // passer « +243 810 000 111 » et « 08 10 00 01 11 » — refusés côté base par
+  // `users_phone_e164_check`, avec un VALIDATION_ERROR qui ne dit pas quel champ.
   const phoneRaw=($('usr_phone')?.value||'').trim();
-  if(phoneRaw && !/^[+]?[0-9\s\-()+]{9,15}$/.test(phoneRaw)){markFieldError('usr_phone','Format invalide — ex: +243 8XX XXX XXX');return;}
-  const phone=phoneRaw||null;
+  const phone=phoneRaw?window._telE164(phoneRaw):null;
+  if(phoneRaw && !phone){markFieldError('usr_phone','Numéro non reconnu — écrivez 0810000111, 810000111 ou +243810000111');return;}
+  // Deux comptes ne peuvent pas partager un numéro : c'est ce qui les identifie.
+  if(phone){
+    const _dejaTel=(DB.users||[]).find(x=>x.id!==uid && x.phone && window._telE164(x.phone)===phone);
+    if(_dejaTel){markFieldError('usr_phone',`Ce numéro est déjà celui de ${_dejaTel.name}`);return;}
+  }
   const _norm=s=>(s||'').trim().toLowerCase().replace(/\s+/g,' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 
   // La connexion identifie un compte par son nom OU ses initiales, sans tenir
@@ -10209,10 +10467,11 @@ R.parents = () => {
             <div style="font-weight:700;font-size:16px">${esc(u.name)}</div>
             <div style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.phone||'—')}</div>
             <span class="pill" style="background:rgba(155,111,212,.15);color:#9b6fd4;font-size:10px;font-weight:700">👪 Parent · ${kids.length} enfant${kids.length>1?'s':''}</span>
+            ${window._pastilleAcces(u)}
           </div>
           <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
             ${u.phone?waBtn(u.phone,u.name):''}
-            ${S.user.role==='direction'&&u.phone?`<button id="wa_${u.id}" class="btn btn-outline btn-sm" style="border-color:#25D366;color:#128C4A" title="Générer un lien d'accès et l'envoyer par WhatsApp" onclick="_envoyerLienWhatsApp('${u.id}')">🔗 Lien</button>`:''}
+            ${window._boutonAcces(u)}
             <button class="btn btn-outline btn-sm" onclick="openUserForm('parent','${u.id}')">Modifier</button>
             <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
           </div>
@@ -25069,7 +25328,8 @@ R.profil_enseignant = () => {
           <div class="form-group"><label class="form-label">Initiales</label><input class="form-input" id="tp_init" maxlength="3" value="${esc(u.initials||ini(u.name)||'')}" placeholder="JK"></div>
         </div>
         <div class="form-group"><label class="form-label">${t('Numéro de téléphone','Phone Number')}</label>
-          <input class="form-input" id="tp_phone" value="${esc(u.phone||'')}" placeholder="+243 xxx xxx xxx" type="tel">
+          <input class="form-input" id="tp_phone" value="${esc(u.phone||'')}" placeholder="0810000111 ou +243810000111" type="tel" oninput="window._telApercu('tp_phone','tp_phone_vu')">
+          <div id="tp_phone_vu" style="font-size:11.5px;margin-top:5px;color:var(--text-muted)"></div>
         </div>
         <div class="form-group"><label class="form-label">${t('Photo de profil','Profile photo')}</label>
           <div style="display:flex;align-items:center;gap:14px">
@@ -25246,7 +25506,11 @@ R.profil_enseignant = () => {
   </div>`;
 };
 window.saveTeacherProfile = () => {
-  const phone=(document.getElementById('tp_phone')?.value||'').trim()||null;
+  const _phRaw=(document.getElementById('tp_phone')?.value||'').trim();
+  const phone=_phRaw?window._telE164(_phRaw):null;
+  // Le numéro identifie le compte : un enregistrement à l'ancienne forme
+  // serait refusé par la base, et la personne ne saurait pas pourquoi.
+  if(_phRaw && !phone){toast('Numéro non reconnu — écrivez 0810000111 ou +243810000111','error');return;}
   const name=(document.getElementById('tp_name')?.value||'').trim();
   const initials=(document.getElementById('tp_init')?.value||'').trim();
   if(!name){toast(t('Entrez votre nom','Enter your name'),'error');return;}
@@ -26505,10 +26769,11 @@ R.accounts = () => {
           <div style="flex:1;min-width:0">
             <div style="font-weight:700;font-size:14px">${esc(u.name)}</div>
             <div style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.phone||'—')}</div>
-            <span class="pill pill-blue" style="font-family:monospace;font-size:11px">${_isDirRole(u.role)?'Mdp':'PIN'}: ••••••</span>
+            ${window._pastilleAcces(u)}
           </div>
           <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
             ${u.phone?waBtn(u.phone,u.name):''}
+            ${window._boutonAcces(u)}
             <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
             <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
           </div>
@@ -27252,50 +27517,151 @@ window.autoActivatePaid = () => {
 //  par une Edge Function, comme pour l'invitation. Le contrat est proposé à
 //  ChatGPT en P0-19 ; tant qu'il ne l'a pas posée, ce bouton le DIT — il ne
 //  reste pas muet et ne prétend pas avoir envoyé quoi que ce soit.
-window._lienAcces = async (userId, type) => {
-  return await _edgeFn('lien-acces', { app_user_id: userId, type: type || 'recovery' });
+//  CE QUE CHATGPT A LIVRÉ (PR #46) : ce n'est pas un lien, c'est un CODE.
+//  `parent-phone-access` crée l'identité Auth et rend un code temporaire de
+//  30 minutes, à usage unique, que la personne devra remplacer avant de voir
+//  quoi que ce soit. Le code n'est rendu QU'UNE FOIS et n'est jamais
+//  enregistré en clair — ni côté serveur, ni ici.
+window._accesTelephone = async (userId, action, phone) => {
+  const corps = { app_user_id: userId, action: action || 'provision' };
+  if (action === 'change_phone') corps.phone = phone;
+  return await _edgeFn('parent-phone-access', corps);
+};
+
+// Qui peut ouvrir ou réinitialiser l'accès de qui. Règle de Loms du 5 août :
+// « Direction 2 peut créer tout compte sauf direction et caisse. »
+// LE SERVEUR NE LE SAIT PAS ENCORE — c'est le point 5 de ma demande P0-21.
+// Ce contrôle-ci ne protège donc rien à lui seul : il évite d'envoyer une
+// demande qui sera refusée, et il dit pourquoi. La sécurité reste chez ChatGPT.
+window._peutOuvrirAcces = (acteurRole, cibleRole) => {
+  if (acteurRole === 'direction') return true;
+  if (acteurRole === 'direction2') return !['direction','direction3'].includes(_roleUI(cibleRole));
+  return false;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  OÙ EN EST L'ACCÈS DE CETTE PERSONNE — une seule réponse, trois écrans
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  La liste du personnel, celle de Direction 2 et celle des parents posaient la
+//  même question et y répondaient chacune à sa façon — l'une affichait
+//  « PIN : •••••• » alors que les codes PIN n'existent plus depuis le 5 août.
+//  Une pastille qui ment sur l'état d'un accès envoie chercher au mauvais
+//  endroit le jour où quelqu'un n'arrive pas à entrer.
+window._etatAccesCompte = (u) => {
+  if (!u) return { cle:'inconnu', texte:'—', bg:'#f3f4f6', fg:'#6b7280' };
+  // Direction 1 entre par son adresse — décision de Loms du 6 août 2026 :
+  // c'est la seule voie de secours qui ne dépend de personne.
+  if (_roleUI(u.role) === 'direction') {
+    const a = (u.email||'').trim();
+    return a
+      ? { cle:'mail', texte:'✉️ ' + (a.length>26 ? a.slice(0,24)+'…' : a), titre:a, bg:'#d8f3e6', fg:'#065f46' }
+      : { cle:'sans_mail', texte:'⚠️ Sans adresse', titre:'Sans adresse e-mail, la Direction 1 ne peut pas se connecter', bg:'#fef3c7', fg:'#92400e' };
+  }
+  if (!window._telE164(u.phone||''))
+    return { cle:'sans_tel', texte:'⚠️ Sans numéro', titre:'Sans numéro utilisable, cette personne ne peut pas se connecter', bg:'#fef3c7', fg:'#92400e' };
+  if (!u.auth_user_id)
+    return { cle:'a_ouvrir', texte:'⏳ Accès non ouvert', titre:'Aucun accès n’a encore été ouvert pour ce compte', bg:'#fef3c7', fg:'#92400e' };
+  if (u.must_change_password)
+    return { cle:'code_envoye', texte:'📲 Code en attente', titre:'Un code temporaire a été remis ; il n’a pas encore été remplacé', bg:'#dbeafe', fg:'#1d4ed8' };
+  return { cle:'actif', texte:'✅ Accès actif', titre:'Cette personne a choisi son code personnel', bg:'#d8f3e6', fg:'#065f46' };
+};
+
+window._pastilleAcces = (u) => {
+  const e = window._etatAccesCompte(u);
+  return `<span class="pill" style="background:${e.bg};color:${e.fg}" title="${esc(e.titre||e.texte)}">${esc(e.texte)}</span>`;
+};
+
+// Le bouton n'apparaît que s'il peut aboutir. Un bouton qui ne peut pas
+// réussir est un mensonge poli — c'est la leçon du 5 août.
+window._boutonAcces = (u) => {
+  if (!S.user || !window._peutOuvrirAcces(S.user.role, u.role)) return '';
+  const e = window._etatAccesCompte(u);
+  if (e.cle === 'mail' || e.cle === 'sans_mail' || e.cle === 'sans_tel') return '';
+  const neuf = e.cle === 'a_ouvrir';
+  return `<button id="wa_${u.id}" class="btn btn-outline btn-sm" style="border-color:#25D366;color:#128C4A" `
+       + `title="${neuf?'Ouvrir l’accès et envoyer le code par WhatsApp':'Remettre un nouveau code temporaire par WhatsApp'}" `
+       + `onclick="_envoyerLienWhatsApp('${u.id}')">${neuf?'🔗 Ouvrir l’accès':'🔁 Nouveau code'}</button>`;
 };
 
 window._envoyerLienWhatsApp = async (uid) => {
   // Exposée globalement, et elle ouvre un accès : elle porte sa garde.
-  if (!S.user || S.user.role !== 'direction') { toast('Seule la Direction 1 peut générer un lien d\'accès','error'); return; }
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Seules la Direction 1 et la Direction 2 peuvent ouvrir un accès','error'); return;
+  }
   const u = (DB.users||[]).find(x => x.id === uid);
   if (!u) { toast('Compte introuvable — rechargez','error'); return; }
-  if (!(u.phone||'').trim()) {
-    toast(`${u.name} n'a pas de numéro enregistré — ouvrez sa fiche`, 'warning'); return;
+  if (!window._peutOuvrirAcces(S.user.role, u.role)) {
+    toast(`La Direction 2 n'ouvre pas l'accès d'un compte ${_roleUI(u.role)==='direction3'?'Caisse':'Direction'}`,'error'); return;
   }
+  const tel = window._telE164(u.phone||'');
+  if (!tel) {
+    toast(`${u.name} n'a pas de numéro utilisable — ouvrez sa fiche et corrigez-le`, 'warning'); return;
+  }
+
+  // `provision` ouvre un accès qui n'existe pas ; `reset` en refait un.
+  // Se tromper est prévu par le contrat — ALREADY_LINKED / ACCOUNT_NOT_LINKED
+  // tombent AVANT que le serveur ne compte la demande, donc corriger et
+  // recommencer ne consomme pas le délai d'une minute.
+  const action = u.auth_user_id ? 'reset' : 'provision';
   const _fin = window._btnBusy('#wa_' + uid, '⏳');
   try {
-    const r = await window._lienAcces(uid, 'recovery');
+    let r = await window._accesTelephone(uid, action);
+    if (!r.ok && (r.code === 'ALREADY_LINKED' || r.code === 'ACCOUNT_NOT_LINKED')) {
+      r = await window._accesTelephone(uid, r.code === 'ALREADY_LINKED' ? 'reset' : 'provision');
+    }
     if (!r.ok) {
       // On nomme la panne au lieu de dire « réessayez ». Celui qui lit doit
       // pouvoir la décrire, et celui qui dépanne doit savoir où chercher.
+      const attendre = r.raw && r.raw.next_allowed_at
+        ? Math.max(1, Math.ceil((new Date(r.raw.next_allowed_at) - Date.now())/1000)) : 60;
       const dit = {
-        AUTH_REQUIRED: 'Session expirée — reconnectez-vous',
-        FORBIDDEN: 'Seule la Direction 1 peut générer un lien',
-        USER_NOT_FOUND: 'Ce compte n\'existe plus côté serveur',
-        NO_EMAIL: `${u.name} n'a pas d'adresse enregistrée — le lien ne peut pas être fabriqué`,
-        HTTP_404: 'La fonction « lien-acces » n\'est pas encore déployée — c\'est la demande P0-19 à ChatGPT',
+        AUTH_REQUIRED:  'Session expirée — reconnectez-vous',
+        INVALID_SESSION:'Session expirée — reconnectez-vous',
+        FORBIDDEN:      'Votre profil n’a pas le droit d’ouvrir cet accès',
+        TOO_SOON:       `Un code vient d’être généré — attendez ${attendre} seconde${attendre>1?'s':''}`,
+        PHONE_IN_USE:   'Ce numéro appartient déjà à un autre compte',
+        TARGET_DISABLED:`Le compte de ${u.name} est désactivé — réactivez-le d’abord`,
+        TARGET_NOT_FOUND:'Ce compte n’existe plus côté serveur — rechargez',
+        TARGET_NOT_PARENT:'Le serveur ne permet cet accès qu’aux parents pour l’instant — c’est la demande P0-21 à ChatGPT',
+        TARGET_ROLE_MISMATCH:'Le serveur ne permet cet accès qu’aux parents pour l’instant — c’est la demande P0-21 à ChatGPT',
+        ORIGIN_NOT_ALLOWED:'Cette adresse du site n’est pas autorisée par le serveur — signalez-le',
+        // Le compte a bougé côté Auth mais le serveur n'a pas pu conclure.
+        // ChatGPT est formel : ne JAMAIS montrer ni envoyer le code dans ce cas.
+        ACCOUNT_UPDATED_FINALIZE_FAILED:'Le serveur n’a pas pu terminer — n’envoyez rien, attendez une minute et recommencez',
+        AUTH_CREATE_FAILED:'Le serveur n’a pas pu créer l’accès — réessayez dans un instant',
+        AUTH_UPDATE_FAILED:'Le serveur n’a pas pu mettre l’accès à jour — réessayez dans un instant',
+        HTTP_404:       'La fonction « parent-phone-access » n’est pas déployée — signalez-le à la Direction',
       }[r.code] || ('Le serveur a refusé — ' + (r.code || 'raison inconnue'));
       toast(dit, 'error');
       return;
     }
-    const lien = r.data && r.data.lien;
-    if (!lien) { toast('Le serveur n\'a pas renvoyé de lien — signalez-le','error'); return; }
+    const code = r.data && r.data.temporary_code;
+    if (!code) { toast('Le serveur n’a pas renvoyé de code — signalez-le','error'); return; }
 
     const ecole = (DB.settings?.school?.name) || 'votre école';
-    const heures = r.data.expire_le
-      ? Math.max(1, Math.round((new Date(r.data.expire_le) - Date.now()) / 3600000)) : 1;
-    const msg = `Bonjour, ici ${ecole}.\n\n`
-      + `Voici votre lien pour créer votre mot de passe SchoolSafe :\n${lien}\n\n`
-      + `Il est valable ${heures} heure${heures > 1 ? 's' : ''} et ne fonctionne qu'une seule fois.\n`
+    const exp = r.data.expires_at ? new Date(r.data.expires_at) : null;
+    const heure = exp ? exp.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : null;
+    const mins = exp ? Math.max(1, Math.round((exp - Date.now())/60000)) : 30;
+    // Le message ne porte AUCUNE donnée de l'enfant : ni nom, ni classe, ni
+    // note, ni montant, ni santé. Un message WhatsApp se transfère, se lit
+    // par-dessus l'épaule, et reste dans un téléphone prêté.
+    const msg = `Bonjour, votre accès ${ecole} est prêt.\n\n`
+      + `Identifiant : ${r.data.phone || tel}\n`
+      + `Code temporaire : ${code}\n\n`
+      + (heure ? `Ce code expire à ${heure} et ne fonctionne qu’une seule fois.\n` : `Ce code expire dans ${mins} minutes.\n`)
+      + `Créez votre code personnel à la première connexion.\n`
       + `Ne le transmettez à personne.`;
-    const url = waLink(u.phone, msg);
+    const url = waLink(tel, msg);
     if (!url) { toast('Numéro inutilisable — corrigez-le dans sa fiche','error'); return; }
 
-    logAudit('lien_acces', `${u.name} — lien d'accès généré et ouvert dans WhatsApp par ${window._acteur()}`, uid);
+    // On trace QUI, POUR QUI, QUAND — jamais le code lui-même.
+    logAudit('acces_telephone', `${u.name} — accès téléphone ${action==='reset'?'réinitialisé':'ouvert'} et code envoyé par WhatsApp par ${window._acteur()}`, uid);
+    if (!u.auth_user_id && action === 'provision') u.auth_user_id = '(ouvert)';
+    u.must_change_password = true;
     window.open(url, '_blank', 'noopener');
-    toast(`WhatsApp ouvert pour ${u.name} — le lien expire dans ${heures} h`, 'success');
+    toast(`WhatsApp ouvert pour ${u.name} — le code expire dans ${mins} min`, 'success');
+    render();
   } finally { _fin(); }
 };
 
@@ -29806,6 +30172,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const lp=$('LP'), ln=$('LN'), np=$('NEW_PASSWORD'), cp=$('CONFIRM_PASSWORD');
   if(lp) lp.addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
   if(ln) ln.addEventListener('keydown', e=>{ if(e.key==='Enter' && lp) lp.focus(); });
+  // La voie d'entrée choisie la dernière fois, et l'aperçu du numéro pendant
+  // la frappe : personne ne doit découvrir après coup que son numéro n'est pas
+  // écrit comme le serveur le connaît.
+  if(ln) ln.addEventListener('input', window._telApercuConnexion);
+  window._voieConnexion(window._voieCourante());
   if(np) np.addEventListener('keydown', e=>{ if(e.key==='Enter' && cp) cp.focus(); });
   if(cp) cp.addEventListener('keydown', e=>{ if(e.key==='Enter') window._completePasswordSetup(); });
 
