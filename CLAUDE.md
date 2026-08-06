@@ -782,8 +782,14 @@ dernier. En deçà, la classe paraît avec ses chiffres et aucun nom.
 ### Un champ qui change de métier change de règles
 
 **6 août 2026.** Le téléphone est devenu ce qui **identifie** un compte —
-décision de Loms, livrée côté serveur par ChatGPT (P0-20, puis P0-21 pour tous
-les postes sauf Direction 1, qui garde l'adresse e-mail).
+décision de Loms, livrée côté serveur par ChatGPT.
+
+**L'état final de cette journée est P0-22 : chaque compte porte une adresse
+e-mail ET un téléphone, et les deux ouvrent LE MÊME compte.** Les deux règles
+précédentes de la même journée — « e-mail ou téléphone » (P0-20), puis
+« téléphone pour tous sauf Direction 1 » (P0-21) — sont **remplacées**. Elles
+ne sont pas rappelées ici pour être discutées : elles le sont pour qu'on
+reconnaisse un vieux code qui les suit encore.
 
 Tant qu'il ne servait qu'à appeler, `+243 810 000 111`, `0810000111` et
 `243-810-000-111` étaient trois écritures du même numéro et personne n'en
@@ -804,6 +810,27 @@ Deux leçons, et la seconde est la vraie :
    vérifie qu'elles sont toutes dans le JS. Si le serveur change une règle,
    l'outil tombe. **Deux normalisations qui divergent ne produisent aucune
    erreur : elles produisent un compte introuvable.**
+
+### Une règle peut changer trois fois dans la journée — l'écran suit, il ne discute pas
+
+Le 6 août, la règle d'accès a changé **trois fois** : e-mail ou téléphone, puis
+téléphone sauf Direction 1, puis les deux pour tout le monde. Chaque fois,
+ChatGPT avait déjà déployé la base avant que je lise sa livraison.
+
+Deux réflexes en sont sortis, et ils valent au-delà de ce jour-là :
+
+1. **Regarder ce que l'autre a déposé AVANT de coder**, pas après. J'ai livré
+   une consigne à Loms — « active le fournisseur Phone » — qui était périmée
+   une heure plus tard. Le canal n'était pas branché en premier.
+2. **Quand l'écran est plus permissif que la base, c'est l'écran qui a tort.**
+   `save_school_user_profile_dual_impl` refuse à Direction 2 de créer un autre
+   Direction 2 ; notre liste d'écran le permettait encore. Une liste plus large
+   que ce que le serveur accepte n'ouvre aucun droit : elle fabrique un refus
+   que personne ne comprend.
+
+Et une conséquence pour ce fichier : **une leçon périmée est plus dangereuse
+qu'une leçon absente.** On ne l'efface pas — on écrit ce qui la remplace, juste
+au-dessus, pour reconnaître un vieux code qui la suit encore.
 
 ### Un état qui n'existe plus continue de s'afficher
 
