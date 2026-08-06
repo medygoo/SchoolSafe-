@@ -2678,6 +2678,11 @@ window._CODE_MSG = {
   PAYMENT_NOT_FOUND:                "Ce paiement est introuvable.",
   PAYMENT_NOT_CONFIRMED:            "Seul un paiement confirmé peut être annulé.",
   REASON_REQUIRED:                  "Indiquez un motif de 5 à 500 caractères.",
+  // Contrat double contact P0-22, ChatGPT, 6 août 2026.
+  PHONE_IN_USE:                     "Ce numéro de téléphone est déjà celui d'un autre compte.",
+  FORBIDDEN_TARGET_ROLE:            "La Direction 2 ne gère que les enseignants, les gardiens et les parents.",
+  AUTH_PHONE_CHANGE_REQUIRED:       "Le numéro d'un compte déjà connecté se change par le bouton d'accès, pas par cette fiche.",
+  CANNOT_DISABLE_CURRENT_ACCOUNT:   "Vous ne pouvez pas désactiver votre propre compte.",
 };
 window._codeMsg = code => window._CODE_MSG[code] || ('Erreur serveur : ' + (code || 'inconnue'));
 
@@ -4816,17 +4821,85 @@ window._telApercuConnexion = () => {
   vu.style.color = n ? 'rgba(255,255,255,.82)' : '#ffc9c9';
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  LA CONNEXION PASSE PAR LE RELAIS DU SERVEUR — contrat P0-22 de ChatGPT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Décision de Loms du 6 août 2026, qui REMPLACE celle du matin : chaque
+//  compte porte une adresse e-mail ET un téléphone, et les deux ouvrent LE
+//  MÊME compte. Il n'y a plus « le canal de Direction 1 » et « celui des
+//  autres » : il y a une personne, deux façons de la joindre.
+//
+//  Le navigateur n'appelle donc plus `signInWithPassword` lui-même. Deux
+//  raisons, et la seconde est la vraie :
+//
+//    1. Un numéro n'est pas une identité Auth. `resolve_school_login_identity`
+//       traduit numéro ou adresse vers l'identité réelle — et cette identité
+//       ne redescend JAMAIS dans le téléphone.
+//    2. Le compteur d'essais est côté serveur. Huit essais sur quinze minutes.
+//       Un compteur tenu par le navigateur ne compte que les honnêtes gens.
+//
+//  L'appel se fait avec la clé publique seule : personne n'est encore
+//  connecté, il n'y a pas de session à présenter.
+window._loginRelais = async (channel, identifier, password) => {
+  try {
+    const r = await fetch(`${OPS_SUPA_URL}/functions/v1/school-login`, {
+      method: 'POST',
+      headers: { 'apikey': OPS_SUPA_KEY, 'Authorization': 'Bearer ' + OPS_SUPA_KEY,
+                 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel, identifier, password }),
+    });
+    const d = await r.json().catch(() => null);
+    if (!r.ok || d?.ok !== true) return { ok: false, code: (d && d.code) || ('HTTP_' + r.status), raw: d };
+    return { ok: true, data: d };
+  } catch (e) {
+    return { ok: false, code: 'NETWORK_ERROR', raw: e };
+  }
+};
+
 async function _loginWithSupabaseAuth(identifiant, password, voie) {
-  const creds = (voie === 'tel') ? { phone: identifiant, password } : { email: identifiant, password };
-  const { data, error } = await window._authClient.auth.signInWithPassword(creds);
-  if (error || !data?.session || !data?.user) {
-    $('PM').textContent = _authErrorMessage(error, voie);
-    $('LP').value = '';
+  const r = await window._loginRelais(voie === 'tel' ? 'phone' : 'email', identifiant, password);
+
+  if (!r.ok) {
+    const attendre = (r.raw && r.raw.retry_after_seconds) || 900;
+    const mins = Math.max(1, Math.round(attendre / 60));
+    // Chaque refus dit ce qu'il est. « Identifiants incorrects » sur une panne
+    // de serveur envoie quelqu'un ressaisir vingt fois un mot de passe juste.
+    const dit = {
+      INVALID_CREDENTIALS: voie === 'tel'
+        ? 'Numéro ou mot de passe incorrect'
+        : 'E-mail ou mot de passe incorrect',
+      TOO_MANY_ATTEMPTS: `Trop d’essais — réessayez dans ${mins} minute${mins > 1 ? 's' : ''}`,
+      LOGIN_TEMPORARILY_UNAVAILABLE: 'Le serveur de l’école ne répond pas — votre mot de passe n’est pas en cause, réessayez',
+      CLIENT_KEY_REQUIRED: 'Cette version de l’application n’est pas reconnue par le serveur — signalez-le',
+      ORIGIN_NOT_ALLOWED: 'Cette adresse du site n’est pas autorisée par le serveur — signalez-le',
+      HTTP_404: 'Le service de connexion n’est pas déployé — signalez-le à la Direction',
+      NETWORK_ERROR: navigator.onLine
+        ? 'Le serveur de l’école ne répond pas — réessayez dans un instant'
+        : 'Vous êtes hors ligne — la connexion demande Internet',
+    }[r.code] || ('Connexion impossible — ' + (r.code || 'raison inconnue'));
+    $('PM').textContent = dit;
+    // On ne vide le champ que si le mot de passe est réellement en cause.
+    // L'effacer après une panne de réseau oblige à tout retaper pour rien.
+    if (r.code === 'INVALID_CREDENTIALS') $('LP').value = '';
     return;
   }
 
-  const opened = await _openSupabaseSession(data.session, password, 'PM');
-  if (opened) localStorage.setItem(_passwordReadyKey(data.user.id), '1');
+  // Le relais rend des jetons ; c'est au client Supabase de les porter, sinon
+  // rien de ce qui suit — RPC, lectures, rafraîchissement — ne les utilisera.
+  const s = r.data.session || {};
+  const { data: pose, error: errPose } = await window._authClient.auth.setSession({
+    access_token: s.access_token, refresh_token: s.refresh_token,
+  });
+  const session = pose?.session || (s.access_token ? { access_token: s.access_token, user: { id: s.user_id } } : null);
+  if (errPose || !session?.access_token) {
+    $('PM').textContent = 'Le serveur a accepté votre mot de passe, mais la session n’a pas pu s’ouvrir — réessayez';
+    return;
+  }
+
+  const opened = await _openSupabaseSession(session, password, 'PM');
+  const uid = session.user?.id || s.user_id;
+  if (opened && uid) localStorage.setItem(_passwordReadyKey(uid), '1');
 }
 
 window.tryLogin = async () => {
@@ -9961,13 +10034,15 @@ window._simpleList = (role, icon, gradient) => {
 // Direction 1 et Caisse — non. Ce sont les deux profils qui touchent à
 // l'argent et aux droits ; ils restent la main de Direction 1.
 //
-// ⚠️ Le SERVEUR ne le permet pas encore : `save_school_user_profile` refuse
-// tout acteur dont le rôle n'est pas exactement `direction`. Tant que
-// ChatGPT n'a pas ouvert la fonction à `direction2` (demande P0-12),
-// Direction 2 sera refusé à l'enregistrement. On le lui dit d'avance
-// plutôt que de le laisser remplir un formulaire pour rien.
-window._D2_INTERDIT = ['direction', 'direction3'];
-window._d2PeutToucher = (role) => !window._D2_INTERDIT.includes(role);
+// ✅ SERVI le 6 août 2026 par le contrat P0-22 de ChatGPT — et il est PLUS
+// STRICT que la règle ci-dessus : `save_school_user_profile_dual_impl` refuse
+// `FORBIDDEN_TARGET_ROLE` dès que Direction 2 vise autre chose qu'enseignant,
+// gardien ou parent. Direction 2 ne se crée donc pas lui-même non plus.
+//
+// On s'aligne sur le serveur, sans discuter : une liste d'écran plus large que
+// ce que la base accepte ne fait qu'inviter à un refus.
+window._D2_AUTORISE = ['enseignant', 'gardien', 'parent'];
+window._d2PeutToucher = (role) => window._D2_AUTORISE.includes(_roleUI(role));
 
 window.openUserForm = (role, uid) => {
   window._userPhoto = null;
@@ -10040,19 +10115,29 @@ ${photoOpts}
   <div class="form-group"><label class="form-label">Initiales</label><input class="form-input" id="usr_init" maxlength="3" value="${u&&u.initials?u.initials:''}" placeholder="JK"></div>
 </div>
 <div class="form-row">
-  <div class="form-group"><label class="form-label">Téléphone</label>
+  <div class="form-group"><label class="form-label">Téléphone <span class="req">*</span></label>
     <input class="form-input" id="usr_phone" value="${u&&u.phone?esc(u.phone):''}" placeholder="0810000111 ou +243810000111" oninput="window._telApercu('usr_phone','usr_phone_vu')">
     <div id="usr_phone_vu" style="font-size:11.5px;margin-top:5px;color:var(--text-muted)"></div>
   </div>
   <div class="form-group">
-    <label class="form-label">Adresse e-mail${u?'':' <span class="req">*</span>'}</label>
+    <label class="form-label">Adresse e-mail <span class="req">*</span></label>
     <input class="form-input" id="usr_email" type="email" autocomplete="off"
            value="${u&&u.email?esc(u.email):''}" placeholder="prenom.nom@exemple.com">
-    <div style="font-size:11.5px;color:var(--text-muted);margin-top:5px">
-      ${u&&u.email
-        ? "L'invitation part à cette adresse. La personne choisit elle-même son mot de passe."
-        : "L'invitation partira à cette adresse. La personne choisit elle-même son mot de passe — l'école ne le connaît jamais."}
-    </div>
+  </div>
+</div>
+<!-- Décision de Loms du 6 août 2026 : chaque compte porte LES DEUX, et les
+     deux ouvrent le MÊME compte. Le canal ci-dessous ne ferme pas l'autre
+     voie de connexion — il dit seulement par où partent l'invitation et les
+     codes de secours. -->
+<div class="form-group">
+  <label class="form-label">Par où lui envoyer son accès</label>
+  <select class="form-select" id="usr_canal">
+    <option value="phone_whatsapp" ${(u?u.access_channel!=='email':role!=='direction')?'selected':''}>📱 WhatsApp — un code remis à la main</option>
+    <option value="email" ${(u?u.access_channel==='email':role==='direction')?'selected':''}>✉️ Courriel — un lien d'invitation</option>
+  </select>
+  <div style="font-size:11.5px;color:var(--text-muted);margin-top:5px">
+    Les deux coordonnées sont obligatoires et servent toutes les deux à se
+    connecter. Ce choix ne décide que de la voie d'envoi.
   </div>
 </div>
 ${classOpts}${kidsOpts}`,
@@ -10140,11 +10225,12 @@ window.saveUser = async () => {
   if(courriel && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courriel)){
     markFieldError('usr_email','Adresse e-mail invalide'); return;
   }
-  // Un compte SANS adresse ne peut pas se connecter : la seule voie d'entrée
-  // est l'invitation. On le dit à la création plutôt que de le laisser
-  // découvrir à quelqu'un qui essaie d'ouvrir l'application en septembre.
-  if(!uid && !courriel){
-    markFieldError('usr_email','Adresse e-mail requise — c\'est par elle que part l\'invitation'); return;
+  // Contrat P0-22 : LES DEUX coordonnées, pour tous les profils, sans
+  // exception. Le serveur refuse l'enregistrement si l'une manque — autant le
+  // dire ici, sur le champ concerné, plutôt que de renvoyer un
+  // « VALIDATION_ERROR » que personne ne peut corriger.
+  if(!courriel){
+    markFieldError('usr_email','Adresse e-mail requise — chaque compte porte les deux coordonnées'); return;
   }
   const initials=($('usr_init')?.value||'').trim()||ini(name);
   // La photo ne part en base que si le rôle la rend utile à autrui.
@@ -10161,7 +10247,8 @@ window.saveUser = async () => {
   // `users_phone_e164_check`, avec un VALIDATION_ERROR qui ne dit pas quel champ.
   const phoneRaw=($('usr_phone')?.value||'').trim();
   const phone=phoneRaw?window._telE164(phoneRaw):null;
-  if(phoneRaw && !phone){markFieldError('usr_phone','Numéro non reconnu — écrivez 0810000111, 810000111 ou +243810000111');return;}
+  if(!phoneRaw){markFieldError('usr_phone','Téléphone requis — chaque compte porte les deux coordonnées');return;}
+  if(!phone){markFieldError('usr_phone','Numéro non reconnu — écrivez 0810000111, 810000111 ou +243810000111');return;}
   // Deux comptes ne peuvent pas partager un numéro : c'est ce qui les identifie.
   if(phone){
     const _dejaTel=(DB.users||[]).find(x=>x.id!==uid && x.phone && window._telE164(x.phone)===phone);
@@ -10203,7 +10290,10 @@ window.saveUser = async () => {
       photo = null;
     }
   }
-  const data={name,role,initials,phone,...(courriel?{email:courriel}:{}),...(photo?{photo_url:photo}:{})};
+  // `access_channel` dit par où part l'accès — il ne ferme PAS l'autre voie
+  // de connexion (contrat P0-22). Direction 1 reçoit par courriel par défaut.
+  const canal=($('usr_canal')?.value==='email')?'email':'phone_whatsapp';
+  const data={name,role,initials,phone,email:courriel,access_channel:canal,...(photo?{photo_url:photo}:{})};
   window._userPhoto=null;
 
   if(uid){
@@ -10244,15 +10334,19 @@ window.saveUser = async () => {
     const _res = await _rpc('save_school_user_profile', { p_user: { id: uid, ...data } });
     if (!_res.ok) {
       const _m = _codeMsg(_res.code);
-      if (_res.code === 'EMAIL_IN_USE') markFieldError('usr_email', _m);
-      else if (_res.code === 'AUTH_EMAIL_CHANGE_REQUIRED') markFieldError('usr_email', _m);
+      if (_res.code === 'EMAIL_IN_USE' || _res.code === 'AUTH_EMAIL_CHANGE_REQUIRED') markFieldError('usr_email', _m);
+      else if (_res.code === 'PHONE_IN_USE' || _res.code === 'AUTH_PHONE_CHANGE_REQUIRED') markFieldError('usr_phone', _m);
+      else if (_res.code === 'VALIDATION_ERROR' && _res.raw && _res.raw.field)
+        markFieldError('usr_' + (_res.raw.field === 'email' ? 'email' : _res.raw.field === 'phone' ? 'phone' : 'name'), _m);
       else toast(_m, 'error');
       return;
     }
     if (_res.data && _res.data.user) Object.assign(existingUser, _res.data.user);
     if (role==='parent') window._rattacherEnfants(uid);
-    // Une adresse ajoutée à un profil qui n'en avait pas : l'invitation part.
-    if (courriel && !_avaitCourriel) {
+    // Une adresse ajoutée à un profil qui n'en avait pas, et qui reçoit par
+    // courriel : l'invitation part. Si son canal est WhatsApp, on ne lance
+    // pas une seconde création en parallèle.
+    if (courriel && !_avaitCourriel && canal === 'email' && !existingUser.auth_user_id) {
       const _inv = await window._inviterCompte(uid, courriel, name);
       toast(_inv.ok ? `Invitation envoyée à ${courriel}`
                     : 'Profil mis à jour, mais l\'invitation n\'est pas partie — ' + _codeMsg(_inv.code),
@@ -10287,17 +10381,25 @@ window.saveUser = async () => {
     if (!_res.ok) {
       const _m = _codeMsg(_res.code);
       if (_res.code === 'EMAIL_IN_USE') markFieldError('usr_email', _m);
+      else if (_res.code === 'PHONE_IN_USE' ) markFieldError('usr_phone', _m);
       else if (_res.code === 'DUPLICATE_USER') markFieldError('usr_name', _m);
+      else if (_res.code === 'VALIDATION_ERROR' && _res.raw && _res.raw.field)
+        markFieldError('usr_' + (_res.raw.field === 'email' ? 'email' : _res.raw.field === 'phone' ? 'phone' : 'name'), _m);
       else toast(_m, 'error');
       return;
     }
     if (_res.data && _res.data.user) Object.assign(ns, _res.data.user);
     logAudit('user_add', `${name} — ${role}`, ns.id);
     if (role==='parent') { const _l=window._rattacherEnfants(ns.id); if(_l&&_l.lies) toast(`${_l.lies} enfant${_l.lies>1?'s':''} rattaché${_l.lies>1?'s':''}`,'info'); }
-    if (courriel) {
+    // UNE seule ouverture d'accès à la fois — ChatGPT est formel : « ne pas
+    // lancer les deux créations en parallèle ». Deux demandes concurrentes,
+    // ce sont deux identités pour une seule personne.
+    if (canal === 'email') {
       const _inv = await window._inviterCompte(ns.id, courriel, name);
       if (!_inv.ok) toast('Compte créé, mais l\'invitation n\'est pas partie — ' + _codeMsg(_inv.code), 'warning');
       else toast(`Invitation envoyée à ${courriel}`, 'success');
+    } else {
+      setTimeout(()=>toast(`Reste à lui remettre son code : bouton « 🔗 Ouvrir l’accès » sur sa fiche`, 'info'), 700);
     }
     if(S.user.role==='direction2'){const _rl=ROLE_META[role]?.label||role;(DB.users||[]).filter(u=>u.role==='direction').forEach(u=>pushNotif(u.id,`📋 ${S.user.name} (Dir.2) a ajouté ${_rl} : ${name}`));}
     toast(`🎉 ${name} ajouté`,'success');
@@ -27535,7 +27637,11 @@ window._accesTelephone = async (userId, action, phone) => {
 // demande qui sera refusée, et il dit pourquoi. La sécurité reste chez ChatGPT.
 window._peutOuvrirAcces = (acteurRole, cibleRole) => {
   if (acteurRole === 'direction') return true;
-  if (acteurRole === 'direction2') return !['direction','direction3'].includes(_roleUI(cibleRole));
+  // P0-22 §6 : Direction 2 gère Enseignant, Gardien et Parent — jamais
+  // Direction 1, jamais Direction 2, jamais la Caisse. C'est le serveur qui
+  // le refuse (`FORBIDDEN_TARGET_ROLE`) ; ici on évite seulement d'envoyer
+  // une demande qu'on sait perdue, et de faire croire à un droit qu'on n'a pas.
+  if (acteurRole === 'direction2') return ['enseignant','gardien','parent'].includes(_roleUI(cibleRole));
   return false;
 };
 
@@ -27550,16 +27656,17 @@ window._peutOuvrirAcces = (acteurRole, cibleRole) => {
 //  endroit le jour où quelqu'un n'arrive pas à entrer.
 window._etatAccesCompte = (u) => {
   if (!u) return { cle:'inconnu', texte:'—', bg:'#f3f4f6', fg:'#6b7280' };
-  // Direction 1 entre par son adresse — décision de Loms du 6 août 2026 :
-  // c'est la seule voie de secours qui ne dépend de personne.
-  if (_roleUI(u.role) === 'direction') {
-    const a = (u.email||'').trim();
-    return a
-      ? { cle:'mail', texte:'✉️ ' + (a.length>26 ? a.slice(0,24)+'…' : a), titre:a, bg:'#d8f3e6', fg:'#065f46' }
-      : { cle:'sans_mail', texte:'⚠️ Sans adresse', titre:'Sans adresse e-mail, la Direction 1 ne peut pas se connecter', bg:'#fef3c7', fg:'#92400e' };
-  }
-  if (!window._telE164(u.phone||''))
-    return { cle:'sans_tel', texte:'⚠️ Sans numéro', titre:'Sans numéro utilisable, cette personne ne peut pas se connecter', bg:'#fef3c7', fg:'#92400e' };
+  // Contrat P0-22 du 6 août 2026 : chaque compte porte les DEUX coordonnées,
+  // et les deux ouvrent le même compte. Une fiche à moitié remplie n'est donc
+  // plus « un choix de canal » : c'est un dossier incomplet, et il se voit.
+  const _mail = (u.email||'').trim();
+  const _tel  = window._telE164(u.phone||'');
+  if (!_mail && !_tel)
+    return { cle:'sans_contact', texte:'⚠️ Sans coordonnées', titre:'Ni adresse ni numéro : cette personne ne peut pas se connecter', bg:'#fef3c7', fg:'#92400e' };
+  if (!_tel)
+    return { cle:'sans_tel', texte:'⚠️ Téléphone manquant', titre:'Chaque compte porte une adresse ET un numéro — complétez la fiche', bg:'#fef3c7', fg:'#92400e' };
+  if (!_mail)
+    return { cle:'sans_mail', texte:'⚠️ Adresse manquante', titre:'Chaque compte porte une adresse ET un numéro — complétez la fiche', bg:'#fef3c7', fg:'#92400e' };
   if (!u.auth_user_id)
     return { cle:'a_ouvrir', texte:'⏳ Accès non ouvert', titre:'Aucun accès n’a encore été ouvert pour ce compte', bg:'#fef3c7', fg:'#92400e' };
   if (u.must_change_password)
@@ -27577,7 +27684,9 @@ window._pastilleAcces = (u) => {
 window._boutonAcces = (u) => {
   if (!S.user || !window._peutOuvrirAcces(S.user.role, u.role)) return '';
   const e = window._etatAccesCompte(u);
-  if (e.cle === 'mail' || e.cle === 'sans_mail' || e.cle === 'sans_tel') return '';
+  // Une fiche incomplète ne peut pas recevoir de code : le serveur refuserait.
+  // On n'affiche donc pas le bouton — la pastille dit déjà quoi corriger.
+  if (['sans_contact','sans_mail','sans_tel'].includes(e.cle)) return '';
   const neuf = e.cle === 'a_ouvrir';
   return `<button id="wa_${u.id}" class="btn btn-outline btn-sm" style="border-color:#25D366;color:#128C4A" `
        + `title="${neuf?'Ouvrir l’accès et envoyer le code par WhatsApp':'Remettre un nouveau code temporaire par WhatsApp'}" `
@@ -27623,8 +27732,9 @@ window._envoyerLienWhatsApp = async (uid) => {
         PHONE_IN_USE:   'Ce numéro appartient déjà à un autre compte',
         TARGET_DISABLED:`Le compte de ${u.name} est désactivé — réactivez-le d’abord`,
         TARGET_NOT_FOUND:'Ce compte n’existe plus côté serveur — rechargez',
-        TARGET_NOT_PARENT:'Le serveur ne permet cet accès qu’aux parents pour l’instant — c’est la demande P0-21 à ChatGPT',
-        TARGET_ROLE_MISMATCH:'Le serveur ne permet cet accès qu’aux parents pour l’instant — c’est la demande P0-21 à ChatGPT',
+        TARGET_NOT_PARENT:'Le serveur refuse cet accès pour ce profil — signalez-le à la Direction',
+        TARGET_ROLE_MISMATCH:'Le serveur refuse cet accès pour ce profil — signalez-le à la Direction',
+        FORBIDDEN_TARGET_ROLE:'La Direction 2 ne gère que les enseignants, les gardiens et les parents',
         ORIGIN_NOT_ALLOWED:'Cette adresse du site n’est pas autorisée par le serveur — signalez-le',
         // Le compte a bougé côté Auth mais le serveur n'a pas pu conclure.
         // ChatGPT est formel : ne JAMAIS montrer ni envoyer le code dans ce cas.
