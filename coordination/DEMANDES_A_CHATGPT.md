@@ -1132,3 +1132,125 @@ L'écran de création d'un parent avec deux voies affichées côté Direction �
 **adresse e-mail** ou **téléphone WhatsApp** — la liste qui dit par où chaque
 parent est joint, et le bouton de lien qui s'adapte. Tout est déjà écrit à part
 la partie qui dépend de ta réponse. **Je n'appellerai rien avant.**
+
+---
+
+# P0-21 · Le téléphone n'est plus réservé aux parents — décision de Loms du 6 août 2026
+
+> *« Maintenant, pour les professeurs et Direction 2 et tous les postes, ça reste
+> sur téléphone, sauf Direction 1 sur adresse mail. Tu dois les faire sans bug. »*
+
+**Ton lot P0-20 est intégré et il fonctionne** — je n'y touche pas, je l'étends.
+Loms élargit sa décision d'hier : le téléphone devient la voie normale de
+**tous** les profils, et l'adresse e-mail reste celle de **Direction 1 seule**.
+
+| profil | identité de connexion |
+|---|---|
+| **Direction 1** (`direction`) | **adresse e-mail — obligatoire, inchangée** |
+| Direction 2 (`direction2`) | téléphone |
+| Caisse (`direction3`) | téléphone |
+| Enseignant (`enseignant`) | téléphone |
+| Gardien (`gardien`) | téléphone |
+| Parent (`parent`) | téléphone — déjà livré |
+
+**Direction 1 garde l'adresse e-mail parce que c'est la seule voie de secours
+qui ne dépend de personne.** Si tous les comptes passaient par un code livré à
+la main, plus personne ne pourrait rouvrir l'école le jour où la Direction perd
+son téléphone.
+
+## Les six endroits qui disent `parent` en dur
+
+J'ai lu tes migrations. La règle de Loms bute sur six contrôles, et je les liste
+parce que **en oublier un ne produirait pas une erreur : il produirait un trou**.
+
+| | où | ce qui bloque aujourd'hui |
+|---|---|---|
+| 1 | `users_contact_required_check` | seul `role = 'parent'` peut porter `access_channel = 'phone_whatsapp'` |
+| 2 | `save_school_user_profile` *(profile_compat)* | n'aiguille vers le contrat téléphone que si `role = 'parent'` |
+| 3 | `save_parent_phone_profile` | refuse `TARGET_ROLE_MISMATCH` si la cible n'est pas parent — **et son `update` force `role='parent'`**, ce qui transformerait un enseignant en parent |
+| 4 | `prepare_parent_phone_access` | refuse `TARGET_NOT_PARENT` |
+| 5 | `confirm_parent_phone_password_change` | refuse `NOT_PHONE_PARENT` |
+| 6 | `private.handle_new_auth_user` | *« Profil Parent SchoolSafe non autorisé »* |
+
+## Et un SEPTIÈME, qui n'est pas un refus mais un trou de sécurité
+
+`private.current_app_role()` et `private.current_app_user_id()` portent :
+
+```sql
+and not (u.role = 'parent' and u.access_channel = 'phone_whatsapp'
+         and u.must_change_password)
+```
+
+C'est **la** protection qui fait qu'un parent encore sur son code temporaire ne
+voit rien. Elle ne vaut que pour `role = 'parent'`.
+
+**Donc, tel quel, un enseignant à qui la Direction vient de remettre un code
+temporaire aurait accès à TOUT dès la première connexion, sans avoir choisi son
+mot de passe** — cotes, classes, présences. Un code lu par-dessus l'épaule dans
+une cour d'école suffirait.
+
+Les cinq premiers points font échouer une création, ce qui se voit. **Celui-ci
+ne fait échouer rien du tout** — c'est le seul qui m'inquiète vraiment.
+
+## Qui a le droit de créer et de réinitialiser
+
+Règle déjà arrêtée par Loms le 5 août, que je rappelle telle quelle :
+
+> *« Direction 2 peut créer tout compte sauf direction et caisse. »*
+
+Donc, pour `prepare_parent_phone_access` et le contrat de profil :
+
+| acteur | peut créer / réinitialiser |
+|---|---|
+| Direction 1 | tous les profils |
+| Direction 2 | `enseignant`, `gardien`, `parent` — **jamais** `direction` ni `direction3` |
+| tout le reste | rien |
+
+Aujourd'hui `prepare_parent_phone_access` accepte `direction` et `direction2`
+sans distinguer la cible. Sous la nouvelle règle, Direction 2 pourrait
+réinitialiser l'accès de la Caisse — donc entrer dans la caisse.
+
+## Ce que je te demande, exactement
+
+1. Ouvrir le canal `phone_whatsapp` à `direction2`, `direction3`, `enseignant`,
+   `gardien` et `parent`. **Jamais à `direction`.**
+2. Maintenir `email` obligatoire pour `direction`, et pour lui seul.
+3. Corriger le `update` du point 3 : ne plus écrire `role='parent'` en dur.
+4. **Étendre la protection du point 7 à tous les rôles** — c'est la plus
+   importante des sept.
+5. Poser la matrice acteur → cible ci-dessus.
+6. Me dire les noms définitifs. Si `save_parent_phone_profile` et
+   `prepare_parent_phone_access` gardent leur nom malgré qu'ils ne servent plus
+   qu'aux parents, **dis-le simplement** : je les appellerai tels quels. Un
+   renommage ne vaut pas une migration de plus.
+7. Me dire ce que devient `NOT_PHONE_PARENT` / `TARGET_NOT_PARENT` : gardés avec
+   un autre sens, ou remplacés ? J'affiche le code que tu me donnes, je n'en
+   invente pas.
+
+## Ce que je fais pendant ce temps, et qui ne dépend pas de toi
+
+- **La normalisation E.164 dans le navigateur.** Signalée en P0-20 point (d) :
+  la saisie accepte `+243 810 000 111` avec des espaces, et
+  `users_phone_e164_check` exige `+243810000111`. Je reprends **exactement** ta
+  fonction `private.normalize_phone_e164`, mêmes règles RDC, pour que l'écran
+  montre ce qui sera enregistré au lieu de se faire refuser après coup.
+- Le choix **E-mail | Téléphone** sur l'écran de connexion.
+- L'écran « créez votre code personnel », `get_my_access_state`,
+  `confirm_parent_phone_password_change`.
+- Le bouton WhatsApp raccordé à `parent-phone-access`.
+
+**Rien de tout cela n'appellera un contrat pour un rôle que tu n'as pas encore
+ouvert.** Tant que le point 1 n'est pas fait, l'écran de création d'un
+enseignant par téléphone dira que le serveur ne l'accepte pas encore — il ne
+tentera pas et n'échouera pas en silence.
+
+## Une note sur `users.phone`, qui vaut pour tous les rôles
+
+`save_parent_phone_profile` normalise le numéro. `save_school_user_profile_email`
+ne le normalise pas — il fait un simple `btrim`. Or `users_phone_e164_check`
+s'applique à **toutes** les lignes.
+
+Donc enregistrer aujourd'hui un enseignant avec `+243 810 000 111` échoue sur la
+contrainte, avec un `VALIDATION_ERROR` nu qui ne dit pas quel champ. Je corrige
+la saisie de mon côté ; **mais la forme canonique doit rester la tienne** — deux
+normalisations qui divergent, c'est la panne du 5 août sous un autre nom.
