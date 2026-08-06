@@ -2768,8 +2768,8 @@ window.ROLE_LOAD = {
       eleves:         ['approbations','aps','scan_log'],
       // Direction 2 n'administre PAS la paie — décision de Loms, 5 août
       // 2026 — mais il est payé comme les autres et voit la sienne.
-      personnel:      [_T('salaries', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||'')),
-                       _T('advances', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||''))],
+      personnel:      [_T('salaries', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')'),
+                       _T('advances', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')')],
       communication:  ['messages','events'],
       // Direction 2 ne voit JAMAIS le montant ni la devise d'un document, même
       // si une ligne mal classée passait la RLS.
@@ -2812,8 +2812,8 @@ window.ROLE_LOAD = {
       // déclarées ici, donc il lisait « Aucun salaire enregistré » le jour
       // même où il avait été payé.
       personnel:     ['teacher_absences','direct_primes',
-                      _T('salaries', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||'')),
-                      _T('advances', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||''))],
+                      _T('salaries', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')'),
+                      _T('advances', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')')],
     },
   },
 
@@ -2858,8 +2858,8 @@ window.ROLE_LOAD = {
     // Le gardien est payé comme tout le monde, et n'avait aucun moyen de
     // le voir — il n'était même pas notifié.
     modules: {
-      personnel: [_T('salaries', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||'')),
-                  _T('advances', () => 'select=*&teacher_id=eq.'+encodeURIComponent(S.user?.id||''))],
+      personnel: [_T('salaries', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')'),
+                  _T('advances', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')')],
     },
   },
 };
@@ -28821,7 +28821,10 @@ window._primesRatDues = () => {
     .reduce((t, r) => t + (Number(r.amount) || 0), 0) * part * 100) / 100;
 };
 window._getAdvancesTotal = (teacherId, month) => {
-  return (DB.advances||[]).filter(a=>a.teacher_id===teacherId&&a.month===month).reduce((s,a)=>s+a.amount,0);
+  // Même normaliseur que la paie : `user_id` d'abord, `teacher_id` ensuite.
+  // Une avance écrite sous le nouveau champ et cherchée sous l'ancien serait
+  // ignorée du net — l'employé serait payé DEUX fois la même avance.
+  return (DB.advances||[]).filter(a=>window._paieQui(a)===teacherId&&a.month===month).reduce((s,a)=>s+(Number(a.amount)||0),0);
 };
 window._getDirectPrimesTotal = (teacherId, month) => {
   return (DB.direct_primes||[]).filter(p=>p.teacher_id===teacherId&&(p.month||(p.date||'').slice(0,7))===month).reduce((s,p)=>s+(Number(p.amount)||0),0);
@@ -28978,7 +28981,50 @@ R.salaires = () => {
 //  Liste ordonnée unique (enseignants + non-enseignants),
 //  paiement rapide, gestion des postes — 4 onglets
 // ══════════════════════════════════════════════════════════════
-window.quickPayTeacher = (teacherId, month) => {
+// ═══════════════════════════════════════════════════════════════════════════
+//  LE VERSEMENT PASSE PAR LE SERVEUR — PR #38 de ChatGPT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Le versement s'écrivait par `pushSync('salaries','upsert',sal)` : l'objet
+//  ENTIER repartait au serveur. La Caisse pouvait donc, par cette porte,
+//  réécrire `amount`, `bonus` et `net` — alors que Loms a tranché que
+//  **Direction 1 seule fixe le montant**.
+//
+//  Depuis la RLS de ChatGPT, la Caisse n'a plus AUCUN droit d'écriture directe
+//  sur `salaries` : cet upsert ne toucherait plus aucune ligne, **et il ne
+//  rendrait pas d'erreur** — c'est exactement l'échec silencieux que nos
+//  audits traquent. La Caisse verrait « payé » à l'écran et rien ne le serait.
+//
+//  `mark_salary_paid` ne modifie que `paid`, `paid_date` et `updated`. Le
+//  montant n'est pas dans ce qu'elle sait écrire : ce n'est plus une règle
+//  d'écran, c'est une impossibilité.
+window._verserSalaire = async (sal, libelle) => {
+  const r = await _rpc('mark_salary_paid', { p_salary_id: sal.id });
+  if (!r.ok) {
+    const dit = {
+      SALARY_ALREADY_PAID: 'Ce salaire est déjà versé — rechargez l’écran',
+      SALARY_NOT_FOUND:    'Cette fiche n’existe plus côté serveur — rechargez',
+      ACCESS_DENIED:       'Seules la Direction 1 et la Caisse peuvent verser',
+      AUTH_REQUIRED:       'Session expirée — reconnectez-vous',
+    }[r.code] || (/fetch|network|timeout/i.test(String(r.code||''))
+      ? (navigator.onLine ? 'Le serveur ne répond pas — RIEN n’a été versé, réessayez'
+                          : 'Vous êtes hors ligne — un versement demande Internet')
+      : ('Le serveur a refusé le versement — ' + (r.code || 'raison inconnue')));
+    toast(dit, 'error');
+    return false;
+  }
+  // On recopie ce que le SERVEUR a écrit, pas ce qu'on espérait écrire.
+  const d = r.data && r.data.data;
+  sal.paid = true;
+  sal.paid_date = (d && d.paid_date) || today();
+  sal.updated = today();
+  const net=(sal.net!=null)?sal.net:(sal.amount||0);
+  logAudit('salaire',`Versement — ${libelle} — ${_cur()}${net} (${sal.month})`);
+  saveToCrypt();
+  return true;
+};
+
+window.quickPayTeacher = async (teacherId, month) => {
   // Direction 1 fixe le montant ; Direction 1 ET la Caisse le versent.
   if(!S.user||!['direction','direction3'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
   const sal=(DB.salaries||[]).find(s2=>window._paieQui(s2)===teacherId&&s2.month===month);
@@ -28988,27 +29034,32 @@ window.quickPayTeacher = (teacherId, month) => {
     return;
   }
   if(sal.paid){toast('Salaire déjà payé','info');return;}
-  sal.paid=true;sal.paid_date=today();sal.by=S.user.id;sal.updated=today();
-  pushSync('salaries','upsert',sal);
   const u2=(DB.users||[]).find(x=>x.id===teacherId);
   const net=(sal.net!=null)?sal.net:(sal.amount||0);
-  const n={id:'n'+Date.now()+Math.random().toString(36).slice(2,4),uid:teacherId,msg:`✅ Salaire de ${month} versé : NET ${_cur()}${net}`,date:today(),time:nowTime(),read:false,type:'info'};
+  const _fin=window._btnBusy('#pay_'+teacherId,'⏳');
+  try {
+    if(!(await window._verserSalaire(sal, u2?.name||teacherId))) return;
+  } finally { _fin(); }
+  const n={id:_uid('n_'),uid:teacherId,msg:`✅ Salaire de ${month} versé : NET ${_cur()}${net}`,date:today(),time:nowTime(),read:false,type:'info'};
   if(!DB.notifs)DB.notifs=[];
   DB.notifs.unshift(n);pushSync('notifs','post',n);
-  logAudit('salaire',`Paiement rapide — ${u2?.name||teacherId} — ${_cur()}${net} (${month})`);
-  saveToCrypt();toast(`✅ ${u2?.name||'Enseignant'} payé — ${_cur()}${net}`,'success');render();
+  toast(`✅ ${u2?.name||'Enseignant'} payé — ${_cur()}${net}`,'success');render();
 };
 
-window.quickPayPersonnel = (salId) => {
+window.quickPayPersonnel = async (salId) => {
   if(!S.user||!['direction','direction3'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
   const sal=(DB.salaries||[]).find(s2=>s2.id===salId);
   if(!sal){toast('Fiche introuvable','error');return;}
   if(sal.paid){toast('Déjà payé','info');return;}
-  sal.paid=true;sal.paid_date=today();sal.by=S.user.id;sal.updated=today();
-  pushSync('salaries','upsert',sal);
   const net=(sal.net!=null)?sal.net:(sal.amount||0);
-  logAudit('salaire',`Paiement rapide — ${sal.person_name} (${sal.person_role||'Personnel'}) — ${_cur()}${net} (${sal.month})`);
-  saveToCrypt();toast(`✅ ${sal.person_name} payé — ${_cur()}${net}`,'success');render();
+  const _fin=window._btnBusy('#pay_'+salId,'⏳');
+  try {
+    if(!(await window._verserSalaire(sal, `${sal.person_name} (${sal.person_role||'Personnel'})`))) return;
+  } finally { _fin(); }
+  // La personne payée a-t-elle un compte ? Alors elle est prévenue.
+  const tgt = window._paieQui(sal);
+  if (tgt && gu(tgt)) pushNotif(tgt, `💰 Salaire de ${sal.month} versé : NET ${_cur()}${net}`);
+  toast(`✅ ${sal.person_name} payé — ${_cur()}${net}`,'success');render();
 };
 
 window._paiePostes = () => {
@@ -29136,7 +29187,7 @@ R.paie = () => {
       const cardBg=p2.paid?(isT?'linear-gradient(120deg,#f0fdf4 0%,#d8f3e6 100%)':'linear-gradient(120deg,#eff6ff 0%,#dbeafe 100%)'):(p2.hasSal?(isT?'linear-gradient(120deg,#fffbeb 0%,#fef3c7 100%)':'linear-gradient(120deg,#faf5ff 0%,#f0e9fa 100%)'):'var(--bg-card)');
       const pill=p2.paid?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:#065f46;background:#d8f3e6;padding:2px 8px;border-radius:10px">✅ Payé</span>`:(p2.hasSal?`<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:#92400e;background:#fdeccd;padding:2px 8px;border-radius:10px">⏳ Non payé</span>`:`<span style="font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:10px">✏️ À saisir</span>`);
       // Direction 1 fixe le montant, la Caisse verse — Loms, 5 août 2026.
-      const payBtn=(!p2.paid&&p2.hasSal&&canEdit)?`<button class="btn btn-sm" style="background:#1f9d6b;color:#fff;border:none;font-weight:700;padding:6px 12px" onclick="${isT?`quickPayTeacher('${p2.id}','${selMonth}')`:`quickPayPersonnel('${p2.id}')`}">✅ Payer</button>`:'';
+      const payBtn=(!p2.paid&&p2.hasSal&&canEdit)?`<button id="pay_${p2.id}" class="btn btn-sm" style="background:#1f9d6b;color:#fff;border:none;font-weight:700;padding:6px 12px" onclick="${isT?`quickPayTeacher('${p2.id}','${selMonth}')`:`quickPayPersonnel('${p2.id}')`}">✅ Payer</button>`:'';
       const editBtn=isDir1?`<button class="btn btn-outline btn-sm" onclick="${isT?`openSalaireForm('${p2.id}','${selMonth}')`:`openPersonnelSalaireForm('${p2.id}','${selMonth}')`}">✏️</button>`:'';
       const pdfBtn=p2.hasSal?`<button class="btn btn-outline btn-sm" onclick="${isT?`printFichePaie('${p2.id}','${selMonth}')`:`printPersonnelFichePaie('${p2.id}')`}">💾</button>`:'';
       const delBtn=(isDir1&&p2.hasRec)?`<button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626" onclick="${isT?`deleteSalaire('${p2.id}','${selMonth}')`:`deletePersonnelSalaire('${p2.id}')`}">🗑️</button>`:'';
@@ -29265,7 +29316,7 @@ R.paie = () => {
   <div class="premium-section">
     <div class="premium-section-title" style="margin-bottom:8px">Détail enseignants — ${monthLabel}</div>
     ${teachers.map(u2=>{
-      const sal2=sals.find(s2=>s2.teacher_id===u2.id&&s2.month===selMonth)||{};
+      const sal2=sals.find(s2=>window._paieQui(s2)===u2.id&&s2.month===selMonth)||{};
       const ratP=_getRatPrime(u2.id,selMonth).prime;
       const dp2=_getDirectPrimesTotal(u2.id,selMonth);
       const adv=_getAdvancesTotal(u2.id,selMonth);
@@ -29335,13 +29386,13 @@ window.saveAvance = (teacherId, month) => {
   if(!DB.advances) DB.advances=[];
   // Une avance qui dépasse le net du mois rendrait la paie négative sans
   // qu'aucun écran ne le signale.
-  const _sal=(DB.salaries||[]).find(s=>s.teacher_id===teacherId&&s.month===month);
+  const _sal=(DB.salaries||[]).find(s=>window._paieQui(s)===teacherId&&s.month===month);
   const _base=_sal?Number(_sal.net!=null?_sal.net:_sal.amount)||0:0;
   const _dejaAvance=_getAdvancesTotal(teacherId,month);
   if(_base>0 && (_dejaAvance+amount)>_base){
     toast(`Avance refusée — le net de ${month} (${_cur()}${_base}) serait dépassé`,'error');return;
   }
-  const obj={id:_uid('adv_'),teacher_id:teacherId,amount,reason:($('adv_reason')?.value||'').slice(0,200)||null,month,date:today(),by:S.user.id};
+  const obj={id:_uid('adv_'),user_id:teacherId,teacher_id:teacherId,amount,reason:($('adv_reason')?.value||'').slice(0,200)||null,month,date:today(),by:S.user.id};
   DB.advances.push(obj);
   pushSync('advances','upsert',obj);
   const u=(DB.users||[]).find(x=>x.id===teacherId);
@@ -29367,7 +29418,7 @@ window.deleteAdvance = (id) => {
 
 window.openSalaireForm = (teacherId, month) => {
   const u=(DB.users||[]).find(x=>x.id===teacherId);if(!u)return;
-  const sal=(DB.salaries||[]).find(s=>s.teacher_id===teacherId&&s.month===month)||{};
+  const sal=(DB.salaries||[]).find(s=>window._paieQui(s)===teacherId&&s.month===month)||{};
   const {count:ratCount,prime:ratPrime}=_getRatPrime(teacherId,month);
   const advTotal=_getAdvancesTotal(teacherId,month);
   const dpTotal=_getDirectPrimesTotal(teacherId,month);
@@ -29418,13 +29469,19 @@ window.saveSalaire = (teacherId, month) => {
   const advTotal=_getAdvancesTotal(teacherId,month);
   const directPrimesTotal=_getDirectPrimesTotal(teacherId,month);
   const net=amount+bonus+ratPrime-deductions-advTotal+directPrimesTotal;
-  const idx=DB.salaries.findIndex(s=>s.teacher_id===teacherId&&s.month===month);
+  // La fiche se retrouve par le compte payé, quel que soit le champ qui le
+  // porte — `user_id` est la référence canonique depuis la PR #38, mais les
+  // pièces déjà écrites n'ont que `teacher_id`.
+  const idx=DB.salaries.findIndex(s=>window._paieQui(s)===teacherId&&s.month===month);
   const ancien=idx>=0?DB.salaries[idx]:null;
   // Une paie déjà versée garde SA date. Ré-enregistrer la fiche d'un mois
   // ancien la réécrivait à aujourd'hui, ce qui déplaçait la dépense
   // d'exercice et faussait le rapprochement de caisse.
   const datePaie = paid ? (ancien&&ancien.paid&&ancien.paid_date ? ancien.paid_date : today()) : null;
-  const obj={id:ancien?ancien.id:_uid('sal_'),teacher_id:teacherId,month,amount,bonus,rat_prime:ratPrime,deductions,adv_total:advTotal,direct_primes_total:directPrimesTotal,net,paid,paid_date:datePaie,notes:($('sal_notes')?.value||'').slice(0,300)||null,by:S.user.id,updated:today()};
+  // `user_id` est la référence canonique du compte payé (PR #38). `teacher_id`
+  // est conservé le temps que les pièces anciennes vivent — ChatGPT a posé un
+  // trigger qui refuse une incohérence entre les deux (`PAYROLL_USER_MISMATCH`).
+  const obj={id:ancien?ancien.id:_uid('sal_'),user_id:teacherId,teacher_id:teacherId,month,amount,bonus,rat_prime:ratPrime,deductions,adv_total:advTotal,direct_primes_total:directPrimesTotal,net,paid,paid_date:datePaie,notes:($('sal_notes')?.value||'').slice(0,300)||null,by:S.user.id,updated:today()};
   if(idx>=0)DB.salaries[idx]=obj;else DB.salaries.push(obj);
   pushSync('salaries','upsert',obj);
   // Ne prévenir qu'au passage à « versé » : chaque réenregistrement
@@ -29441,7 +29498,7 @@ window.saveSalaire = (teacherId, month) => {
 window.deleteSalaire = (teacherId, month) => {
   if(!S.user||S.user.role!=='direction'){toast('Accès non autorisé','error');return;}
   showC('Supprimer ce salaire','Supprimer la fiche salariale de ce mois ?',()=>{
-    const idx=(DB.salaries||[]).findIndex(s=>s.teacher_id===teacherId&&s.month===month);
+    const idx=(DB.salaries||[]).findIndex(s=>window._paieQui(s)===teacherId&&s.month===month);
     if(idx<0)return;
     const sal=DB.salaries[idx];
     const u=(DB.users||[]).find(x=>x.id===teacherId);
@@ -29599,7 +29656,7 @@ window.printPersonnelFichePaie = (salId) => {
 
 window.printFichePaie = (teacherId, month) => {
   const u=(DB.users||[]).find(x=>x.id===teacherId);if(!u)return;
-  const sal=(DB.salaries||[]).find(s=>s.teacher_id===teacherId&&s.month===month);if(!sal)return;
+  const sal=(DB.salaries||[]).find(s=>window._paieQui(s)===teacherId&&s.month===month);if(!sal)return;
   const advList=(DB.advances||[]).filter(a=>a.teacher_id===teacherId&&a.month===month);
   const {count:ratCount,prime:ratPrime}=_getRatPrime(teacherId,month);
   const part=window._partEnseignant();
