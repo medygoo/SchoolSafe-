@@ -2680,6 +2680,17 @@ window._CODE_MSG = {
   REASON_REQUIRED:                  "Indiquez un motif de 5 à 500 caractères.",
   // Contrat double contact P0-22, ChatGPT, 6 août 2026.
   PHONE_IN_USE:                     "Ce numéro de téléphone est déjà celui d'un autre compte.",
+  // Relevés dans `prepare_account_invitation` version P0-22, en la lisant.
+  // Un code qu'on n'a pas prévu s'affiche « Erreur serveur : … » — celui qui
+  // le lit ne peut ni le corriger ni le décrire à celui qui dépanne.
+  CONTACT_SETUP_INCOMPLETE:         "Cette fiche demande une adresse e-mail ET un numéro de téléphone. Complétez-la d'abord.",
+  EMAIL_LOGIN_DISABLED:             "La connexion par e-mail est désactivée pour ce compte.",
+  PHONE_LOGIN_DISABLED:             "La connexion par téléphone est désactivée pour ce compte.",
+  EMAIL_PROFILE_MISMATCH:           "L'adresse envoyée ne correspond pas à celle de la fiche. Rechargez, puis réessayez.",
+  UNSUPPORTED_ROLE:                 "Ce rôle ne peut pas recevoir d'accès.",
+  TARGET_NOT_PHONE_ACCOUNT:         "Ce profil ne peut pas recevoir d'accès par téléphone.",
+  NOT_PHONE_ACCOUNT:                "Ce compte n'utilise pas l'accès par téléphone.",
+  INVITATION_CONFLICT:              "Une invitation existe déjà pour cette adresse. Rechargez la liste.",
   FORBIDDEN_TARGET_ROLE:            "La Direction 2 ne gère que les enseignants, les gardiens et les parents.",
   AUTH_PHONE_CHANGE_REQUIRED:       "Le numéro d'un compte déjà connecté se change par le bouton d'accès, pas par cette fiche.",
   CANNOT_DISABLE_CURRENT_ACCOUNT:   "Vous ne pouvez pas désactiver votre propre compte.",
@@ -2808,7 +2819,7 @@ window.ROLE_LOAD = {
     bootstrap: [
       _T('classes',  'select=*'),
       _T('students', 'select=id,name,mat,cid,pid,photo,access_blocked,blocked,access_parent,archived,may_leave_alone,leave_alone_until&archived=eq.false'),
-      _T('users',    'select=id,name,role,initials,phone,photo_url,email,status,created_at,auth_user_id,access_channel,must_change_password'),
+      _T('users',    'select=id,name,role,initials,phone,photo_url,email,status,created_at,auth_user_id,access_channel,must_change_password,invitation_sent_at,login_email_enabled,login_phone_enabled'),
       _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
       // Les demandes de préinscription arrivent du site public. Direction 1
       // seule les voit et les valide — décision de Loms, 4 août 2026.
@@ -2833,7 +2844,7 @@ window.ROLE_LOAD = {
       // et par quelle voie : sans eux, Direction 2 ne peut pas savoir s'il faut
       // OUVRIR un accès ou le RÉINITIALISER, et le bouton se tromperait de
       // demande. Ce ne sont pas des données personnelles, seulement un état.
-      _T('users',    'select=id,name,role,initials,phone,photo_url,status,auth_user_id,access_channel,must_change_password'),
+      _T('users',    'select=id,name,role,initials,phone,photo_url,status,auth_user_id,access_channel,must_change_password,invitation_sent_at,login_email_enabled,login_phone_enabled'),
       _T('matieres', 'select=id,cid,name,lang,active'),
       _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
     ],
@@ -4742,6 +4753,11 @@ window._completePasswordSetup = async function() {
       if (!c.ok && !window._ABSENTE.test(String(c.code||''))) {
         const dit = {
           PASSWORD_NOT_CHANGED:       'Choisissez un code DIFFÉRENT de celui reçu par WhatsApp',
+          // `NOT_PHONE_PARENT` a disparu avec la version P0-22 : l'impl rend
+          // désormais `NOT_PHONE_ACCOUNT`. On garde les deux — un dépôt qui
+          // tourne encore sur l'ancienne version doit rester lisible.
+          NOT_PHONE_ACCOUNT:          'Ce compte n’utilise pas l’accès par téléphone — signalez-le à la Direction',
+          NOT_PHONE_PARENT:           'Ce compte n’utilise pas l’accès par téléphone — signalez-le à la Direction',
           TEMPORARY_PASSWORD_EXPIRED: 'Ce code temporaire a expiré — demandez-en un nouveau à la Direction',
           ACCESS_REQUEST_NOT_FOUND:   'Le serveur ne retrouve pas votre demande d’accès — demandez un nouveau code',
           PROFILE_NOT_LINKED:         'Aucun profil n’est rattaché à ce compte — signalez-le à la Direction',
@@ -27667,6 +27683,26 @@ window._etatAccesCompte = (u) => {
     return { cle:'sans_tel', texte:'⚠️ Téléphone manquant', titre:'Chaque compte porte une adresse ET un numéro — complétez la fiche', bg:'#fef3c7', fg:'#92400e' };
   if (!_mail)
     return { cle:'sans_mail', texte:'⚠️ Adresse manquante', titre:'Chaque compte porte une adresse ET un numéro — complétez la fiche', bg:'#fef3c7', fg:'#92400e' };
+  // ═══════════════════════════════════════════════════════════════════════
+  //  UNE INVITATION EN VOL N'EST PAS « RIEN D'OUVERT »
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  //  Trouvé en relisant `prepare_account_invitation` ligne à ligne : elle
+  //  pose `users.invitation_sent_at` et laisse `auth_user_id` à NULL tant que
+  //  la personne n'a pas cliqué son lien. Sans cet état, l'écran affichait
+  //  « Accès non ouvert » — donc la Direction, ne voyant rien arriver,
+  //  appuyait sur « Ouvrir l'accès ».
+  //
+  //  Ce clic lance `provision`, qui CRÉE l'identité Auth. L'invitation par
+  //  courriel, elle, reste en vol avec `accepted_at` à NULL : la personne
+  //  reçoit un lien ET un code, et l'un des deux ne marchera pas.
+  //
+  //  ChatGPT l'interdit en une phrase — « ne pas lancer les deux créations en
+  //  parallèle » — et rien dans l'écran ne l'empêchait.
+  if (!u.auth_user_id && u.invitation_sent_at)
+    return { cle:'invit_envoyee', texte:'✉️ Invitation envoyée',
+             titre:'Un lien est parti par courriel et n’a pas encore été ouvert. N’envoyez pas de code en plus.',
+             bg:'#dbeafe', fg:'#1d4ed8' };
   if (!u.auth_user_id)
     return { cle:'a_ouvrir', texte:'⏳ Accès non ouvert', titre:'Aucun accès n’a encore été ouvert pour ce compte', bg:'#fef3c7', fg:'#92400e' };
   if (u.must_change_password)
@@ -27687,19 +27723,37 @@ window._boutonAcces = (u) => {
   // Une fiche incomplète ne peut pas recevoir de code : le serveur refuserait.
   // On n'affiche donc pas le bouton — la pastille dit déjà quoi corriger.
   if (['sans_contact','sans_mail','sans_tel'].includes(e.cle)) return '';
+  // Une invitation en vol : le bouton ne DISPARAÎT pas — la Direction doit
+  // pouvoir basculer sur WhatsApp quand le courriel n'arrive pas, c'est tout
+  // l'intérêt d'avoir deux voies. Mais il ne s'appuie plus par distraction :
+  // il annonce ce qu'il annule.
+  if (e.cle === 'invit_envoyee')
+    return `<button id="wa_${u.id}" class="btn btn-outline btn-sm" style="border-color:#f59e0b;color:#92400e" `
+         + `title="Le courriel n’arrive pas ? Remplacer l’invitation par un code WhatsApp" `
+         + `onclick="_envoyerLienWhatsApp('${u.id}',true)">✉️→📱 Passer au code</button>`;
   const neuf = e.cle === 'a_ouvrir';
   return `<button id="wa_${u.id}" class="btn btn-outline btn-sm" style="border-color:#25D366;color:#128C4A" `
        + `title="${neuf?'Ouvrir l’accès et envoyer le code par WhatsApp':'Remettre un nouveau code temporaire par WhatsApp'}" `
        + `onclick="_envoyerLienWhatsApp('${u.id}')">${neuf?'🔗 Ouvrir l’accès':'🔁 Nouveau code'}</button>`;
 };
 
-window._envoyerLienWhatsApp = async (uid) => {
+window._envoyerLienWhatsApp = async (uid, confirmerRemplacement) => {
   // Exposée globalement, et elle ouvre un accès : elle porte sa garde.
   if (!S.user || !['direction','direction2'].includes(S.user.role)) {
     toast('Seules la Direction 1 et la Direction 2 peuvent ouvrir un accès','error'); return;
   }
   const u = (DB.users||[]).find(x => x.id === uid);
   if (!u) { toast('Compte introuvable — rechargez','error'); return; }
+  // On ne remplace pas une invitation en vol sans le dire. Deux accès ouverts
+  // en parallèle, ce sont deux façons d'entrer dont une seule marchera — et
+  // personne ne saura laquelle.
+  if (confirmerRemplacement) {
+    showC('Remplacer l’invitation par un code ?',
+      `Un lien a déjà été envoyé à ${esc(u.email||'son adresse')}. Si vous continuez, ce lien ne servira plus : `
+      + `${esc(u.name)} devra utiliser le code WhatsApp. Ne faites cela que si le courriel n’arrive pas.`,
+      () => window._envoyerLienWhatsApp(uid));
+    return;
+  }
   if (!window._peutOuvrirAcces(S.user.role, u.role)) {
     toast(`La Direction 2 n'ouvre pas l'accès d'un compte ${_roleUI(u.role)==='direction3'?'Caisse':'Direction'}`,'error'); return;
   }
