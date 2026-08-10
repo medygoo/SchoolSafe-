@@ -831,6 +831,51 @@ n'étaient appelées nulle part.
 en carton qui répond comme les RPC, **profil par profil**. `--preuve` fait
 refuser le serveur et vérifie que l'écran n'annonce pas une sortie.
 
+### Effacer une notification, c'est effacer la preuve qu'on a prévenu
+
+**10 août 2026, P0-30.** L'écran des notifications portait un bouton
+**« 🗑️ Effacer tout »** qui appelait `pushSync('notifs','delete')`. Le contrat
+de ChatGPT dit le contraire — *« une notification n'est jamais supprimée ;
+archiver la masque tout en conservant l'historique »* — et la raison dépasse
+la technique : **le jour où une famille dit « on ne m'a jamais prévenu »,
+c'est cette ligne-là qu'on relit.**
+
+Deux autres défauts du même écran, et chacun se voit par une famille :
+
+| | |
+|---|---|
+| tout ce qui s'affichait | passait **« lu » d'office**. Une convocation lue en diagonale valait un accusé de réception — donc « prise de connaissance » ne voulait plus rien dire |
+| l'état d'envoi extérieur | n'existait pas. Le parent ne savait pas si son téléphone allait sonner |
+
+**Et le chemin du push ne pouvait plus aboutir.** Le navigateur s'abonnait au
+Web Push puis écrivait **directement** dans `push_subscriptions` — table
+passée en **refus total** par `p0_32a_explicit_device_registry_deny_policy`.
+La seule fonction d'enregistrement servie, `register_push_device`, n'accepte
+que `provider = 'fcm'`, alors que la décision canonique retire Firebase au
+profit du Web Push depuis le VPS. **Aucun appareil ne pouvait donc être
+enregistré, et l'application se croyait abonnée.**
+
+Trois leçons :
+
+1. **Un geste destructif se justifie par ce qu'il protège, pas par ce qu'il
+   range.** « Effacer » libérait un écran encombré et détruisait une preuve.
+   Archiver fait le premier sans le second.
+2. **Marquer lu doit rester un geste.** Un état qui se pose tout seul ne
+   témoigne de rien, et on ne peut plus distinguer « vu » de « reçu ».
+3. **Quand une écriture directe devient impossible, elle ne devient pas
+   silencieuse : elle devient un mensonge.** Il faut la retirer, pas la
+   laisser échouer discrètement — et dire à l'écran ce qui est vrai.
+
+`tools/recette-notifications.mjs` tient les 33 points, et `--preuve` vérifie
+qu'un serveur muet fait dire « je n'ai pas pu regarder » plutôt que « vous
+n'avez rien reçu ».
+
+**Une faute commise en écrivant cette recette, et qui vaut d'être notée :**
+ses contrôles « plus aucune écriture de ce type » cherchaient la chaîne dans
+tout le fichier — **y compris dans les commentaires qui expliquent le
+retrait**. La note qui documente la correction faisait échouer le contrôle
+qui la vérifie. Un outil teste une condition, jamais une chaîne.
+
 ### Les gardes de rôle
 
 Toute fonction exposée globalement qui écrit doit vérifier le rôle.

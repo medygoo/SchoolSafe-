@@ -33,6 +33,7 @@ const OUTILS = [
   ['telephone',   'audit-telephone.mjs',       'le numéro écrit comme le serveur l’écrit'],
   ['cartes',      'recette-cartes.mjs',        'le registre des cartes, exécuté'],
   ['sortie',      'recette-sortie.mjs',        'la sortie en deux étapes, exécutée'],
+  ['notifs',      'recette-notifications.mjs', 'le centre de notifications, exécuté'],
 ];
 
 const detail = process.argv.includes('--detail');
