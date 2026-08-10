@@ -165,9 +165,17 @@ begin
         then 'Une information concernant votre enfant est disponible. Ouvrez SchoolSafe.'
         else left(coalesce(n.msg,''),240)
       end,
+      -- Keep both names during the FCM -> Web Push transition.
+      'action_url',coalesce(nullif(n.action_url,''),'./?page=notifications&notification='||n.id),
       'url',coalesce(nullif(n.action_url,''),'./?page=notifications&notification='||n.id),
       'tag','schoolsafe-'||n.id,
-      'urgent',(n.priority='urgent')
+      'urgent',(n.priority='urgent'),
+      'data',jsonb_build_object(
+        'notification_id',n.id,
+        'category',n.category,
+        'student_id',coalesce(n.student_id,''),
+        'action_url',coalesce(nullif(n.action_url,''),'./?page=notifications&notification='||n.id)
+      )
     )
   from public.notifs n
   where n.uid=v_uid
@@ -247,9 +255,17 @@ begin
       jsonb_build_object(
         'title',v_title,
         'body',v_body,
+        -- FCM compatibility fields are preserved; Web Push reads url/tag/urgent.
+        'action_url',v_link,
         'url',v_link,
         'tag','schoolsafe-'||new.id,
-        'urgent',(new.priority='urgent')
+        'urgent',(new.priority='urgent'),
+        'data',jsonb_build_object(
+          'notification_id',new.id,
+          'category',new.category,
+          'student_id',coalesce(new.student_id,''),
+          'action_url',v_link
+        )
       )
     ) on conflict(notification_id,device_id) do nothing;
   end loop;
