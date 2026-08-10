@@ -965,6 +965,28 @@ Trois principes appris en les écrivant :
    cherchent, commise par les outils eux-mêmes : un échec silencieux.
    `tools/audits.mjs` les lance tous et dit lequel passe.
 
+6. **Un « ✓ » posé sur ce qu'un outil ne peut pas voir est un mensonge, pas
+   une omission.** `aucun-montant.mjs` annonçait *« aucun montant nulle
+   part »* sur le site public. Il disait vrai sur ce qu'il regardait : il ne
+   lit que du texte. Or `inscription.html` publiait les **quatre billets de
+   vacances en image**, en pleine résolution et ouvrables au clic — minerval,
+   trois tranches, cantine au mois, amortissement jouets, uniforme. La
+   décision de Loms était contredite sur la page la plus visitée du site, et
+   l'outil chargé de la tenir signait en bas.
+
+   Trois choses en sortent, et elles valent pour tout outil :
+
+   - **La frontière de ce qu'un outil regarde doit être écrite dans sa
+     sortie**, à chaque passage, pas dans un commentaire que personne
+     n'ouvre. Il annonce désormais les 127 images qu'il ne sait pas lire.
+   - **Un fichier posé dans le dépôt est publié même si aucune page n'y
+     renvoie** — GitHub Pages sert l'adresse. Retirer le lien ne retire
+     rien ; il faut retirer le fichier.
+   - **La preuve doit couvrir le nouveau trou, pas seulement l'ancien.**
+     `--preuve` réinjecte le montant dans une page **et** un billet dans le
+     dépôt. Une preuve qui ne suit pas l'outil qu'elle garde se périme en
+     silence.
+
 `verif-coherence` mérite un mot. Il charge les vraies fonctions du fichier dans
 Node avec un navigateur en carton, leur donne un jeu d'essai dont on connaît la
 réponse à la main, et **confronte les chemins de calcul entre eux**. Il est né
