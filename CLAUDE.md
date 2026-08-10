@@ -782,6 +782,47 @@ portail **à la seconde où on la déclare**, sans qu'on ait à la récupérer.
 `--preuve` retire l'invalidation : **9 points tombent**. Une recette qui ne
 sait dire que « oui » ne vérifie rien.
 
+### Un backend servi que personne n'appelle n'existe pas
+
+**10 août 2026, issue #64.** ChatGPT avait livré la sortie en deux étapes en
+entier — quatre RPC, une table `student_exit_events` à trente-cinq colonnes,
+des photos en pied, des références de pièce, des dates de validité. Le
+navigateur n'en appelait **aucune** : `scanExit` lisait `DB.aps` en direct et
+écrivait dans `scan_log`.
+
+Le coût, profil par profil, et chacun se voit par une famille :
+
+| | |
+|---|---|
+| enseignant | **le bouton « Préparer la sortie » n'existait nulle part** — le parent n'était jamais prévenu à l'avance |
+| parent | prévenu **après** le départ, par une notification écrite dans le navigateur du gardien : hors ligne, elle ne partait pas |
+| gardien | une seule photo de portrait. Ni photo en pied, ni pièce, ni validité — rien de ce qui permet de reconnaître quelqu'un à deux mètres |
+| tous | **une accréditation EXPIRÉE passait pour valable**, parce que le filtre sur `valid_until` vit dans la RPC que personne n'appelait |
+| tous | aucune séparation entre « la personne est là » et « je l'autorise » |
+
+Trois leçons :
+
+1. **Une donnée filtrée par le serveur ne se relit pas en local.** `DB.aps`
+   contient tout ; `get_student_pickup_context` ne rend que ce qui est actif,
+   approuvé et dans ses dates. Lire la table directement, c'est refaire le
+   filtre — mal, et sans le savoir.
+2. **Un geste qui constate et un geste qui engage ne sont pas le même geste.**
+   `scan_student_exit_at_gate` dit qui s'est présenté ; `validate_student_exit`
+   engage l'école. Les séparer donne au gardien le temps de comparer un visage
+   à une photo **avant** que l'enfant soit parti.
+3. **L'écran ne dit pas « envoyé » quand le serveur dit `queued`.** L'e-mail et
+   WhatsApp partent en file dans `student_exit_notification_outbox`. Annoncer
+   un message qui n'est jamais parti, c'est un parent qui ne rappelle pas.
+
+Et une règle de méthode qui vaut pour tout lot reçu : **avant de coder,
+chercher ce que l'autre agent a déjà servi.** Un `grep` des noms de RPC dans
+le fichier aurait montré en dix secondes que quatre fonctions livrées
+n'étaient appelées nulle part.
+
+`tools/recette-sortie.mjs` rejoue le parcours sur 39 points avec un serveur
+en carton qui répond comme les RPC, **profil par profil**. `--preuve` fait
+refuser le serveur et vérifie que l'écran n'annonce pas une sortie.
+
 ### Les gardes de rôle
 
 Toute fonction exposée globalement qui écrit doit vérifier le rôle.

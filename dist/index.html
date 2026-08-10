@@ -1891,6 +1891,10 @@ window.DB = {
   // carte émise, jamais effacée : c'est l'historique qui fait foi le jour où
   // une famille conteste, pas la carte qu'elle a en main.
   student_cards: [],
+  // Les sorties en deux étapes — issue #64. Le serveur en est la source :
+  // le navigateur n'en garde un miroir que pour afficher le compte à rebours
+  // et l'état « en attente de récupération » sans redemander à chaque rendu.
+  student_exit_events: [],
   salaries: [], advances: [], direct_primes: [],
   fee_types: [], versements: [], journal_entries: [],
   cantine: [], cantine_menus: [], cantine_presence: [],
@@ -2266,6 +2270,10 @@ window.NAV = {
       {id:'authorized',i:'🔑',l:'Personnes autorisées'},
       {id:'acces_parents',i:'🔐',l:'Accès parents'},
       {id:'cards',i:'🪪',l:"Cartes d'élèves"},
+      // Le contrat de ChatGPT donne la confirmation de sortie à Direction 1
+      // et 2 : le jour où le gardien manque, l'école ne doit pas s'arrêter.
+      {id:'preparer_sortie',i:'🕒',l:'Préparer la sortie'},
+      {id:'scanner_exit',i:'🚪',l:'Sortie au portail'},
       {s:'Finances & RH'},
       {id:'controle_frais',i:'🔍',l:'Contrôle des frais'},
       {id:'payments',i:'💳',l:'Paiements élèves'},
@@ -2338,6 +2346,7 @@ window.NAV = {
       {id:'teacher_comm',i:'🗣️',l:{fr:'Communication co-titulaire',en:'Co-teacher Chat'}},
       {s:{fr:'Portail scolaire',en:'School Gate'}},
       {id:'scanner',i:'📷',l:{fr:'Scanner Entrée',en:'Entry Scan'}},
+      {id:'preparer_sortie',i:'🕒',l:{fr:'Préparer la sortie',en:'Prepare exit'}},
       {id:'scanner_exit',i:'🚪',l:{fr:'Scanner Sortie',en:'Exit Scan'}},
       {id:'scan_log',i:'📜',l:{fr:'Historique portail',en:'Gate Log'}},
       {s:{fr:'Mon compte',en:'My Account'}},
@@ -2442,6 +2451,8 @@ window.NAV = {
       {id:'activites',i:'⚽',l:'Activités Extrascolaires'},
       {id:'sante',i:'🏥',l:'Santé / Infirmerie'},
       {id:'cards',i:'🪪',l:"Cartes d'élèves"},
+      {id:'preparer_sortie',i:'🕒',l:'Préparer la sortie'},
+      {id:'scanner_exit',i:'🚪',l:'Sortie au portail'},
       {s:'Communication'},
       {id:'messages',i:'💬',l:'Messages'},
       {id:'cahier_texte',i:'📖',l:'Cahier de texte'},
@@ -2825,7 +2836,8 @@ window.ROLE_LOAD = {
     ],
     modules: {
       pedagogie:      ['matieres','attendance','devoirs','grades','appreciations','conduct','cahier_prep','cahier_texte','evaluations','prevision_matiere','timetables','rattrapages','tenafep','exetat'],
-      eleves:         ['aps','scan_log','approbations','medical','medical_visits','sanctions','convocations','absences'],
+      eleves:         ['aps','scan_log','approbations','medical','medical_visits','sanctions','convocations','absences',
+                       _T('student_exit_events','select=id,sid,status,prepared_at,expires_at,prepared_by_name,gate_label,gate_scanned_at,escort_name_snapshot,validated_at&order=prepared_at.desc&limit=200')],
       activites:      ['activites','activites_inscriptions','cantine','cantine_menus','cantine_presence'],
       communication:  ['messages','events'],
       personnel:      ['teacher_absences','teacher_notes','salaries','advances','direct_primes'],
@@ -2848,7 +2860,8 @@ window.ROLE_LOAD = {
     ],
     modules: {
       pedagogie:      ['attendance','devoirs','grades','appreciations','conduct','cahier_prep'],
-      eleves:         ['approbations','aps','scan_log'],
+      eleves:         ['approbations','aps','scan_log',
+                       _T('student_exit_events','select=id,sid,status,prepared_at,expires_at,prepared_by_name,gate_label,gate_scanned_at,escort_name_snapshot,validated_at&order=prepared_at.desc&limit=200')],
       // Direction 2 n'administre PAS la paie — décision de Loms, 5 août
       // 2026 — mais il est payé comme les autres et voit la sienne.
       personnel:      [_T('salaries', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')'),
@@ -2888,7 +2901,11 @@ window.ROLE_LOAD = {
     modules: {
       pedagogie:     ['attendance','devoirs','grades','appreciations','conduct','cahier_prep','cahier_texte','prevision_matiere','timetables','rattrapages'],
       eleves:        [_T('scan_log','select='+_COLS_SCAN+'&order=time.desc&limit=500'),
-                      _T('aps','select=id,sid,name,relation,photo,active,phone,approval_status,valid_until')],
+                      _T('aps','select=id,sid,name,relation,photo,active,phone,approval_status,valid_until'),
+                      // Il prépare les sorties : sans cette lecture, l'écran
+                      // proposerait « Préparer » à un élève déjà en attente
+                      // au portail, et le parent recevrait deux avis.
+                      _T('student_exit_events','select=id,sid,status,prepared_at,expires_at,prepared_by_name,gate_label,gate_scanned_at,escort_name_snapshot,validated_at&order=prepared_at.desc&limit=200')],
       communication: ['messages','events'],
       // Chacun voit SA paie — Loms, 5 août 2026. L'onglet Finances de son
       // profil lisait déjà `salaries` et `advances` : elles n'étaient pas
@@ -2916,7 +2933,12 @@ window.ROLE_LOAD = {
                       // Sans elles, ils s'ouvrent vides. Signalé à ChatGPT.
                       // `matieres` est autorisée au parent par la politique
                       // matieres_read via private.can_view_class(cid).
-                      _T('matieres','select=id,cid,name,lang,active')],
+                      _T('matieres','select=id,cid,name,lang,active'),
+                      // La préparation de sortie concerne le parent AVANT
+                      // qu'elle se produise : c'est le seul écran qui lui dit
+                      // que l'enfant l'attend au portail. La RLS limite déjà
+                      // la lecture à ses propres enfants.
+                      _T('student_exit_events','select=id,sid,status,prepared_at,expires_at,prepared_by_name,gate_label,gate_scanned_at,escort_name_snapshot,validated_at&order=prepared_at.desc&limit=60')],
       // PAS de timetables ni de cahier_texte : leur seule politique est
       // `*_direction_all`, réservée à Direction 1. Un appel parent reçoit un
       // refus RLS. Elles n'entreront ici qu'après un contrat de lecture
@@ -2955,6 +2977,7 @@ window.PAGE_MODULE = {
   cahier_prep:'pedagogie', prevision_matiere:'pedagogie', tenafep:'pedagogie', exetat:'pedagogie',
   evaluations_ens:'pedagogie', bulletins:'pedagogie', children:'suivi', scan_history:'suivi',
   students:'eleves', scanner:'eleves', scanner_exit:'eleves', scan_log:'eleves', authorized:'eleves',
+  preparer_sortie:'eleves',
   sante:'eleves', sanctions:'eleves', convocations:'communication', absences:'communication',
   approbations:'eleves', inscriptions:'finance',
   messages:'communication', calendar:'communication', notifications:'communication',
@@ -3347,6 +3370,7 @@ function _cryptSnap() {
     medical:DB.medical||[],
     tenafep:DB.tenafep||[],
     student_cards:DB.student_cards||[],
+    student_exit_events:(DB.student_exit_events||[]).slice(0,200),
     evaluations:DB.evaluations||[],
     salaries:DB.salaries||[],
     advances:DB.advances||[],
@@ -12903,6 +12927,31 @@ window.showChildQR = (sid) => {
     <div style="font-size:12px;color:var(--text-muted)">Ce code change chaque jour. Présentez-le au gardien lors du retrait de l'enfant.</div>
 
     ${(() => {
+      // ── LA SORTIE EN COURS, VUE PAR LE PARENT — issue #64 ──────────────
+      // C'est le seul écran qui lui dit que l'enfant l'attend au portail, et
+      // il doit le lire AVANT de se déplacer. La notification peut ne pas
+      // être arrivée : sur un réseau de Kinshasa, elle arrive quand elle
+      // arrive. L'état, lui, est là dès que l'application se rafraîchit.
+      const ev = (DB.student_exit_events||[])
+        .filter(e => e.sid === sid && ['prepared','gate_scanned'].includes(e.status))
+        .sort((a,b) => String(b.prepared_at||'').localeCompare(String(a.prepared_at||'')))[0];
+      if (!ev) return '';
+      const reste = window._minutesRestantes ? _minutesRestantes(ev.expires_at) : null;
+      if (reste !== null && reste <= 0) return '';
+      const auPortail = ev.status === 'gate_scanned';
+      return `<div style="margin-top:16px;text-align:left;background:${auPortail?'#fffbeb':'#eff6ff'};border:1px solid ${auPortail?'#fcd34d':'#93c5fd'};border-radius:13px;padding:12px 14px">
+        <div style="font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:${auPortail?'#92400e':'#1d4ed8'};margin-bottom:6px">
+          ${auPortail?'Quelqu’un s’est présenté au portail':'Prêt pour la sortie'}</div>
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.6">
+          ${auPortail
+            ? `<b>${esc(ev.escort_name_snapshot||'Une personne')}</b> s’est présentée. Le portail vérifie l’identité avant d’autoriser.`
+            : `Vous pouvez venir le récupérer au portail${ev.gate_label?' — '+esc(ev.gate_label):''}.`}
+          ${reste!==null?`<br><b>${reste} min</b> avant expiration.`:''}
+          <br><span style="color:var(--text-muted)">Préparée par ${esc(ev.prepared_by_name||'—')}</span></div>
+      </div>`;
+    })()}
+
+    ${(() => {
       // ── LA CARTE PHYSIQUE, VUE PAR LE PARENT — P0-8 ────────────────────
       // Il la CONSULTE, il ne l'émet pas : ni duplicata, ni impression, ni
       // déclaration de perte. Quand elle est perdue ou remplacée, il doit le
@@ -18208,7 +18257,536 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null, cartePermanente=fa
 };
 
 // ── SCANNER SORTIE ──
-R.scanner_exit = () => `
+// ════════════════════════════════════════════════════════════════════════════
+//  LA SORTIE DE L'ÉLÈVE EN DEUX ÉTAPES — issue #64
+//  Backend servi par ChatGPT · PROFILE_CREATION_AND_STUDENT_EXIT_BACKEND_COMPLETE.md
+// ════════════════════════════════════════════════════════════════════════════
+//
+//  CE QUI EXISTAIT, ET CE QUE ÇA COÛTAIT
+//
+//  `scanExit` écrivait directement dans `scan_log` et n'appelait AUCUNE des
+//  quatre RPC servies. Conséquences mesurées, profil par profil :
+//
+//   · l'enseignant ne pouvait pas préparer une sortie — le bouton n'existait
+//     nulle part dans l'application ;
+//   · le parent n'était prévenu qu'APRÈS le départ de son enfant, par une
+//     notification écrite dans le navigateur du gardien : hors ligne, elle
+//     ne partait jamais ;
+//   · le gardien voyait une seule photo de portrait. Ni la photo en pied, ni
+//     la pièce d'identité, ni la validité de l'accréditation — donc rien de
+//     ce qui permet de reconnaître quelqu'un à deux mètres ;
+//   · une accréditation EXPIRÉE était présentée comme valable : le filtre sur
+//     `valid_until` vit dans la RPC, que personne n'appelait ;
+//   · aucune séparation entre « la personne est là » et « je l'autorise ».
+//     Un seul geste faisait les deux, et rien ne gardait la comparaison.
+//
+//  ── L'ORDRE DES TROIS APPELS, ET POURQUOI IL COMPTE ───────────────────────
+//
+//    1. prepare_student_exit        en classe    → le parent est prévenu AVANT
+//    2. scan_student_exit_at_gate   au portail   → qui se présente
+//    3. validate_student_exit       au portail   → autorisé ou refusé
+//
+//  L'étape 2 ne décide de rien : elle enregistre qui s'est présenté et rend
+//  les photos de référence. C'est l'étape 3 qui engage l'école. Les séparer,
+//  c'est laisser au gardien le temps de comparer un visage à une photo sans
+//  que l'enfant soit déjà parti.
+//
+//  ── CE QUE L'ÉCRAN N'A PAS LE DROIT DE DIRE ───────────────────────────────
+//  Le contrat est explicite : l'e-mail et WhatsApp sont mis en file dans
+//  `private.student_exit_notification_outbox` au statut `queued`. Tant que ce
+//  statut n'est pas `sent`, l'écran ne dit PAS « envoyé ». Un parent à qui on
+//  annonce un message qui n'est jamais parti ne rappellera pas l'école.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Chaque code de refus a sa phrase. Un « refusé » sans motif ne se dépanne
+// ni par le gardien devant la famille, ni par la Direction au téléphone.
+window._SORTIE_REFUS = {
+  FORBIDDEN:                        'Votre profil n’a pas le droit de faire cette opération.',
+  ACTOR_NOT_FOUND:                  'Votre compte n’est pas reconnu par le serveur.',
+  STUDENT_NOT_FOUND:                'Cet élève n’existe pas ou il est archivé.',
+  MISSING_ENTRY:                    'Cet élève n’est pas entré à l’école aujourd’hui.',
+  ALREADY_EXITED:                   'Cet élève est déjà sorti aujourd’hui.',
+  PRIMARY_PARENT_REQUIRED:          'Aucun parent principal n’est rattaché à cet élève. La Direction doit en désigner un.',
+  PRIMARY_PARENT_INACTIVE:          'Le compte du parent principal est désactivé.',
+  PRIMARY_PARENT_IDENTITY_INCOMPLETE:'Le parent principal n’a pas ses deux photos et sa pièce enregistrées. La Direction doit compléter son identité.',
+  PREPARATION_EXPIRED:              'La préparation a dépassé 30 minutes. Refaites-la depuis la classe.',
+  INVALID_ESCORT:                   'Cette personne n’est pas autorisée à récupérer cet élève, ou son accréditation a expiré.',
+  SELF_EXIT_NOT_ALLOWED:            'Cet élève n’est pas autorisé à rentrer seul.',
+  ESCORT_REQUIRED:                  'Désignez qui récupère l’enfant.',
+  GATE_REQUIRED:                    'Indiquez à quel portail vous êtes.',
+  TEACHER_GATE_REASON_REQUIRED:     'Un enseignant au portail doit dire pourquoi il remplace le gardien.',
+  REFUSAL_REASON_REQUIRED:          'Un refus se motive — écrivez ce que vous avez constaté.',
+  REASON_REQUIRED:                  'Un motif est obligatoire.',
+  EXIT_EVENT_NOT_FOUND:             'Cette sortie n’existe plus. Recommencez le scan.',
+  EXIT_NOT_READY_FOR_VALIDATION:    'Personne ne s’est encore présenté au portail pour cet élève.',
+  EXIT_ALREADY_FINALIZED:           'Cette sortie est déjà close.',
+  UNSUPPORTED_DECISION:             'Décision inconnue.',
+  AUTH_REQUIRED:                    'Vous n’êtes pas connecté au serveur — la sortie ne peut pas être enregistrée.',
+  RPC_REFUSED:                      'Le serveur a refusé sans préciser. Prévenez la Direction.',
+  RPC_ERROR:                        'Le serveur n’a pas répondu. Vérifiez le réseau.',
+  PGRST202:                         'Cette opération n’est pas encore servie par le serveur.',
+};
+window._sortieRefus = (code) => _SORTIE_REFUS[code] || ('Refus du serveur : ' + (code || 'inconnu'));
+
+// Le portail se nomme. Sans nom de portail le serveur refuse (GATE_REQUIRED),
+// et c'est juste : « sorti à 15 h » sans savoir par où ne sert à rien le jour
+// où on cherche un enfant.
+window._portailCourant = () => (DB.settings?.gate_label || 'Portail principal');
+
+// ── ÉTAPE 1 · PRÉPARER, DEPUIS LA CLASSE ───────────────────────────────────
+window.preparerSortie = async (sid) => {
+  if (!S.user || !['enseignant','direction','direction2'].includes(S.user.role)) {
+    toast('Seuls la Direction et les enseignants préparent une sortie','error'); return;
+  }
+  const s = (DB.students||[]).find(x => x.id === sid);
+  if (!s) { toast('Élève introuvable','error'); return; }
+
+  const r = await _rpc('prepare_student_exit', {
+    p_sid: sid, p_gate_label: _portailCourant(), p_manual: false });
+
+  if (!r.ok) {
+    // Le refus s'affiche EN ENTIER, pas en passant : l'enseignant doit
+    // pouvoir le lire à la Direction au téléphone.
+    openM('La sortie n’a pas pu être préparée',
+      `<div style="padding:4px 2px">
+        <p style="margin:0 0 10px;font-size:15px"><b>${esc(s.name)}</b></p>
+        <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:11px;padding:12px 14px;color:#991b1b;font-size:14px;line-height:1.55">
+          ${esc(_sortieRefus(r.code))}</div>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0">Code serveur : <span style="font-family:monospace">${esc(r.code||'—')}</span></p>
+      </div>`,
+      `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`);
+    return;
+  }
+
+  const dejaPrete = r.data.code === 'EXIT_ALREADY_PREPARED';
+  (DB.student_exit_events = DB.student_exit_events || []);
+  const ex = DB.student_exit_events.find(e => e.id === r.data.exit_event_id);
+  const ligne = { id:r.data.exit_event_id, sid, status:r.data.status,
+    prepared_at:r.data.prepared_at || (ex && ex.prepared_at) || new Date().toISOString(),
+    expires_at:r.data.expires_at, prepared_by_name:window._acteur(), gate_label:_portailCourant() };
+  if (ex) Object.assign(ex, ligne); else DB.student_exit_events.unshift(ligne);
+  saveToCrypt();
+
+  logAudit('exit_prepare', `${s.name} — ${dejaPrete ? 'préparation déjà en cours' : 'sortie préparée'}`, sid);
+  toast(dejaPrete ? 'Une préparation était déjà en cours' : `${s.name} — le parent est prévenu`, 'success');
+  render();
+};
+
+window.annulerPreparationSortie = (eventId) => {
+  if (!S.user || !['enseignant','direction','direction2'].includes(S.user.role)) return;
+  openM('Annuler la préparation', `
+<div style="padding:2px">
+  <p style="margin:0 0 10px">Le parent sera prévenu que la sortie est annulée.</p>
+  <label class="form-label">Motif <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="annulSortieMotif" maxlength="180" placeholder="Ex. l’enfant est retenu pour une activité">
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>
+     <button class="btn btn-danger" onclick="confirmerAnnulationSortie(${JSON.stringify(eventId)})">Annuler la sortie</button>`);
+};
+
+window.confirmerAnnulationSortie = async (eventId) => {
+  const motif = (document.getElementById('annulSortieMotif')?.value || '').trim();
+  if (!motif) { markFieldError('annulSortieMotif', 'Le parent lira ce motif — il ne peut pas être vide.'); return; }
+  const r = await _rpc('cancel_student_exit_preparation', { p_exit_event_id: eventId, p_reason: motif });
+  if (!r.ok) { toast(_sortieRefus(r.code), 'error'); return; }
+  const e = (DB.student_exit_events||[]).find(x => x.id === eventId);
+  if (e) { e.status = 'cancelled'; e.cancel_reason = motif; }
+  saveToCrypt(); closeModal();
+  logAudit('exit_prepare_cancel', `Préparation annulée — ${motif}`);
+  toast('Préparation annulée — le parent est prévenu', 'success');
+  render();
+};
+
+// Le compte à rebours. Trente minutes, et ce qui reste se lit d'un coup d'œil :
+// un gardien qui doit calculer une différence d'horaires ne la calcule pas.
+window._minutesRestantes = (expiresAt) => {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - window._serverNow().getTime();
+  return Math.floor(ms / 60000);
+};
+
+// ── L'ÉCRAN DE PRÉPARATION ─────────────────────────────────────────────────
+R.preparer_sortie = () => {
+  const _g = _requireRole('enseignant','direction','direction2'); if (_g) return _g;
+  const role = S.user.role;
+
+  // L'enseignant ne voit QUE ses classes. Ce n'est pas un confort d'affichage :
+  // préparer la sortie d'un enfant qu'on n'a pas devant soi, c'est prévenir un
+  // parent pour rien et ouvrir une fenêtre de 30 minutes au portail.
+  const mesClasses = role === 'enseignant'
+    ? (DB.classes||[]).filter(c => c.titulaire_id === S.user.id || c.teacher_id === S.user.id || c.teacher_id_en === S.user.id)
+    : (DB.classes||[]);
+  const idsClasses = new Set(mesClasses.map(c => c.id));
+
+  const filtre = window._prepClasse || '';
+  const q = (window._prepQ || '').toLowerCase();
+  let eleves = (DB.students||[]).filter(s => !s.archived && idsClasses.has(s.cid));
+  if (filtre) eleves = eleves.filter(s => s.cid === filtre);
+  if (q) eleves = eleves.filter(s => (s.name||'').toLowerCase().includes(q) || (s.mat||'').toLowerCase().includes(q));
+
+  const evenementDe = (sid) => (DB.student_exit_events||[])
+    .filter(e => e.sid === sid && ['prepared','gate_scanned'].includes(e.status))
+    .sort((a,b) => String(b.prepared_at||'').localeCompare(String(a.prepared_at||'')))[0] || null;
+
+  const sortiAujourdhui = (sid) => (DB.scan_log||[])
+    .some(l => l.sid === sid && l.date === today() && l.type === 'exit' && l.status !== 'unauthorized');
+
+  const enAttente = eleves.filter(s => evenementDe(s.id)).length;
+
+  const lignes = eleves.map(s => {
+    const cl = (DB.classes||[]).find(c => c.id === s.cid);
+    const ev = evenementDe(s.id);
+    const dehors = sortiAujourdhui(s.id);
+    const reste = ev ? _minutesRestantes(ev.expires_at) : null;
+    const expire = ev && reste !== null && reste <= 0;
+
+    let etat, bg, bord, coul;
+    if (dehors)      { etat = 'Déjà sorti aujourd’hui'; bg='#f8fafc'; bord='#e2e8f0'; coul='#6b7280'; }
+    else if (expire) { etat = 'Préparation expirée — à refaire'; bg='#fffbeb'; bord='#fcd34d'; coul='#92400e'; }
+    else if (ev)     { etat = `En attente de récupération · ${reste} min`; bg='#eff6ff'; bord='#93c5fd'; coul='#1d4ed8'; }
+    else             { etat = 'En classe'; bg='var(--bg-card,#fff)'; bord='var(--border-light,#e2e8f0)'; coul='var(--text-muted)'; }
+
+    return `<div style="background:${bg};border:1.5px solid ${bord};border-radius:13px;padding:12px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="width:40px;height:48px;border-radius:8px;overflow:hidden;flex:none;background:#efe3d3;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#6f6557">
+        ${s.photo?`<img src="${s.photo}" style="width:100%;height:100%;object-fit:cover">`:esc(ini(s.name))}</div>
+      <div style="flex:1;min-width:130px">
+        <div style="font-weight:800;font-size:14px">${esc(s.name)}</div>
+        <div style="font-size:11.5px;color:var(--text-secondary)">${esc(cl?cl.name:'—')} · ${esc(s.mat||'—')}</div>
+        <div style="font-size:12px;font-weight:700;color:${coul};margin-top:3px">${esc(etat)}</div>
+        ${ev && !expire && !dehors ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Préparée par ${esc(ev.prepared_by_name||'—')}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;flex:none">
+        ${dehors ? ''
+          : ev && !expire
+            ? `<button class="btn btn-sm" style="background:#fff7f7;border:1.5px solid #fca5a5;color:#dc2626;font-weight:700" onclick="annulerPreparationSortie(${JSON.stringify(ev.id)})">Annuler</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="preparerSortie(${JSON.stringify(s.id)})">🚪 Préparer la sortie</button>`}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+<div class="premium-section" style="margin-bottom:14px;border-left:4px solid #2f7bd6">
+  <div class="premium-section-title">🚪 Préparer la sortie</div>
+  <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px">
+    Prévient le parent <b>avant</b> que l’enfant descende au portail. La préparation
+    vaut <b>30 minutes</b>. Elle ne fait pas sortir l’enfant : c’est le portail qui
+    confirme, après avoir vu qui se présente.
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:12px">
+    <div style="background:var(--bg-secondary,#f8fafc);border-radius:10px;padding:11px;text-align:center">
+      <div style="font-size:22px;font-weight:800">${eleves.length}</div>
+      <div style="font-size:10.5px;color:var(--text-secondary)">élèves ${role==='enseignant'?'de mes classes':'de l’école'}</div></div>
+    <div style="background:${enAttente?'#eff6ff':'var(--bg-secondary,#f8fafc)'};border-radius:10px;padding:11px;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:${enAttente?'#1d4ed8':'var(--text-muted)'}">${enAttente}</div>
+      <div style="font-size:10.5px;color:var(--text-secondary)">en attente au portail</div></div>
+  </div>
+  <div class="ww-toolbar" style="margin-bottom:12px">
+    <input class="ww-search" placeholder="Rechercher un élève…" oninput="window._prepQ=this.value;clearTimeout(window._prepT);window._prepT=setTimeout(render,300)" value="${esc(window._prepQ||'')}">
+    <select class="form-select" style="flex-shrink:0;width:auto;min-width:140px;font-size:13px" onchange="window._prepClasse=this.value;render()">
+      <option value="">Toutes mes classes</option>
+      ${mesClasses.map(c=>`<option value="${esc(c.id)}"${filtre===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}
+    </select>
+  </div>
+  ${eleves.length
+    ? `<div style="display:flex;flex-direction:column;gap:9px">${lignes}</div>`
+    : `<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">${role==='enseignant'?'Aucune classe ne vous est attribuée.':'Aucun élève.'}</div>`}
+</div>`;
+};
+
+// ── ÉTAPE 2 · QUI SE PRÉSENTE AU PORTAIL ───────────────────────────────────
+// `get_student_pickup_context` rend le parent principal ET les personnes
+// accréditées, déjà filtrées par le serveur sur `active`, `approved` et les
+// dates de validité. C'est le point qui manquait le plus : l'ancien écran
+// lisait `DB.aps` en direct et présentait une accréditation EXPIRÉE comme
+// valable, parce que le filtre vit dans la RPC.
+window.ouvrirSortiePortail = async (sid) => {
+  if (!S.user || !['gardien','enseignant','direction','direction2'].includes(S.user.role)) {
+    toast('Votre profil ne confirme pas les sorties','error'); return;
+  }
+  const zone = document.getElementById('exitResult'); if (!zone) return;
+  const s = (DB.students||[]).find(x => x.id === sid);
+
+  if (S.lockdown) {
+    // L'exception médicale reste ouverte. Un confinement qui n'a plus aucune
+    // porte est un piège : le jour où un enfant fait une crise, personne ne
+    // doit avoir à choisir entre la règle et l'enfant.
+    zone.innerHTML = `<div class="scan-result red" style="margin-top:8px"><div class="sr-icon">●</div>
+      <div class="sr-title">LOCKDOWN ACTIF</div><div class="sr-sub">Aucune sortie autorisée · ${esc(s?s.name:'')}</div></div>
+      <div style="text-align:center;margin-top:10px">
+        <button class="btn btn-danger" style="padding:10px 20px;font-size:13px" onclick="lockdownEmergencyExit(${JSON.stringify(sid)})">Exception urgence médicale</button></div>`;
+    return;
+  }
+
+  zone.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-secondary);font-size:13px">Lecture des personnes autorisées…</div>`;
+  const r = await _rpc('get_student_pickup_context', { p_sid: sid });
+  if (!r.ok) {
+    zone.innerHTML = `<div class="scan-result red" style="margin-top:8px"><div class="sr-icon">✕</div>
+      <div class="sr-title">Impossible de vérifier</div>
+      <div class="sr-sub">${esc(_sortieRefus(r.code))}</div></div>`;
+    return;
+  }
+
+  const ctx = r.data;
+  window._sortieCtx = ctx;
+  window._sortieSid = sid;
+  window._sortieEvent = null;
+  window._sortieChoix = null;
+
+  const gens = [];
+  if (ctx.primary_parent) gens.push({...ctx.primary_parent, kind:'primary'});
+  (ctx.authorized_people||[]).forEach(p => gens.push({...p, kind:'accredited'}));
+  window._sortieGens = gens;
+
+  const vignette = (p, i) => {
+    // Le parent principal dont l'identité n'est pas complète est montré, mais
+    // BARRÉ et expliqué. Le cacher enverrait le gardien chercher une personne
+    // qui n'est pas là ; le montrer comme valable ferait échouer le scan avec
+    // un code que personne ne comprend au portail.
+    const pret = p.kind !== 'primary' || p.ready_for_pickup !== false;
+    return `<div onclick="${pret?`choisirPersonneSortie(${i})`:''}" style="text-align:center;background:var(--bg-card);border-radius:16px;padding:10px 8px 12px;border:2.5px solid ${pret?'var(--border)':'#fca5a5'};width:136px;flex:none;${pret?'cursor:pointer':'opacity:.62'}" id="sortieVign${i}">
+      <div style="width:116px;height:150px;border-radius:12px;overflow:hidden;margin:0 auto 7px;background:#efe3d3;display:flex;align-items:center;justify-content:center;position:relative">
+        ${p.photo_portrait?`<img src="${p.photo_portrait}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:36px;font-weight:700;color:#6f6557">${esc(ini(p.name||'?'))}</span>`}
+        ${p.kind==='primary'?`<div style="position:absolute;top:5px;left:5px;background:rgba(0,0,0,.62);color:#fff;border-radius:6px;padding:2px 6px;font-size:9px;font-weight:800">PARENT</div>`:''}
+      </div>
+      <div style="font-weight:800;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name||'—')}</div>
+      <div style="font-size:10px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.relation||'Autorisé')}</div>
+      ${pret?'':`<div style="font-size:9.5px;color:#991b1b;font-weight:700;margin-top:4px;line-height:1.3">Identité incomplète<br>voir la Direction</div>`}
+    </div>`;
+  };
+
+  const el = (DB.students||[]).find(x => x.id === sid) || {};
+  const cl = (DB.classes||[]).find(c => c.id === (ctx.student?.class_id || el.cid));
+  const dejaSorti = (DB.scan_log||[]).find(l => l.sid === sid && l.date === today() && l.type === 'exit' && l.status !== 'unauthorized');
+  const prep = (DB.student_exit_events||[]).find(e => e.sid === sid && ['prepared','gate_scanned'].includes(e.status));
+  const reste = prep ? _minutesRestantes(prep.expires_at) : null;
+
+  zone.innerHTML = `
+  <div style="text-align:center;animation:popIn .3s ease">
+    ${dejaSorti?`<div class="scan-result orange" style="padding:10px 14px;margin-bottom:10px;font-size:13px">⚠️ Déjà sorti aujourd’hui à ${esc(dejaSorti.time||'?')}</div>`:''}
+    <div class="scan-result green" style="padding:14px;margin-bottom:12px">
+      <div style="font-size:20px;font-weight:700">${esc(ctx.student?.name || el.name || '')}</div>
+      <div style="font-size:13px;opacity:.9">${esc(cl?cl.name:'')} — ${esc(el.mat||'')}</div>
+    </div>
+
+    ${prep && reste !== null
+      ? `<div style="background:${reste>0?'#eff6ff':'#fffbeb'};border:1px solid ${reste>0?'#93c5fd':'#fcd34d'};border-radius:11px;padding:9px 12px;margin-bottom:11px;font-size:12.5px;color:${reste>0?'#1d4ed8':'#92400e'}">
+          ${reste>0
+            ? `Sortie préparée par <b>${esc(prep.prepared_by_name||'—')}</b> · ${reste} min restantes`
+            : `Préparation expirée — le portail la refera automatiquement`}</div>`
+      : `<div style="background:var(--bg-secondary,#f8fafc);border:1px dashed var(--border-light,#e2e8f0);border-radius:11px;padding:9px 12px;margin-bottom:11px;font-size:12.5px;color:var(--text-secondary)">
+          Aucune préparation en classe — le portail en créera une automatiquement.</div>`}
+
+    <div style="font-size:15px;font-weight:800;margin-bottom:4px">Qui se présente au portail ?</div>
+    <div style="font-size:11.5px;color:var(--text-secondary);margin-bottom:9px">
+      Choisir n’autorise pas encore la sortie. Vous comparerez d’abord les photos.</div>
+    <div style="display:flex;gap:12px;overflow-x:auto;padding:4px 4px 10px;margin-bottom:8px;justify-content:${gens.length<=2?'center':'flex-start'}">
+      ${gens.length ? gens.map(vignette).join('')
+        : `<div style="padding:18px;color:#991b1b;font-size:13px;font-weight:700">Aucune personne autorisée n’est enregistrée pour cet élève.<br>
+             <span style="font-weight:400;color:var(--text-secondary)">La Direction doit en désigner une avant toute sortie.</span></div>`}
+    </div>
+    <div id="sortieDetail"></div>
+    <div style="margin-top:14px">
+      <button class="btn btn-danger" style="padding:11px 20px;font-size:13px;font-weight:800" onclick="signalerPersonneInconnue(${JSON.stringify(sid)})">🔴 Personne inconnue au portail</button>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">
+        Alerte immédiate à la Direction et au parent. L’enfant ne sort pas.</div>
+    </div>
+  </div>`;
+};
+
+// Quelqu'un se présente qui ne figure sur aucune liste. Ce n'est pas un refus
+// de sortie ordinaire : personne n'a été choisi, donc il n'y a rien à valider.
+// On enregistre une TENTATIVE, avec sa description et sa photo, et on alerte.
+window.signalerPersonneInconnue = (sid) => {
+  if (!S.user || !['gardien','enseignant','direction','direction2'].includes(S.user.role)) {
+    toast('Votre profil ne signale pas au portail','error'); return;
+  }
+  const s = (DB.students||[]).find(x => x.id === sid); if (!s) return;
+  openM(`Personne inconnue — ${s.name}`, `
+<div style="padding:2px">
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:13px;color:#991b1b;line-height:1.55">
+    <b>${esc(s.name)} ne sort pas.</b> La Direction et le parent sont alertés immédiatement.</div>
+  <label class="form-label">Décrivez la personne <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="refDesc" maxlength="200" placeholder="Ex. homme, chemise bleue, dit être l’oncle">
+  <label class="form-label" style="margin-top:12px">Photo <span style="font-weight:400;color:var(--text-muted)">(facultative)</span></label>
+  <input class="form-input" type="file" accept="image/*" capture="environment" onchange="previewRefPhoto(this)">
+  <div id="refPhotoPreview" style="margin-top:8px"></div>
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-danger" onclick="doExitRefused(${JSON.stringify(sid)})">Signaler et alerter</button>`);
+};
+
+window.choisirPersonneSortie = (i) => {
+  const p = (window._sortieGens||[])[i]; if (!p) return;
+  window._sortieChoix = i;
+  document.querySelectorAll('[id^=sortieVign]').forEach(el => { el.style.borderColor='var(--border)'; });
+  const v = document.getElementById('sortieVign'+i); if (v) v.style.borderColor = '#2f7bd6';
+
+  const estEns = S.user.role === 'enseignant';
+  const d = document.getElementById('sortieDetail'); if (!d) return;
+  d.innerHTML = `
+  <div style="background:var(--bg-card);border:2.5px solid #2f7bd6;border-radius:18px;padding:16px;margin:8px auto 0;max-width:400px;text-align:left;animation:cardPop .3s ease">
+    <div style="font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#1d4ed8;margin-bottom:9px">Comparez avant d’autoriser</div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div style="flex:1">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;font-weight:700">PORTRAIT</div>
+        <div style="aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#efe3d3;display:flex;align-items:center;justify-content:center">
+          ${p.photo_portrait?`<img src="${p.photo_portrait}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:11px;color:#991b1b;padding:8px;text-align:center">Aucune photo</span>'}</div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;font-weight:700">EN PIED</div>
+        <div style="aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#efe3d3;display:flex;align-items:center;justify-content:center">
+          ${p.photo_full_body?`<img src="${p.photo_full_body}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:11px;color:#991b1b;padding:8px;text-align:center">Aucune photo en pied</span>'}</div>
+      </div>
+    </div>
+    <div style="font-size:16px;font-weight:800">${esc(p.name||'—')}</div>
+    <div style="display:inline-block;background:#dbeafe;color:#205fae;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:700;margin:5px 0 8px">${esc(p.relation||'Autorisé')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.6">
+      ${p.id_doc_type?`Pièce : <b>${esc(p.id_doc_type)}</b>${p.id_doc_last4?` ····${esc(p.id_doc_last4)}`:''}<br>`:'<span style="color:#991b1b">Aucune pièce d’identité enregistrée</span><br>'}
+      ${p.valid_until?`Accréditation valable jusqu’au <b>${esc(p.valid_until)}</b><br>`:''}
+      ${p.phone?`📞 ${esc(p.phone)}`:''}
+    </div>
+    ${estEns?`
+      <label class="form-label" style="margin-top:12px">Pourquoi tenez-vous le portail ? <span style="color:#dc2626">obligatoire</span></label>
+      <input class="form-input" id="sortieMotifEns" maxlength="140" placeholder="Ex. gardien absent">`:''}
+    <button class="btn btn-primary" style="width:100%;padding:13px;font-size:15px;font-weight:800;margin-top:12px"
+      onclick="enregistrerPresentationPortail()">Cette personne est là</button>
+  </div>`;
+};
+
+// ── ÉTAPE 2 (suite) · ON ENREGISTRE LA PRÉSENTATION, ON N'AUTORISE PAS ─────
+window.enregistrerPresentationPortail = async () => {
+  const i = window._sortieChoix;
+  const p = (window._sortieGens||[])[i];
+  const sid = window._sortieSid;
+  if (!p || !sid) { toast('Choisissez qui se présente','warning'); return; }
+
+  const estEns = S.user.role === 'enseignant';
+  const motif = (document.getElementById('sortieMotifEns')?.value || '').trim();
+  if (estEns && !motif) { markFieldError('sortieMotifEns','Le registre doit dire pourquoi un enseignant tenait le portail.'); return; }
+
+  const prep = (DB.student_exit_events||[]).find(e => e.sid === sid && ['prepared','gate_scanned'].includes(e.status));
+  const r = await _rpc('scan_student_exit_at_gate', {
+    p_sid: sid,
+    p_exit_event_id: prep ? prep.id : null,
+    p_escort_kind: p.kind,
+    p_escort_id: p.id,
+    p_gate_label: _portailCourant(),
+    p_teacher_gate_reason: estEns ? motif : null,
+    p_manual: false,
+  });
+
+  if (!r.ok) {
+    const d = document.getElementById('sortieDetail');
+    if (d) d.innerHTML = `<div class="scan-result red" style="margin-top:10px"><div class="sr-icon">✕</div>
+      <div class="sr-title">Présentation refusée</div>
+      <div class="sr-sub">${esc(_sortieRefus(r.code))}</div></div>`;
+    return;
+  }
+
+  window._sortieEvent = r.data.exit_event_id;
+  (DB.student_exit_events = DB.student_exit_events || []);
+  const ex = DB.student_exit_events.find(e => e.id === r.data.exit_event_id);
+  const maj = { id:r.data.exit_event_id, sid, status:r.data.status, gate_scanned_at:r.data.gate_scanned_at,
+    escort_name:r.data.escort_name, gate_label:_portailCourant() };
+  if (ex) Object.assign(ex, maj); else DB.student_exit_events.unshift(maj);
+  saveToCrypt();
+
+  // ── ÉTAPE 3 · LA DÉCISION, ET ELLE SEULE ────────────────────────────────
+  // Les photos affichées ici sont celles que le SERVEUR a figées au moment du
+  // scan, pas celles de la liste : si quelqu'un modifie une fiche pendant que
+  // le gardien compare, la comparaison porte quand même sur ce qui a été
+  // enregistré.
+  const d = document.getElementById('sortieDetail'); if (!d) return;
+  d.innerHTML = `
+  <div style="background:var(--bg-card);border:2.5px solid #d98a2b;border-radius:18px;padding:16px;margin:8px auto 0;max-width:400px;text-align:left">
+    <div style="font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#92400e;margin-bottom:9px">Décision finale</div>
+    <div style="display:flex;gap:10px;margin-bottom:11px">
+      <div style="flex:1"><div style="aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#efe3d3">
+        ${r.data.photo_portrait?`<img src="${r.data.photo_portrait}" style="width:100%;height:100%;object-fit:cover">`:''}</div></div>
+      <div style="flex:1"><div style="aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#efe3d3">
+        ${r.data.photo_full_body?`<img src="${r.data.photo_full_body}" style="width:100%;height:100%;object-fit:cover">`:''}</div></div>
+    </div>
+    <div style="font-size:15px;font-weight:800;margin-bottom:2px">${esc(r.data.escort_name||p.name||'')}</div>
+    <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:12px">
+      ${r.data.id_doc_type?`Pièce : ${esc(r.data.id_doc_type)}${r.data.id_doc_last4?' ····'+esc(r.data.id_doc_last4):''}`:'Aucune pièce enregistrée'}</div>
+    <div style="display:flex;gap:9px">
+      <button class="btn btn-primary" style="flex:1;padding:13px;font-weight:800" onclick="validerSortie('authorized')">✅ Autoriser</button>
+      <button class="btn btn-danger" style="flex:1;padding:13px;font-weight:800" onclick="validerSortie('refused')">⛔ Refuser</button>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin:10px 0 0;line-height:1.5">
+      L’enfant n’est pas encore sorti. Rien n’est enregistré tant que vous n’avez pas tranché.</p>
+  </div>`;
+};
+
+window.validerSortie = (decision) => {
+  if (decision === 'refused') {
+    openM('Refuser la sortie', `
+<div style="padding:2px">
+  <p style="margin:0 0 10px;font-size:13.5px">Le refus part au registre et à la Direction. Écrivez ce que vous avez constaté.</p>
+  <label class="form-label">Motif <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="sortieRefusMotif" maxlength="200" placeholder="Ex. la personne ne correspond pas aux photos">
+</div>`,
+      `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+       <button class="btn btn-danger" onclick="confirmerDecisionSortie('refused')">Refuser la sortie</button>`);
+    return;
+  }
+  confirmerDecisionSortie('authorized');
+};
+
+window.confirmerDecisionSortie = async (decision) => {
+  const eventId = window._sortieEvent;
+  if (!eventId) { toast('Aucune sortie en cours','warning'); return; }
+  const note = decision === 'refused' ? (document.getElementById('sortieRefusMotif')?.value || '').trim() : null;
+  if (decision === 'refused' && !note) { markFieldError('sortieRefusMotif','Un refus se motive.'); return; }
+
+  const r = await _rpc('validate_student_exit', { p_exit_event_id: eventId, p_decision: decision, p_note: note });
+  if (!r.ok) { toast(_sortieRefus(r.code), 'error'); return; }
+  closeModal();
+
+  const ex = (DB.student_exit_events||[]).find(e => e.id === eventId);
+  if (ex) { ex.status = r.data.status; ex.validated_by_name = r.data.validated_by; }
+  saveToCrypt();
+
+  const s = (DB.students||[]).find(x => x.id === window._sortieSid) || {};
+  logAudit(decision === 'authorized' ? 'exit_confirmed' : 'exit_refused',
+    `${s.name||''} — ${r.data.escort_name||''}${note?' — '+note:''}`, window._sortieSid);
+
+  const zone = document.getElementById('exitResult');
+  if (zone) zone.innerHTML = decision === 'authorized'
+    ? `<div class="scan-result green" style="margin-top:8px;padding:18px"><div class="sr-icon">✅</div>
+        <div class="sr-title">Sortie confirmée</div>
+        <div class="sr-sub">${esc(s.name||'')} — récupéré par ${esc(r.data.escort_name||'')}</div>
+        <div style="font-size:11.5px;opacity:.85;margin-top:8px;line-height:1.55">
+          Préparée par ${esc(r.data.prepared_by||'—')} · portail ${esc(r.data.scanned_by||'—')} · validée par ${esc(r.data.validated_by||'—')}<br>
+          ${_libelleNotif(r.data.notification)}</div></div>`
+    : `<div class="scan-result red" style="margin-top:8px;padding:18px"><div class="sr-icon">⛔</div>
+        <div class="sr-title">Sortie refusée</div>
+        <div class="sr-sub">${esc(s.name||'')} reste à l’école</div>
+        <div style="font-size:11.5px;opacity:.85;margin-top:8px">${esc(note||'')}</div></div>`;
+  render();
+};
+
+// L'écran ne dit « envoyé » que si le serveur dit `sent`. Le contrat est
+// explicite : l'e-mail et WhatsApp partent en file au statut `queued`, et un
+// parent à qui on annonce un message jamais parti ne rappellera pas l'école.
+window._libelleNotif = (n) => {
+  if (!n) return 'Le parent est prévenu dans l’application.';
+  const dit = [];
+  dit.push('Notification dans l’application : envoyée');
+  if (n.email === 'sent')       dit.push('e-mail : envoyé');
+  else if (n.email === 'queued')dit.push('e-mail : en file d’envoi');
+  if (n.whatsapp === 'sent')       dit.push('WhatsApp : envoyé');
+  else if (n.whatsapp === 'queued')dit.push('WhatsApp : en file d’envoi');
+  return esc(dit.join(' · '));
+};
+
+// Le portail n'est pas un écran de consultation : il enregistre une sortie
+// d'enfant. Le contrôle est ici, pas seulement dans la navigation — cacher
+// une entrée de menu ne protège rien. La Caisse en est exclue par le
+// contrat de ChatGPT ; le parent l'est par nature.
+R.scanner_exit = () => {
+  const _g = _requireRole('gardien','enseignant','direction','direction2'); if (_g) return _g;
+  return `
 <div class="scan-container">
   <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">🚪 Scanner Sortie</h2>
   <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Scannez la carte de l'élève pour vérifier les personnes autorisées</p>
@@ -18235,171 +18813,35 @@ R.scanner_exit = () => `
   </div>
   <div id="exitResult" style="width:100%;max-width:500px;margin-top:12px"></div>
 </div>`;
+};
 
+// `scanExit` ne décide plus de rien : elle trouve l'élève et passe la main
+// au parcours en deux étapes. Ce qu'elle faisait avant — lire `DB.aps` en
+// direct, afficher un portrait, écrire dans `scan_log` — sautait les quatre
+// RPC servies, et avec elles le filtre de validité des accréditations.
 window.scanExit = () => {
-  if(!S.user||S.user.role==='parent'){toast('Accès non autorisé','error');return;}
-  const code=($('exitCode')?.value||'').trim().toUpperCase();
-  const s=(DB.students||[]).find(x=>x.mat===code);
-  const _out=$('exitResult'); if(!_out) return;
-  if(!s){_out.innerHTML=`<div class="scan-result red" style="margin-top:8px"><div class="sr-icon">✕</div><div class="sr-title">Élève non trouvé</div><div class="sr-sub">${esc(code)}</div></div>`;return;}
-  if(S.lockdown){_out.innerHTML=`<div class="scan-result red" style="margin-top:8px"><div class="sr-icon">●</div><div class="sr-title">LOCKDOWN ACTIF</div><div class="sr-sub">Aucune sortie autorisée · ${esc(s.name)}</div></div><div style="text-align:center;margin-top:10px"><button class="btn btn-danger" style="padding:10px 20px;font-size:13px" onclick="lockdownEmergencyExit('${s.id}')">Exception urgence médicale</button></div>`;return;}
-
-  // PORT-05: check if already exited today
-  const todayExitLog=(DB.scan_log||[]).find(l=>l.sid===s.id&&l.date===today()&&l.type==='exit'&&l.status!=='unauthorized');
-
-  const c=gc(s.cid);
-  const parent=gu(s.pid);
-  // Parent principal + tutelles secondaires liées à l'élève
-  const aps=[];
-  if(parent) aps.push({id:parent.id,name:parent.name,relation:'👑 Parent principal',photo:parent.photo_url||null,active:true,phone:parent.phone||null});
-  (DB.aps||[]).filter(a=>a.sid===s.id&&a.active!==false).forEach(a=>aps.push(a));
-
-  window._exitStudent=s;
-  window._exitAps=aps;
-
-  const thumbs=aps.map((a,i)=>`
-  <div id="exitThumb${i}" onclick="selectExitPerson(${i})" style="text-align:center;background:var(--bg-card);border-radius:16px;padding:10px 8px 12px;border:2.5px solid var(--border);width:130px;transition:all .2s;flex-shrink:0;cursor:pointer;-webkit-tap-highlight-color:transparent" role="button" aria-label="Sélectionner ${esc(a.name)}">
-    <div style="width:112px;height:150px;border-radius:12px;overflow:hidden;margin:0 auto 8px;background:#efe3d3;display:flex;align-items:center;justify-content:center;position:relative">
-      ${a.photo?`<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:38px;font-weight:700;color:#6f6557">${ini(a.name)}</span>`}
-      <div onclick="event.stopPropagation();zoomAuthPhoto(${i})" style="position:absolute;top:5px;right:5px;background:rgba(0,0,0,.65);border-radius:7px;padding:3px 7px;font-size:14px;line-height:1" title="Agrandir">🔍</div>
-    </div>
-    <div style="font-weight:700;font-size:12px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.name.split(' ')[0])}</div>
-    <div style="font-size:10px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.relation||'Tutelle')}</div>
-  </div>`).join('')
-  // Un élève du secondaire rentre souvent par ses propres moyens. La liste
-  // n'offrait que des personnes à désigner : le gardien devait choisir
-  // quelqu'un à tort, ou renoncer à scanner. Ni l'un ni l'autre n'est
-  // acceptable — le premier fausse le registre, le second le laisse muet.
-  + `<div id="exitThumbSeul" onclick="confirmExitSeul('${s.id}')" style="text-align:center;background:var(--bg-card);border-radius:16px;padding:10px 8px 12px;border:2.5px dashed var(--border);width:130px;cursor:pointer">
-      <div style="width:112px;height:150px;border-radius:12px;margin:0 auto 8px;background:#f6ede0;display:flex;align-items:center;justify-content:center;font-size:44px">🚶</div>
-      <div style="font-weight:700;font-size:12px;margin-bottom:2px">Rentre seul</div>
-      <div style="font-size:10px;color:var(--text-secondary)">Sans accompagnant</div>
-    </div>`;
-
-  _out.innerHTML=`
-  <div style="text-align:center;animation:popIn .3s ease">
-    ${todayExitLog?`<div class="scan-result orange" style="padding:10px 14px;margin-bottom:10px;font-size:13px">⚠️ Déjà sorti aujourd'hui à ${esc(todayExitLog.time||'?')} — ${esc(todayExitLog.label||'Sortie enregistrée')}</div>`:''}
-    <div class="scan-result green" style="padding:14px;margin-bottom:12px">
-      <div style="font-size:20px;font-weight:700">${esc(s.name)}</div>
-      <div style="font-size:13px;opacity:.9">${c?esc(c.name):''} — ${esc(s.mat)}</div>
-    </div>
-    <div style="font-size:15px;font-weight:700;margin-bottom:10px">👥 Qui récupère l'enfant ?</div>
-    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;text-align:center">Appuyez sur la photo pour confirmer · 🔍 pour agrandir</div>
-    <div style="display:flex;gap:12px;overflow-x:auto;padding:4px 4px 10px;margin-bottom:12px;justify-content:${aps.length<=2?'center':'flex-start'}">${thumbs||'<p style="color:var(--text-muted);padding:20px">Aucune personne autorisée enregistrée</p>'}</div>
-    <div id="exitPreview"></div>
-    <div style="margin-top:12px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <button class="btn btn-outline" style="padding:12px 20px" onclick="confirmExitAlone('${s.id}')">🚶 Part seul</button>
-      <button class="btn btn-danger" style="padding:12px 20px" onclick="confirmExitRefused('${s.id}')">🔴 Personne inconnue</button>
-    </div>
-  </div>`;
+  if (!S.user || !['gardien','enseignant','direction','direction2'].includes(S.user.role)) {
+    toast('Votre profil ne confirme pas les sorties','error'); return;
+  }
+  const code = ($('exitCode')?.value || '').trim().toUpperCase();
+  const s = (DB.students||[]).find(x => (x.mat||'').toUpperCase() === code);
+  const out = $('exitResult'); if (!out) return;
+  if (!s) {
+    out.innerHTML = `<div class="scan-result red" style="margin-top:8px"><div class="sr-icon">✕</div>
+      <div class="sr-title">Élève non trouvé</div><div class="sr-sub">${esc(code)}</div></div>`;
+    return;
+  }
+  ouvrirSortiePortail(s.id);
 };
 
-window.selectExitPerson = idx => {
-  const a=window._exitAps[idx]; if(!a) return;
-  document.querySelectorAll('[id^=exitThumb]').forEach(el=>{ el.style.borderColor='var(--border)'; el.style.transform='scale(1)'; });
-  const thumb=$('exitThumb'+idx); if(thumb){ thumb.style.borderColor='#2f7bd6'; thumb.style.transform='scale(1.04)'; }
-  $('exitPreview').innerHTML=`
-  <div style="background:var(--bg-card);border-radius:18px;padding:16px 16px 20px;border:2.5px solid #2f7bd6;margin:12px auto 0;max-width:340px;animation:cardPop .3s ease">
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
-      <div onclick="zoomAuthPhoto(${idx})" style="width:90px;height:115px;border-radius:12px;overflow:hidden;flex-shrink:0;background:#efe3d3;display:flex;align-items:center;justify-content:center;border:2.5px solid #2f7bd6;cursor:zoom-in;position:relative">
-        ${a.photo?`<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:32px;font-weight:700;color:#6f6557">${ini(a.name)}</span>`}
-        <div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border-radius:6px;padding:2px 5px;font-size:12px">🔍</div>
-      </div>
-      <div style="flex:1;text-align:left">
-        <div style="font-size:17px;font-weight:800;margin-bottom:4px">${esc(a.name)}</div>
-        <div style="display:inline-block;background:#dbeafe;color:#205fae;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:700;margin-bottom:6px">${esc(a.relation||'Tutelle')}</div>
-        ${a.phone?`<div style="font-size:13px;color:#2f7bd6">📞 ${esc(a.phone)}</div>`:''}
-      </div>
-    </div>
-    <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px;font-weight:800" onclick="confirmExitWith('${window._exitStudent.id}',${idx})">${esc(a.name.split(' ')[0])} a pris l'enfant</button>
-  </div>`;
-};
-
-// Sortie non accompagnée. Volontairement soumise à confirmation : laisser
-// partir un enfant seul est une décision, pas un défaut de saisie.
-window.confirmExitSeul = async (sid) => {
-  if(!S.user||!['gardien','enseignant','direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
-  const s=(DB.students||[]).find(x=>x.id===sid); if(!s) return;
-  const cl = gc(s.cid);
-  showC(`${s.name} rentre seul ?`,
-    `Aucun accompagnant ne sera enregistré${cl?` — ${esc(cl.name)}`:''}. Le parent en sera informé.`, async () => {
-    const recent=(DB.scan_log||[]).find(l=>l.sid===sid&&l.type==='exit'&&l.date===today()&&l.status!=='unauthorized');
-    if(recent){const [rH,rM]=(recent.time||'00:00').split(':').map(Number);const [nH,nM]=nowTime().split(':').map(Number);
-      if((nH*60+nM)-(rH*60+rM)<2){toast('Sortie déjà enregistrée à '+recent.time,'info');return;}}
-    const time=nowTime();
-    const log={id:_uid('sl_'),sid,name:s.name,type:'exit',status:'authorized',label:'Sortie seul 🚶',time,date:today(),
-      by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role,
-      escort_kind:'seul', escort_id:null, escort_name:null};
-    (DB.scan_log=DB.scan_log||[]).unshift(log); pushSync('scan_log','post',log);
-    if(s.pid) await pushNotif(s.pid,`🚶 ${s.name} a quitté l'école seul(e) à ${time}. Enregistré par ${S.user.name}.`);
-    logAudit('exit_alone', `${s.name}${cl?' — '+cl.name:''}`, sid);
-    showExitDone('green','🚶','Sortie enregistrée',s.name,'Rentre seul — parent informé',time);
-    saveToCrypt();
-  });
-};
-
-window.zoomAuthPhoto = idx => {
-  const a=window._exitAps[idx]; if(!a) return;
-  openM(`👤 ${esc(a.name)}`,`
-  <div style="text-align:center">
-    <div style="width:100%;max-width:260px;height:340px;border-radius:16px;overflow:hidden;margin:0 auto 14px;background:#efe3d3;display:flex;align-items:center;justify-content:center;border:3px solid #2f7bd6">
-      ${a.photo?`<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:72px;font-weight:700;color:#6f6557">${ini(a.name)}</span>`}
-    </div>
-    <div style="font-size:20px;font-weight:800;margin-bottom:6px">${esc(a.name)}</div>
-    <div style="display:inline-block;background:#dbeafe;color:#205fae;border-radius:20px;padding:4px 16px;font-size:14px;font-weight:700;margin-bottom:8px">${esc(a.relation||'Tutelle')}</div>
-    ${a.phone?`<div style="font-size:14px;color:#2f7bd6;margin-top:4px">📞 ${esc(a.phone)}</div>`:''}
-  </div>`,
-  `<button class="btn btn-outline" style="padding:12px 18px" onclick="closeModal()">✕ Fermer</button>
-   <button class="btn btn-primary" style="padding:12px 22px" onclick="closeModal();selectExitPerson(${idx})">C'est cette personne</button>`);
-};
-
-window.confirmExitWith = async (sid,personIdx) => {
-  if(!S.user||!['gardien','enseignant','direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
-  const s=DB.students.find(x=>x.id===sid); if(!s) return;
-  const a=window._exitAps[personIdx]; if(!a) return;
-  // PORT-06: block duplicate exit within 2-minute window (race condition between guardians)
-  const recentExit=(DB.scan_log||[]).find(l=>l.sid===sid&&l.type==='exit'&&l.date===today()&&l.status!=='unauthorized');
-  if(recentExit){const [rH,rM]=(recentExit.time||'00:00').split(':').map(Number);const [nH,nM]=nowTime().split(':').map(Number);if((nH*60+nM)-(rH*60+rM)<2){toast('Sortie déjà enregistrée récemment (doublon évité)','warning');return;}}
-  const time=nowTime();
-  const log={id:_uid('sl_'),sid,name:s.name,type:'exit',status:'authorized',label:`Sortie avec ${a.name} ✅`,time,date:today(),
-    by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role,
-    escort_kind:(a.relation||'').includes('Parent principal')?'parent':'autorisee', escort_id:a.id||null, escort_name:a.name};
-  const _rx = await _enregistrerPassage('record_exit_scan',
-    { p_sid:sid, p_escort_kind:log.escort_kind, p_escort_id:log.escort_id,
-      p_escort_name:log.escort_name, p_manual:false }, log);
-  if (!_rx.ok) { showExitDone('red','✕','Sortie refusée',s.name,
-    _rx.raison==='missing_entry' ? "Aucune entrée enregistrée aujourd'hui" :
-    _rx.raison==='duplicate' ? 'Sortie déjà enregistrée' :
-    _rx.raison==='invalid_escort' ? "Cet accompagnant n'est pas autorisé" : 'Refusé par le serveur', nowTime()); return; }
-  if(s.pid) await pushNotif(s.pid,`🚪 ${s.name} a quitté l'école à ${time}. Récupéré(e) par ${a.name}${a.relation?' ('+a.relation+')':''}. Confirmé par : ${S.user.name}`);
-  showExitDone('green','✅','Sortie autorisée',s.name,`Récupéré par ${a.name} (${a.relation||''})`,time);
-  toast(`${s.name} — Sortie avec ${a.name} ✅`,'success');
-  saveToCrypt();
-};
-
-// La vignette « Rentre seul » et le bouton « Part seul » faisaient la même
-// chose par deux chemins distincts — et seul le premier consignait
-// l'accompagnant. Un enfant sorti par le bouton n'apparaissait donc dans
-// aucun relevé des sorties non accompagnées. Un seul chemin désormais.
-window.confirmExitAlone = sid => window.confirmExitSeul(sid);
-
-window.confirmExitRefused = (sid) => {
-  if(!S.user||!['gardien','enseignant','direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
-  const s=(DB.students||[]).find(x=>x.id===sid); if(!s) return;
-  openM(`🚨 Personne inconnue — ${s.name}`,`
-  <div style="background:#fee2e2;border-radius:10px;padding:10px 14px;font-size:13px;color:#991b1b;margin-bottom:14px">
-    Documentez l'incident avant d'alerter la Direction.
-  </div>
-  <div class="form-group"><label class="form-label">Description de la personne *</label>
-    <textarea class="form-input" id="refDesc" rows="3" placeholder="Ex: Homme adulte, chemise rouge, environ 40 ans..." style="resize:none"></textarea>
-  </div>
-  <div class="form-group"><label class="form-label">Photo de la personne (optionnel)</label>
-    <input type="file" accept="image/*" capture="environment" id="refPhoto" class="form-input" style="padding:6px" onchange="previewRefPhoto(this)">
-    <div id="refPhotoPreview" style="margin-top:6px"></div>
-  </div>`,
-  `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
-   <button class="btn btn-danger" onclick="doExitRefused('${sid}')">🚨 Confirmer le refus et alerter</button>`);
-};
+// Le parcours en un seul geste a été retiré le 10 août 2026 : `selectExitPerson`,
+// `confirmExitWith`, `confirmExitSeul`, `confirmExitAlone` et `confirmExitRefused`
+// décidaient et enregistraient dans le même clic, à partir de `DB.aps` lu en
+// direct — donc sans le filtre de validité des accréditations, qui vit dans
+// `get_student_pickup_context`. Une accréditation expirée passait pour valable.
+//
+// La sortie se fait maintenant en deux temps : `enregistrerPresentationPortail`
+// dit QUI se présente, `confirmerDecisionSortie` engage l'école. Voir plus haut.
 window.previewRefPhoto = (input) => {
   const f=input.files[0]; if(!f) return;
   // Cette photo partait à sa résolution d'origine : plusieurs mégaoctets en
