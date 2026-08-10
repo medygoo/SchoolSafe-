@@ -5034,31 +5034,28 @@ window.loginAs = async user => {
   const _sc = DB.settings?.school?.country; if(_sc){ const el=document.getElementById('splashCountry'); if(el) el.textContent=_sc; }
 
   setTimeout(()=>{ $('LS').style.display='none'; $('APP').classList.add('active'); buildUI(); updateSyncIndicator(); toast('Bienvenue '+user.name,'success'); history.pushState({page:'dashboard'},'',''); checkRattrapageReminders(); window._startIdleTimer(); if(!window._iv_autosave) window._iv_autosave=setInterval(()=>{if(S.user&&(DB.users||[]).length>0)saveToCrypt();},30000); if(!window._iv_syncui) window._iv_syncui=setInterval(window.updateSyncIndicator,10000); if(!window._iv_heartbeat) window._iv_heartbeat=setInterval(()=>{if(S.user&&$('PC')&&!$('PC').innerHTML.trim()){toast('App rechargée automatiquement','info');render();}},15000); },450);
-  // Web Push : enregistrer la subscription si VAPID configuré
-  if ('serviceWorker' in navigator && 'PushManager' in window && DB.settings?.vapid_public_key) {
-    navigator.serviceWorker.ready.then(async reg => {
-      try {
-        let sub = await reg.pushManager.getSubscription();
-        if (!sub) {
-          const perm = await Notification.requestPermission();
-          if (perm === 'granted') {
-            const raw = DB.settings.vapid_public_key.replace(/-/g,'+').replace(/_/g,'/');
-            const appKey = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
-            sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
-          }
-        }
-        if (sub) {
-          const j = sub.toJSON();
-          pushSync('push_subscriptions','upsert',{
-            id: sub.endpoint.slice(-32),
-            uid: S.user.id, endpoint: sub.endpoint,
-            auth: j.keys?.auth, p256dh: j.keys?.p256dh,
-            ua: navigator.userAgent.slice(0,100), updated_at: today()
-          });
-        }
-      } catch(e) { console.warn('[PUSH]', e.message); }
-    });
-  }
+  // ── L'ABONNEMENT WEB PUSH A ÉTÉ RETIRÉ LE 10 AOÛT 2026 ──────────────────
+  //
+  // Ce qu'il faisait : il s'abonnait au Web Push avec `vapid_public_key`,
+  // puis écrivait DIRECTEMENT dans `push_subscriptions`.
+  //
+  // Deux vérifications faites ce jour-là, et chacune ferme le chemin :
+  //
+  //  1. la migration `p0_32a_explicit_device_registry_deny_policy` met
+  //     `push_subscriptions` en REFUS TOTAL — « seuls les RPC sécurisés
+  //     peuvent enregistrer un appareil ». L'écriture ne pouvait donc plus
+  //     aboutir, et **rien ne le disait** : l'appareil se croyait enregistré ;
+  //  2. la seule fonction d'enregistrement servie, `register_push_device`,
+  //     refuse tout `provider` autre que `fcm` (`UNSUPPORTED_PROVIDER`).
+  //     Or la décision canonique du 10 août retire Firebase et retient le
+  //     Web Push standard depuis le VPS.
+  //
+  // Il n'existe donc aujourd'hui AUCUN chemin par lequel un appareil puisse
+  // être enregistré. Un repli qui ne peut pas aboutir est pire que pas de
+  // repli : il transforme une absence de contrat en « votre téléphone est
+  // enregistré ». L'écran du centre dit ce qui est vrai, et la demande est
+  // déposée à ChatGPT — voir coordination/DEMANDES_A_CHATGPT.md, P0-30b.
+
 };
 window.logout = () => {
   if (window._authClient) window._authClient.auth.signOut().catch(()=>{});
@@ -9820,69 +9817,325 @@ window.sendUrgentAlert = () => {
 
 // ── NOTIFICATIONS ──
 window._notifPage = window._notifPage || 1;
-R.notifications = () => {
-  const uid=S.user.id, role=S.user.role;
-  const ns = (DB.notifs||[]).filter(n=>n.uid===uid); // COM-11: chaque rôle (y compris direction) ne voit que ses propres notifications
-  const sorted=[...ns].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.time||'').localeCompare(a.time||''));
-  const PAGE_SIZE=25;
-  const _np=window._notifPage||1;
-  const paginated=sorted.slice(0,_np*PAGE_SIZE);
-  // Only mark VISIBLE (paginated) unread notifications as read — not hidden pages
-  const unreadVisible=paginated.filter(n=>!n.read);
-  unreadVisible.forEach(n=>{ n.read=true; });
-  if(unreadVisible.length) {
-    window._patchLot('notifs', {read:true}, unreadVisible.map(n=>n.id));
-    setTimeout(()=>render(),300);
-  }
-  const typeColor={academic:'#2f7bd6',alert:'#ef5b5b',urgent:'#dc2626',info:'#a89c8b',approval:'#d98a2b',receipt:'#1f9d6b',report:'#9b6fd4',correction:'#2f8fa6',correction_dir:'#9b6fd4',message:'#ec4899'};
-  const typeIcon=Object.fromEntries(Object.entries(typeColor).map(([k,v])=>[k,`<div style="width:10px;height:10px;border-radius:50%;background:${v}"></div>`]));
-  const typeBg={academic:'#dbeafe',alert:'#fee2e2',urgent:'#fef2f2',approval:'#fdeccd',receipt:'#d8f3e6',report:'#f0e9fa',info:'#f6ede0',correction:'#d8f3e6',correction_dir:'#f0e9fa',message:'#dbeafe'};
-  const typeBorder={urgent:'#ef5b5b',alert:'#fca5a5'};
-  // unreadTotal = all unread (including hidden pages), for badge display
-  const unreadTotal=sorted.filter(n=>!n.read).length;
-  const hasMore=sorted.length>paginated.length;
-  const remaining=sorted.length-paginated.length;
-  return `
-  <div class="ww-toolbar">
-    <span style="font-size:16px;font-weight:700">Notifications${sorted.length>0?` <span style="font-size:12px;color:var(--text-muted);font-weight:400">(${sorted.length})</span>`:''}</span>
-    <div style="display:flex;gap:6px;align-items:center">
-      ${unreadTotal>0?`<span class="pill pill-blue">${unreadTotal} nouvelle${unreadTotal>1?'s':''}</span>`:'<span style="font-size:12px;color:var(--text-muted)">Tout lu</span>'}
-      ${role==='direction'?`<button class="btn btn-primary btn-sm" onclick="openBroadcastM()" style="font-size:11px;padding:4px 10px">📣 Annonce</button>`:''}
-      ${sorted.length?`<button class="btn btn-outline btn-sm" onclick="clearAllNotifs()" style="font-size:11px;padding:4px 10px">🗑️ Effacer tout</button>`:''}
-    </div>
-  </div>
-  <div class="ww-section">${sorted.length ? paginated.map((n,i)=>`
-  <div class="ww-item notif-drop" ${!n.read?'data-unread="true"':''} style="animation-delay:${i*.04}s;${typeBorder[n.type]?'border-left:4px solid '+typeBorder[n.type]+';border-radius:0 10px 10px 0':''}">
-    <div class="ww-item-icon" style="background:${typeBg[n.type]||'#f6ede0'}">${typeIcon[n.type]||'●'}</div>
-    <div class="ww-item-content">
-      ${n.type==='urgent'?`<div style="font-size:10px;font-weight:700;color:#dc2626;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">⚠️ URGENT</div>`:''}
-      <div class="ww-item-title" style="font-weight:${n.read?500:700};line-height:1.4;white-space:pre-line">${esc(n.msg)}</div>
-      ${n.receipt?`<div style="margin-top:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px">
-        <div style="font-size:12px;font-weight:700;color:#065f46;margin-bottom:4px">🧾 ${esc(n.receipt.num)}</div>
-        <div style="font-size:12px;color:#374151"><strong>${esc(n.receipt.student)}</strong>${n.receipt.mat?' · '+esc(n.receipt.mat):''}</div>
-        <div style="font-size:12px;color:#374151">${esc(n.receipt.type_label)}${n.receipt.trimestre?' · '+esc(n.receipt.trimestre):''} · <strong style="color:#065f46">${_cur()}${n.receipt.amount}</strong></div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px">Reçu par : ${esc(n.receipt.by)}</div>
-        <button onclick="viewReceipt('${n.id}')" style="margin-top:8px;width:100%;padding:8px;background:#243a6b;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">📄 Voir le bordereau</button>
-      </div>`:''}
-      <div class="ww-item-sub">${n.date||''} ${n.time||''}</div>
-    </div>
-  </div>`).join('')+
-  (hasMore?`<div style="text-align:center;padding:16px 0 8px"><button class="btn btn-outline btn-sm" onclick="window._notifPage=(window._notifPage||1)+1;render()" style="font-size:12px">Voir plus (${remaining} restante${remaining>1?'s':''})</button></div>`:'')
-  : '<div style="text-align:center;padding:60px;color:var(--text-muted)"><div style="width:48px;height:48px;border-radius:14px;background:#efe3d3;margin:0 auto 12px;display:flex;align-items:center;justify-content:center"><div style="width:20px;height:20px;border-radius:50%;background:#a89c8b"></div></div>Aucune notification</div>'}</div>`;
+// ════════════════════════════════════════════════════════════════════════════
+//  LE CENTRE UNIQUE DE NOTIFICATIONS — P0-30, issue #66
+//  Backend servi par ChatGPT · P0-30_UNIFIED_NOTIFICATION_CENTER_BACKEND_COMPLETE.md
+// ════════════════════════════════════════════════════════════════════════════
+//
+//  CE QUI EXISTAIT, ET CE QUE ÇA COÛTAIT
+//
+//  L'écran lisait `DB.notifs` en local et n'appelait aucune des six fonctions
+//  servies. Trois conséquences, vérifiées dans le code :
+//
+//   1. « 🗑️ Effacer tout » SUPPRIMAIT les notifications, par
+//      `pushSync('notifs','delete')`. Le contrat dit le contraire, et pour
+//      une raison : **une notification n'est jamais supprimée.** Le jour où
+//      une famille dit « on ne m'a jamais prévenu », c'est cette ligne-là
+//      qu'on relit. Effacer, c'est effacer la preuve qu'on a prévenu.
+//   2. Tout ce qui s'affichait était marqué lu automatiquement — donc
+//      « prise de connaissance » n'existait pas. Une convocation lue en
+//      diagonale valait un accusé de réception.
+//   3. Aucun état d'envoi extérieur. Le parent ne savait pas si son
+//      téléphone allait sonner ou non.
+//
+//  ── UNE SEULE RÉPONSE À « QUEL EST LE TEXTE ? » ──────────────────────────
+//  Le serveur rend `message`, le miroir local porte `msg`. Deux générations
+//  de code, deux noms. On réconcilie à la LECTURE plutôt que de réécrire les
+//  écritures d'une application en service.
+window._notifTexte = (n) => (n && (n.message || n.msg)) || '';
+window._notifTitre = (n) => (n && n.title) || '';
+
+// Les catégories du serveur, dans la langue de l'école. Une catégorie que le
+// serveur connaît et que l'écran ne sait pas nommer s'affiche telle quelle —
+// on ne la cache pas.
+window._NOTIF_CAT = {
+  information:'Information', emergency:'Urgence', convocation:'Convocation',
+  exit_prepared:'Sortie préparée', exit_confirmed:'Sortie confirmée',
+  exit_cancelled:'Sortie annulée', exit_refused:'Sortie refusée', exit_expired:'Sortie expirée',
+  absence:'Absence', lateness:'Retard', homework:'Devoir', assessment:'Évaluation',
+  result_available:'Résultat', teacher_message:'Message d’un enseignant',
+  direction_message:'Message de la Direction', announcement:'Annonce',
+  administrative_reminder:'Rappel administratif', payment:'Paiement',
+  receipt_available:'Reçu disponible', schedule_change:'Changement d’horaire',
+  document_available:'Document disponible', security:'Sécurité',
 };
-window.clearAllNotifs = () => {
-  const uid=S.user.id;
-  // Direction efface uniquement ses propres notifications — pas celles de toute l'école
-  const toDelete = (DB.notifs||[]).filter(n=>n.uid===uid);
-  showC('Effacer mes notifications ?',`${toDelete.length} notification${toDelete.length>1?'s':''} personnelles seront supprimées.`,()=>{
-    // Un parent peut avoir des centaines de notifications : une seule requête
-    // dépasserait la longueur d'URL admise et serait rejetée sans un mot.
-    if(toDelete.length) window._bulkLot('notifs', 'delete', {}, toDelete.map(n=>n.id));
-    DB.notifs=(DB.notifs||[]).filter(n=>n.uid!==uid);
-    saveToCrypt(); toast('🗑️ Notifications effacées','info'); render();
-  });
+window._NOTIF_COUL = {
+  emergency:'#dc2626', security:'#dc2626', exit_refused:'#dc2626',
+  convocation:'#d98a2b', lateness:'#d98a2b', absence:'#d98a2b', exit_expired:'#d98a2b',
+  exit_prepared:'#2f7bd6', exit_confirmed:'#1f9d6b', exit_cancelled:'#6b7280',
+  payment:'#1f9d6b', receipt_available:'#1f9d6b',
+  homework:'#2f7bd6', assessment:'#9b6fd4', result_available:'#9b6fd4',
 };
 
+// L'état d'envoi extérieur, dit honnêtement. Le contrat l'exige au point 12 :
+// « ne jamais annoncer push envoyé sur la seule création ».
+window._NOTIF_PUSH = {
+  sent:         {l:'Envoyée sur le téléphone', c:'#1f9d6b'},
+  queued:       {l:'En file d’envoi',          c:'#d98a2b'},
+  failed:       {l:'Envoi extérieur échoué',   c:'#dc2626'},
+  no_device:    {l:'Aucun appareil enregistré', c:'#6b7280'},
+  not_queued:   {l:'Pas encore mise en file',  c:'#6b7280'},
+  not_requested:{l:'',                          c:''},
+};
+
+window._NOTIF_REFUS = {
+  AUTH_REQUIRED:  'Vous n’êtes pas connecté au serveur.',
+  NOTIFICATION_NOT_FOUND: 'Cette notification n’existe plus.',
+  ACK_NOT_AVAILABLE: 'Cette notification ne demande pas de prise de connaissance.',
+  FORBIDDEN:      'Votre profil n’a pas le droit d’envoyer une notification.',
+  INVALID_PAYLOAD:'Message mal formé.',
+  VALIDATION_ERROR:'Le titre ou le message ne convient pas.',
+  INVALID_CATEGORY:'Catégorie inconnue du serveur.',
+  INVALID_RECIPIENTS:'Liste de destinataires mal formée.',
+  NO_RECIPIENT:   'Aucun destinataire trouvé.',
+  STUDENT_NOT_FOUND:'Cet élève n’existe pas ou il est archivé.',
+  DIRECTION1_REQUIRED_FOR_ROLE_BROADCAST:'Seule la Direction 1 peut écrire à tout un rôle.',
+  RPC_REFUSED:    'Le serveur a refusé sans préciser.',
+  PGRST202:       'Le centre de notifications n’est pas servi par ce serveur.',
+};
+window._notifRefus = (c) => _NOTIF_REFUS[c] || ('Refus du serveur : ' + (c || 'inconnu'));
+
+// ── LE CHARGEMENT ──────────────────────────────────────────────────────────
+// Le serveur est la source. Le miroir local ne sert qu'à ne pas afficher un
+// écran vide pendant l'aller-retour — et quand il sert, l'écran le DIT.
+window._centreEtat = { charge:false, enCours:false, hors_ligne:false, code:null,
+  items:[], unread:0, ack:0, appareils:0, categorie:'' };
+
+window.chargerCentreNotifs = async (categorie) => {
+  if (_centreEtat.enCours) return;
+  _centreEtat.enCours = true;
+  _centreEtat.categorie = categorie || '';
+  const r = await _rpc('get_my_notification_center', {
+    p_limit: 60, p_before: null, p_category: _centreEtat.categorie || null });
+  _centreEtat.enCours = false;
+  if (!r.ok) {
+    // On ne fabrique pas un centre vide qui aurait l'air normal : une lecture
+    // qui ÉCHOUE n'est pas une lecture qui ne trouve RIEN, et confondre les
+    // deux fait croire à un parent qu'on ne lui a rien envoyé.
+    _centreEtat.hors_ligne = true;
+    _centreEtat.code = r.code;
+    _centreEtat.charge = true;
+    render();
+    return;
+  }
+  _centreEtat.hors_ligne = false;
+  _centreEtat.code = null;
+  _centreEtat.charge = true;
+  _centreEtat.items = r.data.items || [];
+  _centreEtat.unread = r.data.unread_count || 0;
+  _centreEtat.ack = r.data.ack_required_count || 0;
+  _centreEtat.appareils = r.data.active_device_count || 0;
+  // Le miroir local suit, pour les pastilles du menu et le mode hors ligne.
+  DB.notifs = _centreEtat.items.map(n => ({...n, msg: _notifTexte(n), uid: S.user.id}));
+  saveToCrypt();
+  render();
+};
+
+// ── LES QUATRE GESTES ──────────────────────────────────────────────────────
+// Aucun n'écrit en local avant le succès serveur. Marquer lu dans le
+// navigateur pendant que le serveur refuse, c'est perdre un accusé.
+window.ouvrirNotification = async (id) => {
+  const n = _centreEtat.items.find(x => x.id === id); if (!n) return;
+  if (!n.opened_at) {
+    const r = await _rpc('mark_my_notification_opened', { p_notification_id: id });
+    if (r.ok) n.opened_at = new Date().toISOString();
+  }
+  window._notifOuverte = (window._notifOuverte === id) ? null : id;
+  render();
+  if (n.action_url && /page=/.test(n.action_url)) {
+    const p = new URLSearchParams(n.action_url.split('?')[1] || '').get('page');
+    if (p && p !== 'notifications' && window.NAV[_roleUI(S.user.role)]?.nav.some(x => x.id === p)) go(p);
+  }
+};
+
+window.marquerNotifLue = async (id) => {
+  const r = await _rpc('mark_my_notification_read', { p_notification_id: id });
+  if (!r.ok) { toast(_notifRefus(r.code), 'error'); return; }
+  await chargerCentreNotifs(_centreEtat.categorie);
+};
+
+window.accuserNotif = async (id) => {
+  const r = await _rpc('acknowledge_my_notification', { p_notification_id: id });
+  if (!r.ok) { toast(_notifRefus(r.code), 'error'); return; }
+  toast('Prise de connaissance enregistrée', 'success');
+  await chargerCentreNotifs(_centreEtat.categorie);
+};
+
+// ARCHIVER, JAMAIS SUPPRIMER. C'est la règle 9 du contrat, et elle protège
+// l'école autant que la famille : archiver masque, il n'efface pas la preuve.
+window.archiverNotif = async (id) => {
+  const r = await _rpc('archive_my_notification', { p_notification_id: id });
+  if (!r.ok) { toast(_notifRefus(r.code), 'error'); return; }
+  await chargerCentreNotifs(_centreEtat.categorie);
+};
+
+window.archiverToutesLues = () => {
+  const lues = _centreEtat.items.filter(n => n.read && !(n.requires_ack && !n.acknowledged_at));
+  if (!lues.length) { toast('Aucune notification lue à archiver', 'info'); return; }
+  showC('Archiver les notifications lues ?',
+    `${lues.length} notification${lues.length>1?'s':''} quitteront cette liste. ` +
+    `Elles ne sont pas supprimées : l’école garde la trace de ce qu’elle a envoyé.`,
+    async () => {
+      for (const n of lues) await _rpc('archive_my_notification', { p_notification_id: n.id });
+      await chargerCentreNotifs(_centreEtat.categorie);
+      toast(`${lues.length} archivée${lues.length>1?'s':''}`, 'success');
+    });
+};
+
+// ── L'APPAREIL ET LA NOTIFICATION EXTÉRIEURE ───────────────────────────────
+//
+//  ÉTAT VÉRIFIÉ LE 10 AOÛT 2026, ET C'EST UN BLOCAGE À SIGNALER :
+//
+//  · le navigateur s'abonnait au Web Push (VAPID) puis écrivait DIRECTEMENT
+//    dans `push_subscriptions`. Depuis la migration
+//    `p0_32a_explicit_device_registry_deny_policy`, cette table est en refus
+//    total : **l'écriture ne pouvait plus aboutir, et rien ne le disait** ;
+//  · la seule fonction d'enregistrement servie, `register_push_device`,
+//    n'accepte que `provider = 'fcm'` — elle refuse tout le reste avec
+//    `UNSUPPORTED_PROVIDER`.
+//
+//  Or la décision canonique du 10 août retire Firebase et retient le **Web
+//  Push standard depuis le VPS**. Il n'existe donc, aujourd'hui, AUCUN chemin
+//  par lequel un appareil puisse être enregistré.
+//
+//  On ne garde pas un repli qui ne peut pas aboutir : il transformerait une
+//  absence de contrat en « votre téléphone est enregistré ». L'écran dit ce
+//  qui est vrai, et la demande est déposée à ChatGPT.
+window.activerNotificationsExterieures = async () => {
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    toast('Ce navigateur ne sait pas recevoir de notifications', 'warning'); return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    toast('Vous avez refusé les notifications — vous les verrez dans SchoolSafe', 'info');
+    render(); return;
+  }
+  // L'autorisation du navigateur est acquise ; l'enregistrement côté serveur
+  // attend le contrat de transport. On le dit, on ne le simule pas.
+  openM('Notifications autorisées', `
+<div style="padding:2px">
+  <p style="margin:0 0 10px">Votre navigateur accepte les notifications de SchoolSafe.</p>
+  <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:11px;padding:12px 14px;font-size:13.5px;color:#92400e;line-height:1.6">
+    <b>L’envoi vers le téléphone n’est pas encore branché.</b><br>
+    Le service d’envoi de l’école est en cours d’installation sur son serveur.
+    En attendant, <b>toutes vos notifications restent dans SchoolSafe</b> —
+    aucune n’est perdue.</div>
+</div>`,
+    `<button class="btn btn-primary" onclick="closeModal()">J’ai compris</button>`);
+  render();
+};
+
+// ── L'ÉCRAN ────────────────────────────────────────────────────────────────
+R.notifications = () => {
+  // Le chargement part au premier rendu, pas avant : appeler le serveur à
+  // chaque `render()` ferait un aller-retour par frappe de clavier.
+  if (!_centreEtat.charge && !_centreEtat.enCours) setTimeout(() => chargerCentreNotifs(''), 60);
+
+  const role = S.user.role;
+  const items = _centreEtat.items;
+  const ouvert = window._notifOuverte;
+  const permis = ('Notification' in window) ? Notification.permission : 'unsupported';
+
+  // Les catégories réellement présentes, pas la liste théorique des vingt-deux.
+  const cats = [...new Set(items.map(n => n.category).filter(Boolean))].sort();
+
+  const ligne = (n) => {
+    const cat = _NOTIF_CAT[n.category] || n.category || 'Information';
+    const coul = _NOTIF_COUL[n.category] || '#a89c8b';
+    const urgent = n.priority === 'urgent' || n.priority === 'high';
+    const ackDu = n.requires_ack && !n.acknowledged_at;
+    const push = _NOTIF_PUSH[n.push_status] || null;
+    const estOuvert = ouvert === n.id;
+    const quand = (n.created_at || '').slice(0, 16).replace('T', ' à ');
+    return `
+  <div class="ww-item" style="align-items:flex-start;${ackDu?'border-left:4px solid #d98a2b;':n.read?'':'border-left:4px solid '+coul+';'}${n.read?'':'background:var(--bg-secondary,#f8fafc);'}border-radius:0 11px 11px 0">
+    <div class="ww-item-icon" style="background:${coul}1f;flex:none">
+      <div style="width:10px;height:10px;border-radius:50%;background:${coul}"></div></div>
+    <div class="ww-item-content" style="flex:1;min-width:0;cursor:pointer" onclick="ouvrirNotification(${JSON.stringify(n.id)})">
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:3px">
+        <span style="font-size:9.5px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;color:${coul}">${esc(cat)}</span>
+        ${urgent?`<span style="font-size:9px;font-weight:900;color:#fff;background:#dc2626;border-radius:999px;padding:1px 7px">URGENT</span>`:''}
+        ${ackDu?`<span style="font-size:9px;font-weight:900;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:999px;padding:1px 7px">À CONFIRMER</span>`:''}
+        <span style="font-size:10.5px;color:var(--text-muted);margin-left:auto">${esc(quand)}</span>
+      </div>
+      ${_notifTitre(n)?`<div style="font-weight:${n.read?600:800};font-size:14px;margin-bottom:2px">${esc(_notifTitre(n))}</div>`:''}
+      <div style="font-weight:${n.read?400:600};font-size:13px;line-height:1.5;white-space:pre-line;color:${n.read?'var(--text-secondary)':'var(--text-primary,inherit)'}${estOuvert?'':';display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden'}">${esc(_notifTexte(n))}</div>
+      ${estOuvert?`<div style="font-size:11px;color:var(--text-muted);margin-top:7px;line-height:1.5">
+        ${n.created_by_name?`De ${esc(n.created_by_name)}${n.created_by_role?' · '+esc(n.created_by_role):''}<br>`:''}
+        ${push && push.l?`<span style="color:${push.c};font-weight:700">${esc(push.l)}</span>`:''}
+      </div>`:''}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px;flex:none">
+      ${ackDu?`<button class="btn btn-sm" style="background:#fef3c7;border:1.5px solid #fcd34d;color:#92400e;font-weight:800;font-size:11px;white-space:nowrap" onclick="accuserNotif(${JSON.stringify(n.id)})">J’ai pris connaissance</button>`:''}
+      ${!n.read?`<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="marquerNotifLue(${JSON.stringify(n.id)})">Marquer lu</button>`:''}
+      ${!ackDu?`<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="archiverNotif(${JSON.stringify(n.id)})">Archiver</button>`:''}
+    </div>
+  </div>`;
+  };
+
+  return `
+  <div class="ww-toolbar" style="flex-wrap:wrap;gap:8px">
+    <span style="font-size:16px;font-weight:800">Notifications</span>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto">
+      ${_centreEtat.unread?`<span class="pill pill-blue">${_centreEtat.unread} non lue${_centreEtat.unread>1?'s':''}</span>`:'<span style="font-size:12px;color:var(--text-muted)">Tout lu</span>'}
+      ${_centreEtat.ack?`<span class="pill" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d">${_centreEtat.ack} à confirmer</span>`:''}
+      <button class="btn btn-outline btn-sm" style="font-size:11px" onclick="chargerCentreNotifs(_centreEtat.categorie)">↻ Actualiser</button>
+      ${role==='direction'?`<button class="btn btn-primary btn-sm" style="font-size:11px" onclick="openBroadcastM()">📣 Annonce</button>`:''}
+    </div>
+  </div>
+
+  ${_centreEtat.hors_ligne?`
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:12px 15px;margin-bottom:12px;font-size:13px;color:#991b1b;line-height:1.6">
+    <b>Le centre n’a pas pu être lu sur le serveur.</b><br>
+    Ce n’est pas « vous n’avez rien reçu » : c’est « je n’ai pas pu regarder ».
+    ${esc(_notifRefus(_centreEtat.code))}
+    <div style="margin-top:8px"><button class="btn btn-sm btn-outline" onclick="chargerCentreNotifs('')">Réessayer</button></div>
+  </div>`:''}
+
+  <div style="background:${permis==='granted'?'var(--bg-secondary,#f8fafc)':'#eff6ff'};border:1px solid ${permis==='granted'?'var(--border-light,#e2e8f0)':'#93c5fd'};border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:12.5px;line-height:1.6;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1;min-width:180px">
+      ${permis==='granted'
+        ? `<b>Notifications autorisées sur cet appareil.</b> ${_centreEtat.appareils
+            ? `${_centreEtat.appareils} appareil${_centreEtat.appareils>1?'s':''} enregistré${_centreEtat.appareils>1?'s':''}.`
+            : `<span style="color:#92400e">L’envoi vers le téléphone n’est pas encore branché — tout reste dans SchoolSafe.</span>`}`
+        : permis==='denied'
+          ? `<b>Les notifications sont bloquées</b> dans les réglages de ce navigateur. Vos messages restent tous ici.`
+          : `<b>Recevoir un avertissement sur ce téléphone ?</b> Vos messages resteront de toute façon dans SchoolSafe.`}
+    </div>
+    ${permis==='default'?`<button class="btn btn-primary btn-sm" onclick="activerNotificationsExterieures()">Activer les notifications</button>`:''}
+  </div>
+
+  ${cats.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+    <button class="btn btn-sm ${_centreEtat.categorie?'btn-outline':'btn-primary'}" style="font-size:11px" onclick="chargerCentreNotifs('')">Toutes</button>
+    ${cats.map(c=>`<button class="btn btn-sm ${_centreEtat.categorie===c?'btn-primary':'btn-outline'}" style="font-size:11px" onclick="chargerCentreNotifs(${JSON.stringify(c)})">${esc(_NOTIF_CAT[c]||c)}</button>`).join('')}
+  </div>`:''}
+
+  <div class="ww-section">
+    ${items.length ? items.map(ligne).join('') : (_centreEtat.charge && !_centreEtat.hors_ligne
+      ? `<div style="text-align:center;padding:44px 20px;color:var(--text-muted)">
+           <div style="font-size:40px;margin-bottom:10px">🔔</div>
+           <div style="font-weight:700;margin-bottom:4px">Aucune notification</div>
+           <div style="font-size:12.5px">${_centreEtat.categorie?'Aucune dans cette catégorie.':'Votre centre est vide.'}</div>
+         </div>`
+      : `<div style="text-align:center;padding:44px 20px;color:var(--text-muted);font-size:13px">Lecture du centre…</div>`)}
+  </div>
+
+  ${items.some(n=>n.read && !(n.requires_ack && !n.acknowledged_at))?`
+  <div style="margin-top:14px;text-align:center">
+    <button class="btn btn-outline btn-sm" onclick="archiverToutesLues()">Archiver les notifications lues</button>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">
+      Archiver n’efface rien. L’école garde la trace de ce qu’elle a envoyé.</div>
+  </div>`:''}
+`;
+};
+
+// `clearAllNotifs` est retirée le 10 août 2026. Elle SUPPRIMAIT les
+// notifications par `pushSync('notifs','delete')`. Le contrat P0-30 l'interdit,
+// et pour une raison qui dépasse la technique : le jour où une famille dit
+// « on ne m'a jamais prévenu », c'est cette ligne-là qu'on relit. Effacer une
+// notification, c'est effacer la preuve qu'on a prévenu.
+//
+// `archiverToutesLues` la remplace : elle masque, elle n'efface pas.
 window.openBroadcastM = () => {
   const cycles=[...new Set(DB.classes.map(c=>c.cycle).filter(Boolean))];
   const cycleLabels={maternelle:'🧸 Maternelle',primaire:'📚 Primaire',secondaire:'🎓 Secondaire',humanites:'🏛️ Humanités'};
@@ -9913,36 +10166,77 @@ window._bcTargetChange = (val) => {
   if(wrap) wrap.style.display=val==='classe'?'':'none';
 };
 
-window.sendBroadcast = () => {
-  if(!S.user||S.user.role!=='direction'){toast('Accès non autorisé','error');return;}
-  const target=($('bc_target')?.value||'').trim();
-  const msg=($('bc_msg')?.value||'').trim();
-  if(!msg){toast('Message requis','error');return;}
-  let recipients=[];
-  if(target==='parents'){ recipients=DB.users.filter(u=>u.role==='parent'); }
-  else if(target==='enseignants'){ recipients=DB.users.filter(u=>u.role==='enseignant'); }
-  else if(target==='all'){ recipients=DB.users.filter(u=>u.role==='parent'||u.role==='enseignant'); }
-  else if(target.startsWith('cycle_')){
-    const cycle=target.slice(6);
-    const classCids=DB.classes.filter(c=>c.cycle===cycle).map(c=>c.id);
-    const pids=new Set(DB.students.filter(s=>classCids.includes(s.cid)&&s.pid).map(s=>s.pid));
-    recipients=DB.users.filter(u=>pids.has(u.id));
-  } else if(target==='classe'){
-    const cid=$('bc_classe')?.value;
-    if(!cid){toast('Sélectionnez une classe','error');return;}
-    const pids=new Set(DB.students.filter(s=>s.cid===cid&&s.pid).map(s=>s.pid));
-    recipients=DB.users.filter(u=>pids.has(u.id));
+// ── UNE SEULE PORTE POUR ÉCRIRE UNE NOTIFICATION ──────────────────────────
+// Avant : l'annonce fabriquait les lignes elle-même et les poussait dans
+// `notifs`. Trois défauts, dont deux invisibles :
+//
+//  · le contrat dit « ne jamais contourner un refus par une écriture directe
+//    dans notifs ». Tant que la RLS accepte, ça marche ; le jour où elle
+//    refuse, l'annonce part dans le vide sans que personne le voie ;
+//  · le navigateur choisissait les destinataires. Un parent retiré de l'école
+//    la veille recevait encore l'annonce ;
+//  · l'identifiant sortait de l'horloge — deux annonces de la même
+//    milliseconde partagent une clé, et une seule survit.
+//
+// `send_school_notification` fait les trois correctement, côté serveur.
+window.sendBroadcast = async () => {
+  if (!S.user || S.user.role !== 'direction') { toast('Accès non autorisé','error'); return; }
+  const cible = ($('bc_target')?.value || '').trim();
+  const msg   = ($('bc_msg')?.value || '').trim();
+  if (!msg) { markFieldError('bc_msg', 'Une annonce sans texte n’apprend rien à personne.'); return; }
+
+  // Le serveur choisit les destinataires à partir de ce qu'on lui DÉSIGNE :
+  // un rôle, une classe, un cycle. On ne lui envoie pas une liste calculée
+  // dans le navigateur — elle serait périmée d'un jour.
+  const envoi = { category:'announcement', title:'Annonce de la Direction',
+                  message: msg, priority:'normal', privacy_level:'normal' };
+
+  if (cible === 'parents')          envoi.target_role = 'parent';
+  else if (cible === 'enseignants') envoi.target_role = 'enseignant';
+  else if (cible === 'classe') {
+    const cid = $('bc_classe')?.value;
+    if (!cid) { toast('Sélectionnez une classe','error'); return; }
+    envoi.class_id = cid;
   }
-  if(!recipients.length){toast('Aucun destinataire trouvé','error');return;}
-  recipients.forEach(u=>{
-    const n={id:'n'+Date.now()+Math.random().toString(36).slice(2,5),uid:u.id,
-      msg:`📣 ${msg}`,time:nowTime(),date:today(),read:false,type:'info',by:S.user.id};
-    DB.notifs.unshift(n); pushSync('notifs','post',n);
-  });
-  logAudit('broadcast',`→ ${target} : ${msg.slice(0,60)}${msg.length>60?'...':''}`);
-  saveToCrypt();
-  toast(`✅ Annonce envoyée à ${recipients.length} destinataire${recipients.length>1?'s':''}`, 'success');
-  closeModal(); render();
+  else if (cible.startsWith('cycle_')) {
+    // Le serveur ne connaît pas « cycle » : on lui donne les classes du cycle,
+    // une par une, et il en déduit les parents à jour.
+    const cycle = cible.slice(6);
+    const classes = (DB.classes||[]).filter(c => c.cycle === cycle);
+    if (!classes.length) { toast('Aucune classe dans ce cycle','error'); return; }
+    let envoyees = 0, refus = null;
+    for (const c of classes) {
+      const r = await _rpc('send_school_notification', {...envoi, class_id: c.id});
+      if (r.ok) envoyees += (r.data.sent_count || r.data.count || 1); else refus = refus || r.code;
+    }
+    closeModal();
+    if (!envoyees) { toast(_notifRefus(refus), 'error'); return; }
+    logAudit('broadcast', `cycle ${cycle} : ${msg.slice(0,60)}`);
+    toast(`Annonce envoyée — ${envoyees} destinataire(s)`, 'success');
+    return;
+  }
+  else if (cible === 'all') {
+    // « Tout le monde » = deux rôles. Deux appels, et on additionne ce que le
+    // serveur dit avoir envoyé — pas ce qu'on croyait envoyer.
+    let envoyees = 0, refus = null;
+    for (const role of ['parent','enseignant']) {
+      const r = await _rpc('send_school_notification', {...envoi, target_role: role});
+      if (r.ok) envoyees += (r.data.sent_count || r.data.count || 0); else refus = refus || r.code;
+    }
+    closeModal();
+    if (!envoyees) { toast(_notifRefus(refus), 'error'); return; }
+    logAudit('broadcast', `tout le monde : ${msg.slice(0,60)}`);
+    toast(`Annonce envoyée — ${envoyees} destinataire(s)`, 'success');
+    return;
+  }
+
+  const r = await _rpc('send_school_notification', envoi);
+  if (!r.ok) { toast(_notifRefus(r.code), 'error'); return; }
+  closeModal();
+  logAudit('broadcast', `${cible} : ${msg.slice(0,60)}${msg.length>60?'...':''}`);
+  const n = r.data.sent_count || r.data.count || 0;
+  toast(n ? `Annonce envoyée — ${n} destinataire(s)` : 'Annonce enregistrée', 'success');
+  if (S.page === 'notifications') chargerCentreNotifs(_centreEtat.categorie);
 };
 
 // ═══════════════════════════════════════════
@@ -11024,13 +11318,20 @@ window.deleteUser = (uid) => {
     if(_clsEn.length) pushSync('classes','patch',{teacher_id_en:null},'id=in.('+_clsEn.map(c=>c.id).join(',')+')');
     if(_clsTit.length) pushSync('classes','patch',{titulaire_id:null},'id=in.('+_clsTit.map(c=>c.id).join(',')+')');
 
-    // Notifications et abonnements aux alertes visent un destinataire qui
-    // n'existe plus : ils ne seront jamais lus et encombrent la base. Les
-    // salaires, primes et évaluations sont en revanche conservés — ce sont des
-    // pièces d'historique, pas des références vivantes.
+    // Le nettoyage des notifications et des appareils appartient au SERVEUR,
+    // et il y est resté sans qu'on le sache. Deux écritures ont été retirées
+    // le 10 août 2026 :
+    //
+    //  · `pushSync('notifs','delete')` — le contrat P0-30 dit qu'une
+    //    notification n'est JAMAIS supprimée. Elle est la preuve que l'école
+    //    a prévenu, et cette preuve survit au compte qui la recevait ;
+    //  · `pushSync('push_subscriptions','delete')` — la table est en refus
+    //    total depuis `p0_32a_explicit_device_registry_deny_policy`. Cette
+    //    ligne ne pouvait pas aboutir, et rien ne le disait.
+    //
+    // On retire seulement le miroir local, pour que l'écran cesse d'afficher
+    // les notifications d'un compte parti.
     DB.notifs=(DB.notifs||[]).filter(x=>x.uid!==uid);
-    pushSync('notifs','delete',{},'uid=eq.'+uid);
-    pushSync('push_subscriptions','delete',{},'uid=eq.'+uid);
 
     DB.users=DB.users.filter(x=>x.id!==uid);
     pushSync('users','delete',{},'id=eq.'+uid);
