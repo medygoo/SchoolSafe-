@@ -2673,6 +2673,10 @@ window._CODE_MSG = {
   // Relevés dans `prepare_account_invitation` version P0-22, en la lisant.
   // Un code qu'on n'a pas prévu s'affiche « Erreur serveur : … » — celui qui
   // le lit ne peut ni le corriger ni le décrire à celui qui dépanne.
+  // Les deux codes du contrat P0-24, servi le 6 août 2026.
+  CONTACT_REQUIRED:                 "Renseignez au moins un numéro OU une adresse e-mail : sans l'un des deux, cette personne ne pourra jamais se connecter.",
+  EMAIL_REQUIRED:                   "L'invitation part par courriel : ce profil n'a pas d'adresse. Ajoutez-en une, ou envoyez-lui un code par WhatsApp.",
+  // Gardé : un serveur encore sur l'ancienne version doit rester lisible.
   CONTACT_SETUP_INCOMPLETE:         "Cette fiche demande une adresse e-mail ET un numéro de téléphone. Complétez-la d'abord.",
   EMAIL_LOGIN_DISABLED:             "La connexion par e-mail est désactivée pour ce compte.",
   PHONE_LOGIN_DISABLED:             "La connexion par téléphone est désactivée pour ce compte.",
@@ -10030,19 +10034,16 @@ window._simpleList = (role, icon, gradient) => {
 //
 // On s'aligne sur le serveur, sans discuter : une liste d'écran plus large que
 // ce que la base accepte ne fait qu'inviter à un refus.
-// Le serveur exige encore les DEUX coordonnées (contrat P0-22). Loms a tranché
-// le 6 août qu'une seule suffit — c'est la demande P0-24, elle n'est pas encore
-// servie. Tant qu'elle ne l'est pas, un enregistrement à une seule coordonnée
-// est refusé par un `VALIDATION_ERROR` qui nomme le champ manquant mais pas la
-// raison. On la donne : « le serveur ne l'accepte pas ENCORE » n'est pas la
-// même chose que « vous avez mal rempli ».
-window._msgChampManquant = (champ, courriel, phone) => {
-  if (champ === 'email' && !courriel && phone)
-    return 'Le serveur exige encore une adresse e-mail en plus du numéro — c’est la demande P0-24 à ChatGPT. En attendant, renseignez les deux.';
-  if (champ === 'phone' && !phone && courriel)
-    return 'Le serveur exige encore un numéro en plus de l’adresse — c’est la demande P0-24 à ChatGPT. En attendant, renseignez les deux.';
-  return null;
-};
+// P0-24 SERVI par ChatGPT le 6 août 2026 — migration `p0_24_single_contact_auth`.
+// `save_school_user_profile_dual_impl` accepte désormais une seule coordonnée
+// et rend `CONTACT_REQUIRED` quand les deux manquent — le code que j'avais
+// proposé, repris tel quel.
+//
+// Le message d'attente qui vivait ici — « le serveur exige ENCORE une adresse…
+// c'est la demande P0-24 » — est donc devenu FAUX. Il a été retiré le jour où
+// la demande a été servie, et pas plus tard : un message qui renvoie vers une
+// demande déjà close envoie chercher au mauvais endroit, et c'est ce jour-là
+// qu'on le croit.
 
 window._D2_AUTORISE = ['enseignant', 'gardien', 'parent'];
 window._d2PeutToucher = (role) => window._D2_AUTORISE.includes(_roleUI(role));
@@ -10355,7 +10356,7 @@ window.saveUser = async () => {
       else if (_res.code === 'PHONE_IN_USE' || _res.code === 'AUTH_PHONE_CHANGE_REQUIRED') markFieldError('usr_phone', _m);
       else if (_res.code === 'VALIDATION_ERROR' && _res.raw && _res.raw.field)
         markFieldError('usr_' + (_res.raw.field === 'email' ? 'email' : _res.raw.field === 'phone' ? 'phone' : 'name'),
-                       window._msgChampManquant(_res.raw.field, courriel, phone) || _m);
+                       _m);
       else toast(_m, 'error');
       return;
     }
@@ -10403,7 +10404,7 @@ window.saveUser = async () => {
       else if (_res.code === 'DUPLICATE_USER') markFieldError('usr_name', _m);
       else if (_res.code === 'VALIDATION_ERROR' && _res.raw && _res.raw.field)
         markFieldError('usr_' + (_res.raw.field === 'email' ? 'email' : _res.raw.field === 'phone' ? 'phone' : 'name'),
-                       window._msgChampManquant(_res.raw.field, courriel, phone) || _m);
+                       _m);
       else toast(_m, 'error');
       return;
     }
