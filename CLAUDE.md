@@ -746,6 +746,42 @@ de quelqu'un à son école.** `_lireMonProfil` réessaie trois fois, 400 ms puis
 rendront la même chose une seconde plus tard : les réessayer ne fait qu'ajouter
 de l'attente à un refus.
 
+### Un compteur n'est pas un registre
+
+**10 août 2026, P0-8.** Les cartes d'élèves tenaient sur trois champs plats
+posés sur `students` : `card_printed` (une bascule), `card_print_date`,
+`card_print_count`. Trois défauts, et chacun se voit par une famille :
+
+| | |
+|---|---|
+| le « duplicata » | incrémentait le compteur et réimprimait **la même carte**. L'ancienne restait valable au portail : une carte perdue dans la rue ouvrait toujours l'école |
+| « imprimé » | était une bascule qu'on pouvait remettre à zéro. La date s'effaçait avec elle, et **rien ne gardait qui avait imprimé** |
+| le QR de la carte | valait `schoolsafe://student/<matricule>` — **non signé**. Le scanner refuse un QR non signé 30 jours après la pose du secret : toute carte imprimée aurait affiché « CARTE PÉRIMÉE » au bout d'un mois, et un matricule connu suffisait à fabriquer le même QR |
+
+Trois leçons, et elles dépassent les cartes :
+
+1. **Un compteur répond « combien », jamais « lequel ».** Dès qu'une pièce
+   peut être remplacée, il faut une ligne par exemplaire : un numéro, un
+   état, un auteur, une date, un motif. Sinon on ne peut ni invalider l'une
+   sans l'autre, ni dire laquelle fait foi.
+2. **Ce qui invalide doit invalider AVANT que le remplaçant existe.** Une
+   seconde à deux cartes valables est une seconde de trop, et l'ordre des
+   deux écritures est la seule chose qui le garantit.
+3. **Deux QR, deux durées de vie, et la différence doit se lire dans le
+   format.** Le quotidien porte une date et six segments ; le permanent
+   porte un numéro de carte et cinq. Un contrôle qui ne sait pas les
+   distinguer applique au permanent la règle du quotidien — et c'est
+   exactement ce qui périmait les cartes.
+
+Corollaire qui vaut pour tout identifiant imprimé : **le QR permanent ne
+porte que le numéro.** Ni nom, ni matricule, ni famille. C'est le registre
+qui dit à qui il appartient — donc une carte perdue cesse d'ouvrir le
+portail **à la seconde où on la déclare**, sans qu'on ait à la récupérer.
+
+`tools/recette-cartes.mjs` exécute les vraies fonctions sur 36 points, et
+`--preuve` retire l'invalidation : **9 points tombent**. Une recette qui ne
+sait dire que « oui » ne vérifie rien.
+
 ### Les gardes de rôle
 
 Toute fonction exposée globalement qui écrit doit vérifier le rôle.

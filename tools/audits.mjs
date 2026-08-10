@@ -31,6 +31,7 @@ const OUTILS = [
   ['contraste',   'audit-contraste-site.mjs',  'les contrastes du site, mesurés'],
   ['connexion',   'audit-contraste-connexion.mjs', "l'écran de connexion, sur photographie"],
   ['telephone',   'audit-telephone.mjs',       'le numéro écrit comme le serveur l’écrit'],
+  ['cartes',      'recette-cartes.mjs',        'le registre des cartes, exécuté'],
 ];
 
 const detail = process.argv.includes('--detail');

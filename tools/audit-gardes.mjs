@@ -17,7 +17,11 @@ const ligneDe = p => { let o = map[0]; for (const x of map) if (x.start <= p) o 
 
 const ast = parse(src, { ecmaVersion: 2022 });
 const ECRIT = /pushSync\s*\(/;
-const GARDE = /S\.user|_requireRole|_denyRole|Accès non autorisé|role\s*===|includes\(S\.user\.role\)|role!==/;
+// `_peutCarte()` est le normaliseur de droit du registre des cartes : il lit
+// `S.user.role` et rien d'autre. L'outil doit reconnaître la CONDITION, pas
+// une syntaxe — sinon on inline `S.user.role` partout juste pour lui plaire,
+// et on se retrouve avec neuf réponses à la même question.
+const GARDE = /S\.user|_requireRole|_denyRole|_peutCarte\s*\(|Accès non autorisé|role\s*===|includes\(S\.user\.role\)|role!==/;
 const LECTURE_SEULE = /^(R\.|render|show|open|print|export|dl|_fit|_b64|_lire|_est|_msg|_school|_cible|_uid|_hash)/;
 
 const suspects = [];

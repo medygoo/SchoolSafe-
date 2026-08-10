@@ -111,7 +111,13 @@ const REGLE = {
   ssPrintCard:                 ['donnee', 'la carte porte déjà l’emblème'],
   exportSSAllCardsZip:         ['donnee', 'la carte porte déjà l’emblème'],
   printClassCards:             ['donnee', 'la carte porte déjà l’emblème'],
-  generateDuplicata:           ['donnee', 'la carte porte déjà l’emblème'],
+  // P0-8 — `imprimerCarte` remplace `generateDuplicata`, retirée le 10 août
+  // 2026. Même classement, et pour la même raison : la carte EST la pièce,
+  // elle porte l'emblème de l'école sur sa face. Un bloc de signatures
+  // au-dessous d'un badge PVC de 86 mm n'aurait aucun sens, et ce qui
+  // engage l'école ici n'est pas un paraphe : c'est le REGISTRE, qui garde
+  // le numéro, l'auteur, la date et le motif de chaque émission.
+  imprimerCarte:               ['donnee', 'la carte porte déjà l’emblème'],
 };
 
 // ── Repérer les documents et ce qu'ils portent ────────────────────────────

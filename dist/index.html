@@ -1887,6 +1887,10 @@ window.DB = {
   convocations: [], timetables: [], approbations: [],
   teacher_notes: [], audit_log: [], teacher_absences: [],
   sanctions: [], medical: [], tenafep: [], exetat: [], evaluations: [],
+  // Le registre annuel des cartes d'élèves — P0-8, issue #63. Une ligne par
+  // carte émise, jamais effacée : c'est l'historique qui fait foi le jour où
+  // une famille conteste, pas la carte qu'elle a en main.
+  student_cards: [],
   salaries: [], advances: [], direct_primes: [],
   fee_types: [], versements: [], journal_entries: [],
   cantine: [], cantine_menus: [], cantine_presence: [],
@@ -3342,6 +3346,7 @@ function _cryptSnap() {
     teacher_absences:DB.teacher_absences||[],
     medical:DB.medical||[],
     tenafep:DB.tenafep||[],
+    student_cards:DB.student_cards||[],
     evaluations:DB.evaluations||[],
     salaries:DB.salaries||[],
     advances:DB.advances||[],
@@ -6117,6 +6122,29 @@ window.showStudentInfo = (sid) => {
       <div><div style="font-weight:700;font-size:14px">${attLabel}</div>${attTime?`<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${attTime}</div>`:''}</div>
     </div>
 
+    ${(() => {
+      // ── LA CARTE, DANS LA FICHE DE L'ÉLÈVE — P0-8 ─────────────────────
+      // Le même bloc pour la Direction et pour l'enseignant, et c'est le
+      // droit qui change, pas l'information : l'enseignant LIT l'état de la
+      // carte de ses élèves, il n'imprime pas. Deux blocs séparés auraient
+      // fini par diverger, comme les neuf copies du classement.
+      const c = _carteActive(sid);
+      const h = _cartesDe(sid);
+      const derniere = h[0] || null;
+      const e = c ? _CARTE_ETATS.active : (derniere ? _CARTE_ETATS[derniere.status] : null);
+      const corps = c
+        ? `<b style="font-family:monospace">${esc(c.card_no)}</b> · ${e.l} · année ${esc(c.year)}`
+        : derniere
+          ? `<b style="font-family:monospace">${esc(derniere.card_no)}</b> · <span style="color:${e.c};font-weight:700">${e.l}</span>${derniere.invalidated_reason?' — '+esc(derniere.invalidated_reason):''}`
+          : 'Aucune carte émise';
+      const fond = c ? _CARTE_ETATS.active : (e || {bg:'var(--bg)', b:'var(--border-light)', c:'var(--text-muted)'});
+      return `<div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Carte d’élève</div>
+      <div style="background:${fond.bg};border:1px solid ${fond.b};border-radius:12px;padding:11px 14px;margin-bottom:14px;font-size:13px;line-height:1.5">
+        ${corps}
+        ${_peutCarte() ? `<div style="margin-top:9px"><button class="btn btn-sm btn-outline" onclick="closeModal();historiqueCartes(${JSON.stringify(sid)})">🕘 Ouvrir le registre</button></div>` : ''}
+      </div>`;
+    })()}
+
     <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Famille</div>
     <div style="background:var(--bg);border-radius:12px;padding:12px 16px;margin-bottom:14px">
       ${s.nom_papa?`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border-light)"><span style="color:var(--text-muted)">Papa</span><span style="font-weight:600">${esc(s.nom_papa)}</span></div>`:''}
@@ -8662,6 +8690,474 @@ window.exportSSAllCardsZip=function(){
   toast('Fenêtre d\'impression ouverte — '+all.length+' élèves','success');
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+//  P0-8 — LE REGISTRE ANNUEL DES CARTES D'ÉLÈVES
+//  Issue #63 · contrat canonique du 10 août 2026 · décision de Loms
+// ════════════════════════════════════════════════════════════════════════════
+//
+//  CE QUI EXISTAIT, ET POURQUOI ÇA NE POUVAIT PAS TENIR
+//
+//  Trois champs plats sur `students` : `card_printed` (une bascule),
+//  `card_print_date`, `card_print_count`. Trois défauts mesurés dans le code :
+//
+//   1. Le « duplicata » n'invalidait RIEN. Il incrémentait un compteur et
+//      réimprimait la même carte. L'ancienne restait valable au portail :
+//      une carte perdue dans la rue ouvrait toujours l'école.
+//   2. « Imprimé » était une bascule qu'on pouvait remettre à zéro. La date
+//      s'effaçait avec elle, et rien ne gardait QUI avait imprimé.
+//   3. Le QR imprimé valait `schoolsafe://student/<matricule>` — non signé.
+//      Le scanner refuse un QR non signé 30 jours après la pose du secret :
+//      TOUTE carte imprimée aujourd'hui aurait cessé d'être acceptée. Et
+//      n'importe qui connaissant un matricule fabriquait le même QR.
+//
+//  UNE CARTE N'EST PAS UN COMPTEUR, C'EST UNE PIÈCE D'IDENTITÉ SCOLAIRE.
+//  Elle a un numéro, une année, un état, un auteur, et une histoire qu'on
+//  n'efface jamais. Le registre ci-dessous tient cela.
+//
+//  ── LE MOMENT DE L'ÉCRITURE ────────────────────────────────────────────
+//  L'aperçu n'écrit rien. Seule la confirmation d'impression écrit au
+//  registre. C'est la règle 9 de l'issue #63, et elle a une raison : on
+//  ouvre un aperçu dix fois pour vérifier une photo, on n'imprime qu'une.
+//
+//  ── CE QUE LE SERVEUR DOIT ENCORE FAIRE — demandé à ChatGPT ────────────
+//  Le numéro de carte et la signature du QR permanent appartiennent au
+//  serveur. Ici ils sont calculés dans le navigateur et **marqués comme
+//  provisoires** : `numero_provisoire:true`. Ce n'est pas un contournement,
+//  c'est un état déclaré, que `issue_student_card` remplacera. Voir le
+//  compte rendu déposé sur l'issue #63.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Les cinq états d'une carte. `active` est le seul qui ouvre le portail.
+window._CARTE_ETATS = {
+  active:      {l:'Active',       c:'#1f9d6b', bg:'#f0fdf4', b:'#6ee7b7'},
+  remplacee:   {l:'Remplacée',    c:'#6b7280', bg:'#f8fafc', b:'#e2e8f0'},
+  perdue:      {l:'Perdue',       c:'#dc2626', bg:'#fef2f2', b:'#fca5a5'},
+  deterioree:  {l:'Détériorée',   c:'#d98a2b', bg:'#fffbeb', b:'#fcd34d'},
+  revoquee:    {l:'Révoquée',     c:'#7f1d1d', bg:'#fef2f2', b:'#ef4444'},
+};
+
+// Les cinq motifs d'émission. Les trois derniers invalident la carte en cours.
+window._CARTE_TYPES = {
+  initiale:                {l:'Carte initiale',            i:'🪪', remplace:false},
+  renouvellement:          {l:'Renouvellement annuel',     i:'🔄', remplace:true},
+  duplicata_perte:         {l:'Duplicata — perte',         i:'🚩', remplace:true},
+  duplicata_deterioration: {l:'Duplicata — détérioration', i:'🩹', remplace:true},
+  correction:              {l:'Correction d’informations', i:'✏️', remplace:true},
+};
+
+window._anneeScolaire = () => (DB.settings?.year) || (DB.settings?.currentYear) ||
+  (new Date().getFullYear() + '-' + (new Date().getFullYear() + 1));
+
+// ── UNE SEULE RÉPONSE À « QUELLE EST SA CARTE ? » ──────────────────────────
+// Neuf écrans posent la question ; ils appellent tous ceci. La leçon des neuf
+// copies du classement a coûté assez cher pour ne pas la recommencer.
+window._cartesDe = (sid, annee) => (DB.student_cards || [])
+  .filter(c => c.sid === sid && (!annee || c.year === annee))
+  .sort((a, b) => String(b.issued_at || '').localeCompare(String(a.issued_at || '')));
+
+window._carteActive = (sid, annee) =>
+  _cartesDe(sid, annee || _anneeScolaire()).find(c => c.status === 'active') || null;
+
+// ── LE NUMÉRO ──────────────────────────────────────────────────────────────
+// Séquentiel par année scolaire, comme un registre de délivrance : une
+// administration doit pouvoir demander « montrez-moi le n° 42 ».
+// PROVISOIRE tant que le serveur ne l'attribue pas — voir l'en-tête.
+window._carteNumero = (annee) => {
+  const an = annee || _anneeScolaire();
+  const n = (DB.student_cards || []).filter(c => c.year === an).length + 1;
+  return 'LS-' + an + '-' + String(n).padStart(4, '0');
+};
+
+// ── LE QR PERMANENT ────────────────────────────────────────────────────────
+// Il est DISTINCT du QR quotidien, et la différence se lit dans le format :
+//
+//    quotidien  schoolsafe://student/{mat}/{YYYYMMDD}/{sig}   — 6 segments
+//    permanent  schoolsafe://card/{numero}/{sig}              — 5 segments
+//
+// Le permanent ne porte ni date d'expiration ni donnée familiale : seulement
+// le numéro de carte, qui ne dit rien tout seul. C'est le registre qui dit si
+// ce numéro est actif, à qui il appartient et pour quelle année — donc une
+// carte perdue cesse d'ouvrir le portail à la seconde où on la déclare, sans
+// qu'on ait besoin de la récupérer.
+window._carteQR = async (numero) => {
+  const secret = DB.settings?.qr_secret;
+  if (!secret) return null;   // pas de secret : on ne fabrique pas un faux
+  const sig = await _hmacSign(secret, 'card:' + numero);
+  return 'schoolsafe://card/' + numero + '/' + sig;
+};
+
+// ── LE SEUL DROIT QUI COMPTE ───────────────────────────────────────────────
+// Loms, 10 août 2026 : « on fait maternelle et primaire pour la carte,
+// direction 1 et 2 ». Les deux Directions ont les mêmes droits sur les
+// cartes — c'est un écart assumé avec la matrice de l'issue #63, qui
+// réservait la déclaration de perte à Direction 1. Signalé à ChatGPT.
+window._peutCarte = () => !!S.user && ['direction', 'direction2'].includes(S.user.role);
+
+// ── INVALIDER ──────────────────────────────────────────────────────────────
+// Rien n'est supprimé, jamais. Une carte change d'état, et l'état garde qui,
+// quand et pourquoi. Une invalidation sans auteur ne vaut rien : le jour où
+// une famille conteste, c'est cette ligne-là qu'on lit.
+window._carteInvalider = (carte, etat, motif, remplacantId) => {
+  carte.status = etat;
+  carte.invalidated_at = new Date().toISOString();
+  carte.invalidated_by = S.user?.id || null;
+  carte.invalidated_by_name = window._acteur();
+  carte.invalidated_reason = motif || null;
+  if (remplacantId) carte.replaced_by = remplacantId;
+  pushSync('student_cards', 'patch', {
+    status: carte.status, invalidated_at: carte.invalidated_at,
+    invalidated_by: carte.invalidated_by, invalidated_by_name: carte.invalidated_by_name,
+    invalidated_reason: carte.invalidated_reason, replaced_by: carte.replaced_by || null,
+  }, 'id=eq.' + carte.id);
+};
+
+// ── L'ÉCRAN D'ÉMISSION ─────────────────────────────────────────────────────
+window.ouvrirEmissionCarte = (sid, typeSuggere) => {
+  if (!_peutCarte()) { toast('Seule la Direction émet les cartes', 'error'); return; }
+  const s = (DB.students || []).find(x => x.id === sid);
+  if (!s) { toast('Élève introuvable', 'error'); return; }
+
+  const an = _anneeScolaire();
+  const active = _carteActive(sid, an);
+  const cl = (DB.classes || []).find(c => c.id === s.cid);
+
+  // Ne rien produire vaut mieux que produire faux : une carte sans photo ne
+  // sert à rien au portail, une carte sans matricule ne se scanne pas.
+  const manque = [];
+  if (!s.photo) manque.push('la photo');
+  if (!s.mat)   manque.push('le matricule');
+  if (!s.dob)   manque.push('la date de naissance');
+  if (!s.cid)   manque.push('la classe');
+  if (manque.length) {
+    openM('Dossier incomplet',
+      `<div style="padding:6px 2px"><p style="margin:0 0 10px">La carte de <b>${esc(s.name)}</b> ne peut pas être émise : il manque <b>${manque.join(', ')}</b>.</p>
+       <p style="margin:0;font-size:13px;color:var(--text-secondary)">Complétez la fiche de l’élève, puis revenez ici.</p></div>`,
+      `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`);
+    return;
+  }
+
+  const defaut = typeSuggere || (active ? 'duplicata_perte' : 'initiale');
+  const opts = Object.entries(_CARTE_TYPES).map(([k, v]) => {
+    // Une carte initiale n'a de sens que s'il n'y en a pas déjà une active.
+    const off = (k === 'initiale' && active) || (k !== 'initiale' && !active);
+    return `<option value="${k}"${k === defaut ? ' selected' : ''}${off ? ' disabled' : ''}>${v.i} ${v.l}${off ? ' — impossible ici' : ''}</option>`;
+  }).join('');
+
+  openM(`Émettre une carte — ${s.name}`, `
+<div style="padding:2px">
+  ${active ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#92400e">
+    <b>Une carte est active : ${esc(active.card_no)}.</b><br>
+    Émettre une nouvelle carte la rendra <b>immédiatement invalide au portail</b>.
+    Elle restera dans l’historique — rien n’est effacé.</div>` : ''}
+
+  <label class="form-label">Motif de l’émission</label>
+  <select class="form-input" id="carteType" onchange="window._carteMajMotif()">${opts}</select>
+
+  <div id="carteMotifBloc" style="margin-top:12px"></div>
+
+  <label class="form-label" style="margin-top:12px">Photo de la carte</label>
+  <div style="display:flex;gap:10px;align-items:center;background:var(--bg-secondary,#f8fafc);border-radius:10px;padding:10px">
+    <div style="width:46px;height:56px;border-radius:7px;overflow:hidden;flex:none;background:#efe3d3">
+      ${s.photo ? `<img src="${s.photo}" style="width:100%;height:100%;object-fit:cover">` : ''}</div>
+    <div style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary)">
+      La photo actuelle de la fiche est utilisée et <b>conservée avec la carte</b> :
+      changer la photo de l’élève plus tard ne réécrit pas les cartes déjà émises.</div>
+  </div>
+
+  <label class="form-label" style="margin-top:12px">Note administrative <span style="font-weight:400;color:var(--text-muted)">(facultative)</span></label>
+  <input class="form-input" id="carteNote" maxlength="180" placeholder="Ex. remise en main propre au parent">
+
+  <div style="margin-top:14px;padding:10px 12px;background:var(--bg-secondary,#f8fafc);border-radius:10px;font-size:12px;color:var(--text-secondary)">
+    <b>Année ${esc(an)}</b> · ${esc(cl ? cl.name : '—')} · matricule ${esc(s.mat)}<br>
+    Le numéro de carte est attribué à la confirmation. <b>Ouvrir l’aperçu n’écrit rien.</b>
+  </div>
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-primary" onclick="confirmerEmissionCarte(${JSON.stringify(sid)})">Confirmer et imprimer</button>`);
+  window._carteMajMotif();
+};
+
+// Le motif n'est obligatoire que là où il engage : une perte et une
+// détérioration se déclarent, un renouvellement d'année n'a rien à déclarer.
+window._carteMajMotif = () => {
+  const t = document.getElementById('carteType')?.value;
+  const b = document.getElementById('carteMotifBloc');
+  if (!b) return;
+  const besoin = {
+    duplicata_perte:         'Où et quand la carte a-t-elle été perdue ?',
+    duplicata_deterioration: 'Qu’est-il arrivé à la carte ?',
+    correction:              'Qu’est-ce qui était faux sur la carte ?',
+  }[t];
+  b.innerHTML = besoin
+    ? `<label class="form-label">Motif <span style="color:#dc2626">obligatoire</span></label>
+       <input class="form-input" id="carteMotif" maxlength="180" placeholder="${besoin}">`
+    : '';
+};
+
+// ── LA CONFIRMATION — C'EST ICI, ET SEULEMENT ICI, QU'ON ÉCRIT ─────────────
+window.confirmerEmissionCarte = async (sid) => {
+  if (!_peutCarte()) { toast('Seule la Direction émet les cartes', 'error'); return; }
+  const s = (DB.students || []).find(x => x.id === sid);
+  if (!s) return;
+  const type = document.getElementById('carteType')?.value || 'initiale';
+  const motif = (document.getElementById('carteMotif')?.value || '').trim();
+  const note  = (document.getElementById('carteNote')?.value || '').trim();
+
+  if (['duplicata_perte', 'duplicata_deterioration', 'correction'].includes(type) && !motif) {
+    markFieldError('carteMotif', 'Ce motif reste dans le registre — il ne peut pas être vide.');
+    return;
+  }
+
+  const an = _anneeScolaire();
+  const cl = (DB.classes || []).find(c => c.id === s.cid);
+  const ancienne = _carteActive(sid, an);
+  const numero = _carteNumero(an);
+  const carte = {
+    id: _uid('crt_'),
+    sid, year: an,
+    card_no: numero,
+    numero_provisoire: true,     // le serveur remplacera — voir l'en-tête
+    class_id: s.cid || null,
+    class_name: cl ? cl.name : null,
+    status: 'active',
+    emission: type,
+    motif: motif || null,
+    note: note || null,
+    photo: s.photo || null,      // la photo RÉELLEMENT imprimée, figée ici
+    qr_payload: await _carteQR(numero),
+    issued_by: S.user?.id || null,
+    issued_by_name: window._acteur(),
+    issued_at: new Date().toISOString(),
+    print_count: 1,
+    replaces: ancienne ? ancienne.id : null,
+  };
+
+  // L'ancienne devient invalide AVANT que la nouvelle soit active. Dans cet
+  // ordre : une seconde à deux cartes valables est une seconde de trop.
+  if (ancienne) {
+    const etat = type === 'duplicata_perte' ? 'perdue'
+               : type === 'duplicata_deterioration' ? 'deterioree'
+               : 'remplacee';
+    _carteInvalider(ancienne, etat, motif || _CARTE_TYPES[type].l, carte.id);
+  }
+
+  (DB.student_cards = DB.student_cards || []).unshift(carte);
+  pushSync('student_cards', 'post', carte);
+
+  // Les trois anciens champs restent tenus à jour : le reste de l'application
+  // les lit encore, et un champ qu'on cesse d'écrire sans le dire fabrique un
+  // écran qui ment.
+  s.card_printed = true;
+  s.card_print_date = today();
+  s.card_print_count = _cartesDe(sid).length;
+  pushSync('students', 'patch', {
+    card_printed: true, card_print_date: s.card_print_date, card_print_count: s.card_print_count,
+  }, 'id=eq.' + sid);
+
+  saveToCrypt();
+  logAudit('card_issue', `${_CARTE_TYPES[type].l} — ${s.name} — ${numero} — année ${an}` +
+    (ancienne ? ` — remplace ${ancienne.card_no}` : '') + (motif ? ` — motif : ${motif}` : ''), sid);
+  closeModal();
+  toast(`Carte ${numero} émise — ${_CARTE_TYPES[type].l.toLowerCase()}`, 'success');
+  imprimerCarte(carte.id, true);
+  render();
+};
+
+// ── DÉCLARER UNE CARTE PERDUE ──────────────────────────────────────────────
+// Séparé de l'émission, parce que c'est un acte différent : le parent
+// signale la perte aujourd'hui, la nouvelle carte s'imprime peut-être demain.
+// Entre les deux, la carte perdue ne doit plus rien ouvrir.
+window.declarerCartePerdue = (sid) => {
+  if (!_peutCarte()) { toast('Seule la Direction déclare une perte', 'error'); return; }
+  const s = (DB.students || []).find(x => x.id === sid);
+  const c = s && _carteActive(sid);
+  if (!c) { toast('Aucune carte active à déclarer perdue', 'warning'); return; }
+  openM(`Déclarer la carte perdue — ${s.name}`, `
+<div style="padding:2px">
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#991b1b">
+    La carte <b>${esc(c.card_no)}</b> cessera d’ouvrir le portail <b>dès la validation</b>,
+    sans qu’on ait besoin de la récupérer.</div>
+  <label class="form-label">Que s’est-il passé ? <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="perteMotif" maxlength="180" placeholder="Ex. perdue sur le trajet, signalée par la maman">
+  <p style="font-size:12px;color:var(--text-secondary);margin:10px 0 0">
+    La déclaration garde votre nom, la date et le motif. Elle ne s’efface pas.</p>
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-danger" onclick="confirmerPerteCarte(${JSON.stringify(sid)})">Déclarer perdue</button>`);
+};
+
+window.confirmerPerteCarte = (sid) => {
+  if (!_peutCarte()) return;
+  const motif = (document.getElementById('perteMotif')?.value || '').trim();
+  if (!motif) { markFieldError('perteMotif', 'Le motif reste dans le registre — il ne peut pas être vide.'); return; }
+  const s = (DB.students || []).find(x => x.id === sid);
+  const c = _carteActive(sid);
+  if (!c) return;
+  _carteInvalider(c, 'perdue', motif, null);
+  saveToCrypt();
+  logAudit('card_lost', `Carte ${c.card_no} déclarée perdue — ${s.name} — ${motif}`, sid);
+  closeModal();
+  toast(`Carte ${c.card_no} déclarée perdue — elle n’ouvre plus le portail`, 'success');
+  // On enchaîne : la famille est devant le bureau, pas besoin de la faire
+  // revenir demain pour qu'on pense au duplicata.
+  setTimeout(() => ouvrirEmissionCarte(sid, 'duplicata_perte'), 400);
+  render();
+};
+
+// ── RÉVOQUER ───────────────────────────────────────────────────────────────
+window.revoquerCarte = (cid) => {
+  if (!_peutCarte()) { toast('Seule la Direction révoque une carte', 'error'); return; }
+  const c = (DB.student_cards || []).find(x => x.id === cid);
+  if (!c || c.status !== 'active') { toast('Cette carte n’est pas active', 'warning'); return; }
+  const s = (DB.students || []).find(x => x.id === c.sid);
+  openM(`Révoquer la carte ${c.card_no}`, `
+<div style="padding:2px">
+  <p style="margin:0 0 10px">La carte de <b>${esc(s ? s.name : '')}</b> sera invalidée <b>sans</b> qu’un duplicata soit proposé.</p>
+  <label class="form-label">Motif <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="revocMotif" maxlength="180" placeholder="Ex. élève parti de l’école">
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-danger" onclick="confirmerRevocation(${JSON.stringify(cid)})">Révoquer</button>`);
+};
+
+window.confirmerRevocation = (cid) => {
+  if (!_peutCarte()) return;
+  const motif = (document.getElementById('revocMotif')?.value || '').trim();
+  if (!motif) { markFieldError('revocMotif', 'Le motif reste dans le registre.'); return; }
+  const c = (DB.student_cards || []).find(x => x.id === cid);
+  if (!c) return;
+  _carteInvalider(c, 'revoquee', motif, null);
+  saveToCrypt();
+  logAudit('card_revoke', `Carte ${c.card_no} révoquée — ${motif}`, c.sid);
+  closeModal();
+  toast(`Carte ${c.card_no} révoquée`, 'success');
+  render();
+};
+
+// ── L'HISTORIQUE — il ne se vide jamais ────────────────────────────────────
+window.historiqueCartes = (sid) => {
+  const s = (DB.students || []).find(x => x.id === sid);
+  if (!s) return;
+  const toutes = _cartesDe(sid);
+  const parAnnee = {};
+  toutes.forEach(c => { (parAnnee[c.year] = parAnnee[c.year] || []).push(c); });
+  const annees = Object.keys(parAnnee).sort().reverse();
+
+  const corps = annees.length ? annees.map(an => `
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:900;letter-spacing:.06em;color:var(--text-muted);text-transform:uppercase;margin-bottom:7px">Année ${esc(an)}</div>
+      ${parAnnee[an].map(c => {
+        const e = _CARTE_ETATS[c.status] || _CARTE_ETATS.remplacee;
+        const t = _CARTE_TYPES[c.emission] || {l: c.emission, i: '·'};
+        return `<div style="background:${e.bg};border:1px solid ${e.b};border-radius:11px;padding:11px 13px;margin-bottom:7px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <b style="font-family:monospace;font-size:13px">${esc(c.card_no)}</b>
+            <span style="font-size:10px;font-weight:900;color:${e.c};background:#fff;border:1px solid ${e.b};border-radius:999px;padding:2px 8px">${e.l}</span>
+            <span style="font-size:11px;color:var(--text-secondary);margin-left:auto">${t.i} ${esc(t.l)}</span>
+          </div>
+          <div style="font-size:11.5px;color:var(--text-secondary);margin-top:6px;line-height:1.55">
+            ${esc(c.class_name || '—')} · émise le ${esc((c.issued_at || '').slice(0, 10))} par ${esc(c.issued_by_name || '—')}
+            ${c.motif ? `<br><span style="color:var(--text-muted)">Motif :</span> ${esc(c.motif)}` : ''}
+            ${c.note ? `<br><span style="color:var(--text-muted)">Note :</span> ${esc(c.note)}` : ''}
+            ${c.invalidated_at ? `<br><span style="color:${e.c};font-weight:700">Invalidée le ${esc(c.invalidated_at.slice(0, 10))} par ${esc(c.invalidated_by_name || '—')}</span>${c.invalidated_reason ? ' — ' + esc(c.invalidated_reason) : ''}` : ''}
+          </div>
+          ${c.status === 'active' && _peutCarte() ? `<div style="display:flex;gap:6px;margin-top:9px">
+            <button class="btn btn-sm btn-outline" style="flex:1" onclick="imprimerCarte(${JSON.stringify(c.id)})">🖨️ Réimprimer</button>
+            <button class="btn btn-sm" style="flex:1;background:#fff7f7;border:1.5px solid #ef4444;color:#7f1d1d;font-weight:700" onclick="closeModal();revoquerCarte(${JSON.stringify(c.id)})">⛔ Révoquer</button>
+          </div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`).join('')
+    : `<div style="text-align:center;padding:30px;color:var(--text-muted)">
+         <div style="font-size:36px;margin-bottom:8px">🪪</div>Aucune carte n’a encore été émise pour cet élève.</div>`;
+
+  openM(`Registre des cartes — ${s.name}`,
+    `<div style="padding:2px">${corps}</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>` +
+    (_peutCarte() ? `<button class="btn btn-primary" onclick="closeModal();ouvrirEmissionCarte(${JSON.stringify(sid)})">Émettre une carte</button>` : ''));
+};
+
+// ── L'APERÇU — il n'écrit rien, et il le dit ───────────────────────────────
+window.apercuCarte = (sid) => {
+  window._ssPreviewSid = sid;
+  if (window.ssRenderPreview) ssRenderPreview();
+  document.getElementById('ss-preview-outer')?.scrollIntoView({behavior: 'smooth'});
+};
+
+// ── L'IMPRESSION ───────────────────────────────────────────────────────────
+// `premiere` vaut true au moment de l'émission : le compteur est déjà à 1.
+// Toute autre ouverture est une RÉIMPRESSION et doit se compter — c'est ce
+// qui permet de voir, dans l'écran de gestion, les cartes réimprimées trois
+// fois dans l'année.
+window.imprimerCarte = (cid, premiere) => {
+  // Imprimer une carte d'élève, c'est produire une pièce d'identité scolaire :
+  // le contrôle est ici, pas seulement dans le rendu du bouton. Cacher un
+  // bouton ne protège rien.
+  if (!_peutCarte()) { toast('Seule la Direction imprime les cartes', 'error'); return; }
+  const c = (DB.student_cards || []).find(x => x.id === cid);
+  if (!c) { toast('Carte introuvable', 'error'); return; }
+  if (!premiere) {
+    c.print_count = (c.print_count || 1) + 1;
+    pushSync('student_cards', 'patch', {print_count: c.print_count}, 'id=eq.' + c.id);
+    saveToCrypt();
+  }
+  const s = (DB.students || []).find(x => x.id === c.sid);
+  if (!s) return;
+  const cl = (DB.classes || []).find(x => x.id === c.class_id);
+  const teacher = cl ? (DB.users || []).find(u => u.id === (cl.titulaire_id || cl.teacher_id)) : null;
+  const patStyle = document.getElementById('ss-pat-style')?.value || 'vignette';
+  const {type} = ssClassType(cl);
+  const patB = ssGetClassPat(cl, 'badge'), patC = ssGetClassPat(cl, 'carte');
+  const built = type === 'badge'
+    ? ssBuildBadge(s, cl, teacher ? teacher.name : '', c.year, patB, patStyle)
+    : ssBuildCarte(s, cl, teacher ? teacher.name : '', c.year, patC, patStyle);
+
+  const fam = window._ssCardFam || 'L';
+  const studio = document.getElementById('ss-card-studio');
+  const col = studio ? {
+    cc: studio.style.getPropertyValue('--ss-cc') || '#556777',
+    soft: studio.style.getPropertyValue('--ss-cc-soft') || '#dadee2',
+    dark: studio.style.getPropertyValue('--ss-cc-dark') || '#1a2228',
+  } : {cc: '#556777', soft: '#dadee2', dark: '#1a2228'};
+  let css = '';
+  try { css = Array.from(document.styleSheets).reduce((a, ss) => {
+    try { return a + Array.from(ss.cssRules).map(r => r.cssText).join('\n'); } catch (e) { return a; } }, ''); } catch (e) {}
+
+  // Le QR imprimé est le PERMANENT — jamais le quotidien. Sans secret posé,
+  // aucun QR ne s'imprime : un QR que le portail refusera vaut moins que pas
+  // de QR du tout, parce qu'il fait croire que la carte fonctionne.
+  const qrId = 'qr_perm_' + c.id.replace(/[^a-z0-9]/gi, '_');
+  const qrScript = c.qr_payload
+    ? `<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+       <script>window.addEventListener('load',function(){try{new QRCode(document.getElementById('${qrId}'),{text:${JSON.stringify(c.qr_payload)},width:80,height:80,correctLevel:QRCode.CorrectLevel.M});}catch(e){}});<\/script>`
+    : '';
+  const bandeau = c.qr_payload ? '' :
+    `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:11px 14px;margin-bottom:16px;font-size:13px;color:#991b1b">
+       <b>Aucun QR permanent sur cette carte.</b> Le secret de signature n’est pas posé
+       dans les réglages de l’école : un QR non signé serait refusé au portail.
+       La carte s’imprime, mais elle ne se scannera pas.</div>`;
+
+  const win = window.open('', '_blank', 'width=1000,height=800');
+  if (!win) { toast('Popup bloqué — autorisez les popups', 'error'); return; }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Carte ${esc(c.card_no)} — ${esc(s.name)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito+Sans:opsz,wght@6..12,700;6..12,800&display=swap" rel="stylesheet">
+<style>body{margin:20px;background:#e9ecf4;font-family:sans-serif}
+.hdr{background:#1e3a5f;color:#fff;padding:13px 18px;border-radius:12px;margin-bottom:16px}
+.hdr h1{margin:0 0 3px;font-size:16px}.hdr p{margin:0;font-size:12px;opacity:.85}
+.btn-print{background:#1446aa;color:#fff;border:0;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:16px}
+@media print{.no-print{display:none}body{background:#fff;padding:0}@page{margin:8mm}.hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+${css}</style>${qrScript}</head><body>
+<div class="no-print"><button class="btn-print" onclick="window.print()">🖨️ Imprimer / PDF</button></div>
+<div class="no-print">${bandeau}</div>
+<div class="hdr"><h1>🪪 ${esc(c.card_no)} — ${esc(s.name)}</h1>
+  <p>${esc(_CARTE_TYPES[c.emission]?.l || c.emission)} · année ${esc(c.year)} · ${esc(c.class_name || '—')} · émise par ${esc(c.issued_by_name || '—')}</p></div>
+<div class="ss-card-studio" data-fam="${fam}" style="display:flex;flex-wrap:wrap;gap:20px;justify-content:center;--ss-cc:${col.cc};--ss-cc-soft:${col.soft};--ss-cc-dark:${col.dark}">
+${built.recto}${built.verso}<div id="${qrId}" style="align-self:center"></div></div>
+</body></html>`);
+  win.document.close();
+  logAudit('card_print', `Impression carte ${c.card_no} — ${s.name}`, c.sid);
+};
+
 // ── CARDS STUDIO — Renderer ──
 R.cards = () => {
   const _g=_requireRole('direction','direction2'); if(_g) return _g;
@@ -8713,19 +9209,52 @@ R.cards = () => {
 
   setTimeout(()=>{if(window._ssPreviewSid)ssRenderPreview();},150);
 
+  // Le registre de l'année en cours, compté une fois pour l'écran entier.
+  const _an=_anneeScolaire();
+  const _reg=(DB.student_cards||[]).filter(c=>c.year===_an);
+  const reg={
+    total:      _reg.length,
+    actives:    _reg.filter(c=>c.status==='active').length,
+    invalidees: _reg.filter(c=>c.status!=='active').length,
+    initiales:  _reg.filter(c=>c.emission==='initiale').length,
+    renouv:     _reg.filter(c=>c.emission==='renouvellement').length,
+    dupPerte:   _reg.filter(c=>c.emission==='duplicata_perte').length,
+    dupDeter:   _reg.filter(c=>c.emission==='duplicata_deterioration').length,
+  };
+
   // La liste des élèves de l'atelier
   const classFilter=window._cardClassFilter||'';
   const nameSearch=(window._cardNameSearch||'').toLowerCase();
+  const etatFilter=window._cardEtatFilter||'';
   let students=allStudents;
   if(classFilter)students=students.filter(s=>s.cid===classFilter);
   if(nameSearch)students=students.filter(s=>(s.name||'').toLowerCase().includes(nameSearch)||(s.mat||'').toLowerCase().includes(nameSearch));
-  const cycleLabel=cl=>{if(!cl)return '';if(cl.cycle==='humanites')return 'Humanités'+(cl.option?' · '+cl.option:'');if(cl.cycle==='maternelle')return 'Maternelle';if(cl.cycle==='primaire')return 'Primaire';if(cl.cycle==='secondaire')return 'Secondaire';return cl.cycle||'';};
+  // Les six questions que la Direction pose vraiment devant l'écran : qui n'a
+  // pas de carte, qui l'a perdue, qui en a plusieurs. Le filtre répond à
+  // celles-là, pas à une liste d'états théoriques.
+  if(etatFilter){
+    students=students.filter(s=>{
+      const c=_carteActive(s.id), h=_cartesDe(s.id);
+      if(etatFilter==='sans')      return !c;
+      if(etatFilter==='active')    return !!c;
+      if(etatFilter==='perdue')    return h.some(x=>x.status==='perdue');
+      if(etatFilter==='duplicata') return h.some(x=>String(x.emission||'').startsWith('duplicata'));
+      if(etatFilter==='multi')     return h.reduce((n,x)=>n+(x.print_count||1),0)>1;
+      return true;
+    });
+  }
+  // Maternelle et primaire — décision de Loms du 10 août 2026. L'école n'a ni
+  // secondaire ni humanités ; les afficher ici proposait un cycle qui n'existe
+  // pas, sur l'écran qui fabrique une pièce d'identité.
+  const cycleLabel=cl=>{if(!cl)return '';if(cl.cycle==='maternelle')return 'Maternelle';if(cl.cycle==='primaire')return 'Primaire';return cl.cycle||'';};
   const cardHtml=students.map(s=>{
     const cl=(DB.classes||[]).find(c=>c.id===s.cid);
     const parent=(DB.users||[]).find(u=>u.id===s.pid);
     const teacher=cl?(DB.users||[]).find(u=>u.id===(cl.titulaire_id||cl.teacher_id)):null;
     const parNm=parent?parent.name:(s.nom_papa||s.nom_maman||'—'), parPh=parent?parent.phone||'—':'—';
     const isComplete=s.photo&&s.name&&s.mat&&s.dob;
+    const carte=_carteActive(s.id), nbCartes=_cartesDe(s.id).length;
+    const et=carte?_CARTE_ETATS.active:null;
     return `<div style="background:var(--bg-card,#fff);border-radius:14px;border:1.5px solid ${isComplete?'var(--border-light,#efe3d3)':'#f59e0b'};padding:14px;display:flex;flex-direction:column;gap:8px">
     <div style="display:flex;gap:10px;align-items:flex-start">
       <div style="width:52px;height:62px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#efe3d3;display:flex;align-items:center;justify-content:center;font-size:20px">${s.photo?`<img src="${s.photo}" style="width:100%;height:100%;object-fit:cover">`:'👤'}</div>
@@ -8737,13 +9266,16 @@ R.cards = () => {
       <div><span style="color:var(--text-muted)">Prof.:</span> <span>${esc(teacher?teacher.name:'—')}</span></div>
     </div>
     ${!isComplete?`<div style="background:#fff3cd;border-radius:8px;padding:6px 8px;font-size:10px;color:#92400e">⚠️ Dossier incomplet</div>`:''}
+    ${carte
+      ? `<div style="background:${et.bg};border:1px solid ${et.b};border-radius:8px;padding:6px 9px;font-size:10.5px;color:${et.c};display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="font-family:monospace">${esc(carte.card_no)}</b><span>·</span><span>${et.l}</span><span style="margin-left:auto;color:var(--text-muted)">émise le ${esc((carte.issued_at||'').slice(0,10))}</span></div>`
+      : `<div style="background:var(--bg-secondary,#f8fafc);border:1px dashed var(--border-light,#e2e8f0);border-radius:8px;padding:6px 9px;font-size:10.5px;color:var(--text-muted)">Aucune carte active pour ${esc(_anneeScolaire())}</div>`}
     <div style="display:flex;gap:6px">
-      <button class="btn btn-outline btn-sm" style="flex:1" onclick="window._ssPreviewSid=${JSON.stringify(s.id)};document.getElementById('ss-student-sel')&&(document.getElementById('ss-student-sel').value=${JSON.stringify(s.id)});ssRenderPreview();document.getElementById('ss-preview-outer')?.scrollIntoView({behavior:'smooth'})">👁 Aperçu</button>
-      <button class="btn btn-primary btn-sm" style="flex:1" onclick="creerCarte(${JSON.stringify(s.id)})" ${!isComplete?'disabled':''}>🪪 Créer la carte</button>
+      <button class="btn btn-outline btn-sm" style="flex:1" onclick="apercuCarte(${JSON.stringify(s.id)});document.getElementById('ss-student-sel')&&(document.getElementById('ss-student-sel').value=${JSON.stringify(s.id)})">👁 Aperçu</button>
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="ouvrirEmissionCarte(${JSON.stringify(s.id)})" ${!isComplete?'disabled title="Complétez le dossier"':''}>${carte?'🔄 Nouvelle carte':'🪪 Émettre'}</button>
     </div>
     <div style="display:flex;gap:6px">
-      <button class="btn btn-sm" style="flex:1;background:${s.card_printed?'#f0fdf4':'var(--bg-secondary,#f8fafc)'};border:1.5px solid ${s.card_printed?'#6ee7b7':'var(--border-light,#e2e8f0)'};color:${s.card_printed?'#065f46':'var(--text-secondary)'};font-weight:700" onclick="markCardPrinted(${JSON.stringify(s.id)})">${s.card_printed?'✅ Imprimé':'⬜ Imprimé'}</button>
-      <button class="btn btn-sm" style="flex:1;background:#fff7f7;border:1.5px solid ${s.card_printed?'#fca5a5':'#e2e8f0'};color:${s.card_printed?'#dc2626':'#9ca3af'};font-weight:700" onclick="generateDuplicata(${JSON.stringify(s.id)})" ${!s.card_printed?'disabled title="Imprimez d\'abord la carte originale"':''}>📋 Duplicata${s.card_print_count>1?' #'+s.card_print_count:''}</button>
+      <button class="btn btn-sm" style="flex:1;background:var(--bg-secondary,#f8fafc);border:1.5px solid var(--border-light,#e2e8f0);color:var(--text-secondary);font-weight:700" onclick="historiqueCartes(${JSON.stringify(s.id)})">🕘 Registre${nbCartes?' · '+nbCartes:''}</button>
+      <button class="btn btn-sm" style="flex:1;background:#fff7f7;border:1.5px solid ${carte?'#fca5a5':'#e2e8f0'};color:${carte?'#dc2626':'#9ca3af'};font-weight:700" onclick="declarerCartePerdue(${JSON.stringify(s.id)})" ${!carte?'disabled title="Aucune carte active"':''}>🚩 Perdue</button>
     </div>
     </div>`;
   }).join('');
@@ -8822,7 +9354,18 @@ R.cards = () => {
       <option value="">Toutes les classes</option>
       ${(DB.classes||[]).map(cl=>`<option value="${esc(cl.id)}"${classFilter===cl.id?' selected':''}>${esc(cl.name)}</option>`).join('')}
     </select>
+    <select class="form-select" style="flex-shrink:0;width:auto;min-width:150px;font-size:13px" onchange="window._cardEtatFilter=this.value;render()">
+      ${[['','Tous les élèves'],['sans','Sans carte active'],['active','Avec une carte active'],['perdue','Une perte déclarée'],['duplicata','Un duplicata émis'],['multi','Réimprimée au moins une fois']]
+        .map(([v,l])=>`<option value="${v}"${etatFilter===v?' selected':''}>${l}</option>`).join('')}
+    </select>
   </div>
+  ${reg.total?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;margin-bottom:12px">
+    ${[['Cartes actives',reg.actives,'#1f9d6b'],['Initiales',reg.initiales,'#2f7bd6'],['Renouvellements',reg.renouv,'#7b5cd6'],
+       ['Duplicatas perte',reg.dupPerte,'#dc2626'],['Duplicatas détérioration',reg.dupDeter,'#d98a2b'],['Invalidées',reg.invalidees,'#6b7280']]
+      .map(([l,n,c])=>`<div style="background:var(--bg-secondary,#f8fafc);border-radius:10px;padding:10px 8px;text-align:center">
+        <div style="font-size:21px;font-weight:800;color:${c}">${n}</div>
+        <div style="font-size:10px;color:var(--text-secondary);line-height:1.3">${l}</div></div>`).join('')}
+  </div>`:''}
   ${students.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">${cardHtml}</div>`:'<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px">Aucun élève trouvé</div>'}
 </div>
 `;
@@ -8856,20 +9399,12 @@ window.saveClassCardStyle=function(cid,cc,soft,dark,pat){
   ssRenderPreview();
 };
 
-window.markCardPrinted=function(sid){
-  if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
-  const s=(DB.students||[]).find(x=>x.id===sid); if(!s) return;
-  s.card_printed=!s.card_printed;
-  s.card_print_date=s.card_printed?today():null;
-  if(s.card_printed&&!s.card_print_count) s.card_print_count=1;
-  saveToCrypt();
-  // `card_print_count` était mis à jour en mémoire sans jamais partir : le
-  // compteur de duplicata repartait de 1 sur tout autre appareil.
-  pushSync('students','patch',{card_printed:s.card_printed,card_print_date:s.card_print_date,card_print_count:s.card_print_count||0},'id=eq.'+sid);
-  logAudit('card_print_status','Carte '+s.name+': '+(s.card_printed?'marquée imprimée':'non imprimée'));
-  render();
-};
-
+// `markCardPrinted` et `generateDuplicata` ont été retirées le 10 août 2026.
+// La première était une BASCULE : on pouvait « dé-imprimer » une carte, la
+// date s'effaçait avec elle, et rien ne gardait qui avait imprimé. La seconde
+// n'invalidait rien — elle incrémentait un compteur et réimprimait la même
+// carte, laissant la perdue valable au portail. Les deux sont remplacées par
+// le registre : `ouvrirEmissionCarte` et `declarerCartePerdue`.
 window.printClassCards=function(cid){
   const cl=(DB.classes||[]).find(c=>c.id===cid); if(!cl) return;
   const students=(DB.students||[]).filter(s=>s.cid===cid&&!_estBloque(s));
@@ -8916,55 +9451,6 @@ ${cardsHtml}
   win.document.close();
   logAudit('print_class_cards','Impression classe: '+cl.name+' ('+students.length+' élèves)');
   toast('✅ Fenêtre d\'impression ouverte — '+students.length+' carte'+( students.length>1?'s':''),'success');
-};
-
-window.generateDuplicata=function(sid){
-  if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
-  const s=(DB.students||[]).find(x=>x.id===sid); if(!s) return;
-  if(!s.card_printed){toast('Imprimez d\'abord la carte originale','warning');return;}
-  s.card_print_count=(s.card_print_count||1)+1;
-  const count=s.card_print_count;
-  saveToCrypt();
-  pushSync('students','patch',{card_print_count:count},'id=eq.'+sid);
-  logAudit('card_duplicata','DUPLICATA carte n°'+count+': '+s.name);
-  const cl=(DB.classes||[]).find(c=>c.id===s.cid);
-  const teacher=cl?(DB.users||[]).find(u=>u.id===(cl.titulaire_id||cl.teacher_id)):null;
-  const teacherName=teacher?teacher.name:'';
-  const year=(DB.settings?.year)||(DB.settings?.currentYear)||(new Date().getFullYear()+'-'+(new Date().getFullYear()+1));
-  const patStyle=document.getElementById('ss-pat-style')?.value||'vignette';
-  const {type}=ssClassType(cl);
-  const patB=ssGetClassPat(cl,'badge'),patC=ssGetClassPat(cl,'carte');
-  const built=type==='badge'?ssBuildBadge(s,cl,teacherName,year,patB,patStyle):ssBuildCarte(s,cl,teacherName,year,patC,patStyle);
-  const fam=window._ssCardFam||'L';
-  const studio=document.getElementById('ss-card-studio');
-  const col=studio?{cc:studio.style.getPropertyValue('--ss-cc')||'#556777',soft:studio.style.getPropertyValue('--ss-cc-soft')||'#dadee2',dark:studio.style.getPropertyValue('--ss-cc-dark')||'#1a2228'}:{cc:'#556777',soft:'#dadee2',dark:'#1a2228'};
-  const css=Array.from(document.styleSheets).reduce((a,ss)=>{try{return a+Array.from(ss.cssRules).reduce((b,r)=>b+r.cssText,'');}catch(e){return a;};},'');
-  // Injecter le tampon DUPLICATA dans le recto
-  const rectoWithStamp=built.recto.replace(/(<div class="art[^>]*>)/,'$1<div class="ss-duplicata-stamp">DUPLICATA</div>');
-  const win=window.open('','_blank');
-  if(!win){toast('Popup bloqué — autorisez les popups','error');return;}
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>DUPLICATA — ${esc(s.name)}</title>
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito+Sans:opsz,wght@6..12,700;6..12,800;6..12,900&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-<style>*{box-sizing:border-box}body{margin:0;padding:24px;font-family:sans-serif;background:#fff5f5}
-.dup-hdr{background:#dc2626;color:#fff;padding:12px 18px;border-radius:10px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between}
-.dup-hdr h1{margin:0;font-size:16px}.dup-hdr p{margin:0;font-size:11px;opacity:.85}
-.btn-print{background:#dc2626;color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer}
-@media print{.no-print{display:none}body{background:#fff;padding:0}.dup-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-${css}</style></head><body>
-<div class="no-print" style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
-  <button class="btn-print" onclick="window.print()">🖨️ Imprimer DUPLICATA</button>
-  <span style="font-size:12px;color:#6b7280">Duplicata n°${count} · ${today()}</span>
-</div>
-<div class="dup-hdr"><h1>📋 DUPLICATA — ${esc(s.name)}</h1><p>Copie n°${count} · Original imprimé le ${s.card_print_date||'—'}</p></div>
-<div class="ss-card-studio" data-fam="${fam}" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;--ss-cc:${col.cc};--ss-cc-soft:${col.soft};--ss-cc-dark:${col.dark}">
-  ${rectoWithStamp}
-  ${built.verso}
-</div>
-<script>try{const el=document.querySelector('.qr-big,.qr-side');if(el&&el.id)new QRCode(el,{text:${JSON.stringify(built.qr)},width:el.offsetWidth||80,height:el.offsetHeight||80,correctLevel:QRCode.CorrectLevel.M});}catch(e){}<\/script>
-</body></html>`);
-  win.document.close();
-  toast('📋 Duplicata n°'+count+' généré','info');
 };
 
 // Les commandes de cartes passent par l'Edge Function centrale : elles
@@ -9197,31 +9683,12 @@ window.migratePhotosToStorage = async (opts) => {
 //
 //  UNE SEULE ÉCOLE, AUCUN TIERS : plus rien ne sort.
 // ════════════════════════════════════════════════════════════════════════════
-window.creerCarte = async (sid) => {
-  // Direction 1 seule : la carte est une pièce d'identité scolaire. La créer,
-  // c'est décider qu'un enfant est bien élève de cette école cette année-là.
-  if (!S.user || (window._normRole ? window._normRole(S.user.role) : S.user.role) !== 'direction') {
-    toast("Seule la Direction crée les cartes", 'error'); return;
-  }
-  const s = (DB.students||[]).find(x => x.id === sid);
-  if (!s) { toast('Élève introuvable','error'); return; }
-  const manque = [];
-  if (!s.photo) manque.push('la photo');
-  if (!s.mat)   manque.push('le matricule');
-  if (!s.dob)   manque.push('la date de naissance');
-  if (!s.cid)   manque.push('la classe');
-  if (manque.length) {
-    // Ne rien produire vaut mieux que produire faux : une carte sans photo ne
-    // sert à rien au portail, et une carte sans matricule ne se scanne pas.
-    toast(`Dossier incomplet — il manque ${manque.join(', ')}`, 'error');
-    return;
-  }
-  window._ssPreviewSid = sid;
-  ssRenderPreview();
-  document.getElementById('ss-preview-outer')?.scrollIntoView({behavior:'smooth'});
-  logAudit('card_create', `${s.name} — ${(DB.classes||[]).find(c=>c.id===s.cid)?.name||''} — année ${DB.settings?.year||''} — par ${window._acteur()}`, sid);
-  toast('Carte prête — imprimez-la, puis marquez-la « imprimée »', 'success');
-};
+// `creerCarte` est retirée le 10 août 2026 : elle n'écrivait rien au registre
+// — elle ouvrait l'aperçu et écrivait une ligne d'audit. `ouvrirEmissionCarte`
+// la remplace, et c'est la CONFIRMATION qui écrit, pas l'aperçu.
+//
+// La décision de Loms du 4 août reste entière et le registre la respecte :
+// l'école imprime elle-même, aucune donnée d'élève ne sort vers un tiers.
 
 // ── LOCKDOWN ──
 R.lockdown = () => { const _g=_requireRole('direction','direction2'); if(_g) return _g; return `
@@ -12433,7 +12900,33 @@ window.showChildQR = (sid) => {
     <div style="font-size:14px;color:var(--text-secondary);margin-bottom:4px">${cl?esc(cl.name):''} · ${esc(s.mat)}</div>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${esc(DB.settings.school?.name||'SchoolSafe')}</div>
     <div id="childQRCanvas" style="display:flex;justify-content:center;margin-bottom:12px"></div>
-    <div style="font-size:12px;color:var(--text-muted)">Présentez cette carte au gardien lors du retrait de l'enfant</div>
+    <div style="font-size:12px;color:var(--text-muted)">Ce code change chaque jour. Présentez-le au gardien lors du retrait de l'enfant.</div>
+
+    ${(() => {
+      // ── LA CARTE PHYSIQUE, VUE PAR LE PARENT — P0-8 ────────────────────
+      // Il la CONSULTE, il ne l'émet pas : ni duplicata, ni impression, ni
+      // déclaration de perte. Quand elle est perdue ou remplacée, il doit le
+      // voir écrit — sinon il présente une carte morte au portail et c'est
+      // l'enfant qui attend devant la grille.
+      const c = window._carteActive ? _carteActive(sid) : null;
+      const perdue = window._cartesDe ? _cartesDe(sid).find(x => x.status === 'perdue') : null;
+      if (c) {
+        const e = window._CARTE_ETATS.active;
+        return `<div style="margin-top:16px;text-align:left;background:${e.bg};border:1px solid ${e.b};border-radius:13px;padding:12px 14px">
+          <div style="font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:${e.c};margin-bottom:6px">Carte de l’école</div>
+          <div style="font-family:monospace;font-size:15px;font-weight:800">${esc(c.card_no)}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:5px;line-height:1.55">
+            ${esc(e.l)} · année ${esc(c.year)}<br>Émise le ${esc((c.issued_at||'').slice(0,10))}</div>
+        </div>`;
+      }
+      if (perdue) {
+        return `<div style="margin-top:16px;text-align:left;background:#fef2f2;border:1px solid #fca5a5;border-radius:13px;padding:12px 14px;font-size:12.5px;color:#991b1b;line-height:1.55">
+          <b>La carte de l’école a été déclarée perdue.</b><br>
+          Elle n’ouvre plus le portail. Passez à la Direction pour en obtenir une nouvelle.</div>`;
+      }
+      return `<div style="margin-top:16px;text-align:left;background:var(--bg-secondary,#f8fafc);border:1px dashed var(--border-light,#e2e8f0);border-radius:13px;padding:12px 14px;font-size:12.5px;color:var(--text-secondary);line-height:1.55">
+        Aucune carte de l’école n’est active pour cette année.<br>La Direction l’émet et vous la remet.</div>`;
+    })()}
   </div>`,
   `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`);
   // Generate QR using same system as cards page
@@ -17081,6 +17574,26 @@ function _decodeQR(raw) {
   // Retourne {mat, qrSig, qrTs} — qrSig/qrTs null si ancien format non signé
   if(!raw) return null;
   let str=raw.trim();
+
+  // ── LE QR PERMANENT DE LA CARTE — P0-8 ────────────────────────────────
+  //   permanent  schoolsafe://card/{numero}/{sig}     — 5 segments
+  //   quotidien  schoolsafe://student/{mat}/{d}/{sig} — 6 segments
+  //
+  // Deux formats, deux durées de vie, et c'est voulu : le QR d'une carte
+  // physique ne peut pas expirer le soir même, et le QR quotidien du parent
+  // ne doit jamais se retrouver imprimé sur une carte. La règle 10 de
+  // l'issue #63 dit exactement cela.
+  //
+  // Le permanent ne porte QUE le numéro de carte — ni matricule, ni nom, ni
+  // rien de la famille. C'est le registre qui dit à qui il appartient : donc
+  // une carte perdue cesse d'ouvrir le portail à la seconde où on la déclare,
+  // sans qu'on ait à la récupérer.
+  if(str.startsWith('schoolsafe://card/')){
+    const p=str.split('/');
+    if(p.length===5) return {carteNo:p[3], carteSig:p[4], mat:null, qrSig:null, qrTs:null};
+    return {carteNo:null, carteSig:null, mat:str, qrSig:null, qrTs:null};
+  }
+
   if(str.startsWith('schoolsafe://student/')||str.startsWith('schoolsafe://verify/')){
     const parts=str.split('/');
     // Nouveau format signé : schoolsafe://student/{mat}/{YYYYMMDD}/{sig8} → 6 segments
@@ -17100,6 +17613,43 @@ function _decodeQR(raw) {
   if(byId) return {mat:byId.mat, qrSig:null, qrTs:null};
   return {mat, qrSig:null, qrTs:null};
 }
+// ── LE QR PERMANENT AU PORTAIL — P0-8 ──────────────────────────────────────
+// Cinq contrôles, dans cet ordre, et chacun a sa propre réponse à l'écran.
+// Un gardien qui lit « refusé » sans savoir pourquoi ne peut ni expliquer à
+// la famille ni alerter la bonne personne : c'est la leçon des quatre pannes
+// derrière un seul message, appliquée d'avance.
+window._resoudreCarteQR = async (numero, sig) => {
+  const secret = DB.settings?.qr_secret;
+  if (!secret) return {ok:false, titre:'CONTRÔLE IMPOSSIBLE',
+    detail:'Le secret de signature n’est pas posé — prévenez la Direction'};
+
+  const attendu = await _hmacSign(secret, 'card:' + numero);
+  if (sig !== attendu) return {ok:false, titre:'CARTE FALSIFIÉE',
+    detail:'Signature invalide — alertez la Direction'};
+
+  const c = (DB.student_cards || []).find(x => x.card_no === numero);
+  if (!c) return {ok:false, titre:'CARTE INCONNUE',
+    detail:'Ce numéro n’est pas au registre de l’école'};
+
+  const s = (DB.students || []).find(x => x.id === c.sid);
+  const nom = s ? s.name : null;
+
+  if (c.status !== 'active') {
+    const e = window._CARTE_ETATS[c.status];
+    return {ok:false, nom, titre:'CARTE ' + (e ? e.l.toUpperCase() : 'INVALIDE'),
+      detail: c.status === 'perdue' ? 'Déclarée perdue — cette carte n’ouvre plus'
+            : c.status === 'remplacee' ? 'Une carte plus récente a été émise'
+            : 'Carte invalidée par la Direction'};
+  }
+  if (c.year !== _anneeScolaire()) return {ok:false, nom, titre:'CARTE D’UNE AUTRE ANNÉE',
+    detail:'Carte ' + c.year + ' — l’année en cours est ' + _anneeScolaire()};
+
+  if (!s) return {ok:false, titre:'ÉLÈVE INTROUVABLE', detail:'Le dossier n’est pas dans cet appareil'};
+  if (s.archived) return {ok:false, nom, titre:'ÉLÈVE ARCHIVÉ', detail:'Cet élève n’est plus inscrit'};
+
+  return {ok:true, mat:s.mat, carte:c, nom};
+};
+
 function _startDecodeLoop(video) {
   const canvas=document.createElement('canvas');
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -17119,10 +17669,16 @@ function _startDecodeLoop(video) {
       if(raw && raw!==lastCode && Date.now()-lastTime>2000){
         lastCode=raw; lastTime=Date.now();
         const _dqr=_decodeQR(raw);
-        if(!_dqr||!_dqr.mat) return;
-        const {mat:_mat,qrSig:_qSig,qrTs:_qTs}=_dqr;
+        if(!_dqr) return;
+        let _mat=_dqr.mat, _qSig=_dqr.qrSig, _qTs=_dqr.qrTs, _perm=false;
+        if(_dqr.carteNo){
+          const _r=await _resoudreCarteQR(_dqr.carteNo,_dqr.carteSig);
+          if(!_r.ok){ showScanResult('red','⛔',_r.titre,_r.nom||'Carte '+_dqr.carteNo,_r.detail,nowTime()); return; }
+          _mat=_r.mat; _qSig=null; _qTs=null; _perm=true;
+        }
+        if(!_mat) return;
         setScanStatus(true,'QR détecté — traitement...');
-        if(S.page==='scanner') processScanEntry(_mat,_qSig,_qTs);
+        if(S.page==='scanner') processScanEntry(_mat,_qSig,_qTs,_perm);
         else if(S.page==='scanner_exit'){const inp=$('exitCode');if(inp)inp.value=_mat;scanExit();}
       }
     } catch(e){}
@@ -17443,7 +17999,7 @@ window._statutPortail = async (sid) => {
            instruction:'Contrôle manuel requis' };
 };
 
-window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
+window.processScanEntry = async (code, qrSig=null, qrTs=null, cartePermanente=false) => {
   // Tout le personnel scanne — gardien, enseignant, direction, caisse. Seul
   // un parent ne peut pas enregistrer une entrée.
   if(!S.user||S.user.role==='parent'){toast('Accès non autorisé','error');return;}
@@ -17472,7 +18028,12 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null) => {
   const _qrSecret=DB.settings?.qr_secret;
   let _qrOk = true; // true = passe, false = bloque
   let _qrWarn = null; // message avertissement orange si QR non signé en période de grâce
-  if(_qrSecret) {
+  // Une carte permanente arrive DÉJÀ vérifiée par `_resoudreCarteQR` :
+  // signature, état, année, élève. La revérifier ici avec la formule du QR
+  // quotidien la ferait échouer — ce n'est pas la même signature, et c'est
+  // exactement le piège que la grâce de 30 jours tendait aux cartes
+  // imprimées : elles n'étaient jamais signées, donc « CARTE PÉRIMÉE ».
+  if(_qrSecret && !cartePermanente) {
     if(qrSig && qrTs) {
       // QR signé — vérifier l'HMAC
       const expectedSig = await _hmacSign(_qrSecret, code+':'+qrTs);
