@@ -1,0 +1,83 @@
+-- SchoolSafe VPS baseline - 09a exact RLS state
+-- All 66 public tables use RLS.
+-- The private outbox exposed to authenticated uses RLS; the other private internal tables remain non-exposed through grants.
+
+BEGIN;
+
+ALTER TABLE private.account_invitations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE private.notification_push_outbox DISABLE ROW LEVEL SECURITY;
+ALTER TABLE private.parent_phone_access_requests DISABLE ROW LEVEL SECURITY;
+ALTER TABLE private.qr_keys DISABLE ROW LEVEL SECURITY;
+ALTER TABLE private.role_test_runs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE private.school_counters DISABLE ROW LEVEL SECURITY;
+ALTER TABLE private.school_login_rate_limits DISABLE ROW LEVEL SECURITY;
+ALTER TABLE private.student_exit_notification_outbox ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.absences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activites_inscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.administrative_document_types ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.administrative_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.advances ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.appreciations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.approbations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.aps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cahier_prep ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cahier_texte ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cantine ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cantine_menus ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cantine_presence ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.conduct ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.convocations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.devoirs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.direct_primes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.evaluations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exetat ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fee_types ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.grades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.journal_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.matieres ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.medical ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.medical_visits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.palmares_publication_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.palmares_publications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_access_exceptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_allocations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_receipt_counters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_scan_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.preinscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.prevision_matiere ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rattrapages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.salaries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sanctions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.scan_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.school_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.school_profile ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_content ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.student_exit_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.student_fee_obligations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.student_primary_parent_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.teacher_absences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.teacher_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tenafep ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.timetables ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.versements ENABLE ROW LEVEL SECURITY;
+
+COMMIT;
