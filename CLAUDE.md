@@ -810,9 +810,17 @@ Trois leçons :
    `scan_student_exit_at_gate` dit qui s'est présenté ; `validate_student_exit`
    engage l'école. Les séparer donne au gardien le temps de comparer un visage
    à une photo **avant** que l'enfant soit parti.
-3. **L'écran ne dit pas « envoyé » quand le serveur dit `queued`.** L'e-mail et
-   WhatsApp partent en file dans `student_exit_notification_outbox`. Annoncer
+3. **L'écran ne dit pas « envoyé » quand le serveur dit `queued`.** Annoncer
    un message qui n'est jamais parti, c'est un parent qui ne rappelle pas.
+
+   **Et il faut lire la forme que le serveur rend VRAIMENT.** J'avais écrit
+   `n.email` et `n.whatsapp` d'après le document de contrat. La fonction
+   déployée rend `{channels:["app"|"push"], push_status, push_device_count}`
+   et **supprime** les lignes e-mail et WhatsApp de la file. Deux canaux
+   annoncés à partir de champs toujours absents : un champ mort lu par un
+   écran, la faute même que nos audits cherchent — commise en lisant une
+   documentation au lieu du code servi. **Un document dit l'intention ; seule
+   la fonction dit la forme.**
 
 Et une règle de méthode qui vaut pour tout lot reçu : **avant de coder,
 chercher ce que l'autre agent a déjà servi.** Un `grep` des noms de RPC dans

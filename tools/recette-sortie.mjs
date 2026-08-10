@@ -81,7 +81,7 @@ globalThis._rpc = async (nom, p) => {
     if (!s.pid) return { ok:false, code:'PRIMARY_PARENT_REQUIRED' };
     return { ok:true, data:{ code:'EXIT_PREPARED', exit_event_id:'ev_'+p.p_sid,
       status:'prepared', prepared_at:'2026-08-10T13:50:00Z', expires_at:'2026-08-10T14:20:00Z',
-      notification:{ app:'sent', email:'queued', whatsapp:'queued' } } };
+      notification:{ ok:true, channels:['app','push'], push_status:'queued', push_device_count:2 } } };
   }
   if (nom === 'get_student_pickup_context') {
     if (!s) return { ok:false, code:'STUDENT_NOT_FOUND' };
@@ -109,7 +109,7 @@ globalThis._rpc = async (nom, p) => {
     return { ok:true, data:{ code:p.p_decision==='authorized'?'EXIT_CONFIRMED':'EXIT_REFUSED',
       exit_event_id:p.p_exit_event_id, status:p.p_decision, prepared_by:'Mme Luyeye',
       scanned_by:'Gardien', validated_by:'Gardien', escort_name:'Tante Deux',
-      notification:{ app:'sent', email:'queued', whatsapp:'queued' } } };
+      notification:{ ok:true, channels:['app','push'], push_status:'queued', push_device_count:2 } } };
   }
   if (nom === 'cancel_student_exit_preparation') {
     if (!p.p_reason) return { ok:false, code:'REASON_REQUIRED' };
@@ -157,6 +157,22 @@ ok('sans parent principal, le refus est EXPLIQUÉ, pas avalé',
 await preparerSortie('s4');
 ok('un élève non entré ce jour est refusé, avec sa raison',
    modal && /n’est pas entré/i.test(modal.b), '');
+
+// ═══ 1 bis · UN ENSEIGNANT NE PRÉPARE QUE SES CLASSES ════════════════════
+// Durcissement serveur de ChatGPT (§C.1). Le frontend le double pour ne pas
+// faire attendre devant une classe qui descend — mais c'est le serveur qui
+// fait foi, et le message est le même des deux côtés.
+S.user = { id:'ens1', name:'Mme Luyeye', role:'enseignant' };
+const avPrep = appels.filter(a=>a.nom==='prepare_student_exit').length;
+await preparerSortie('s2');   // s2 est en c2, classe de ens2
+ok('un enseignant ne prépare pas un élève d’une autre classe',
+   appels.filter(a=>a.nom==='prepare_student_exit').length === avPrep, '');
+ok('et il lit pourquoi, sans aller-retour serveur',
+   modal && /pas à une classe qui vous est attribuée/.test(modal.b), '');
+S.user = { id:'d1', name:'Direction', role:'direction' };
+await preparerSortie('s2');
+ok('la Direction, elle, prépare n’importe quelle classe',
+   appels.filter(a=>a.nom==='prepare_student_exit').length === avPrep+1, '');
 
 // ═══ 2 · L'ÉCRAN DE PRÉPARATION, PAR PROFIL ══════════════════════════════
 S.user = { id:'ens1', name:'Mme Luyeye', role:'enseignant' };
@@ -211,8 +227,10 @@ ok('la décision appelle validate_student_exit',
 const fin = zones.exitResult.innerHTML;
 ok('la sortie confirmée nomme les TROIS acteurs',
    /Mme Luyeye/.test(fin) && /Gardien/.test(fin), '');
-ok('l’écran ne prétend PAS que l’e-mail est parti',
-   /en file d’envoi/.test(fin) && !/e-mail : envoyé/.test(fin), fin.slice(0,0));
+ok('l’écran n’annonce jamais « envoyé » pour la notification externe',
+   /en file d’envoi/.test(fin) && !/envoyé/.test(fin.replace(/en file d’envoi/g,'')), '');
+ok('et il ne parle plus d’e-mail ni de WhatsApp — canaux abandonnés',
+   !/e-mail/i.test(fin) && !/whatsapp/i.test(fin), '');
 
 // ═══ 4 · UN REFUS SE MOTIVE ══════════════════════════════════════════════
 const avant = appels.filter(a=>a.nom==='validate_student_exit').length;
