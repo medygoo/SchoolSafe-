@@ -18314,6 +18314,13 @@ window._SORTIE_REFUS = {
   SELF_EXIT_NOT_ALLOWED:            'Cet élève n’est pas autorisé à rentrer seul.',
   ESCORT_REQUIRED:                  'Désignez qui récupère l’enfant.',
   GATE_REQUIRED:                    'Indiquez à quel portail vous êtes.',
+  // Ajoutés le 10 août 2026 par le durcissement serveur de ChatGPT
+  // (P0-8_BACKEND_ET_AUDIT_SORTIE_REPONSE_A_CLAUDE.md §C.1 et §D).
+  // Ils existaient comme trous : un enseignant pouvait préparer la sortie
+  // de n'importe quel élève de l'école, et créer un parcours rapide pour un
+  // enfant qu'il n'a jamais eu devant lui.
+  STUDENT_OUTSIDE_TEACHER_CLASSES:  'Cet élève n’appartient pas à une classe qui vous est attribuée. La Direction ou l’enseignant de sa classe doit préparer la sortie.',
+  PREPARATION_REQUIRED_FOR_OTHER_CLASS: 'Cette sortie n’a pas été préparée par la classe. Demandez à la Direction ou à l’enseignant responsable de la préparer avant de continuer.',
   TEACHER_GATE_REASON_REQUIRED:     'Un enseignant au portail doit dire pourquoi il remplace le gardien.',
   REFUSAL_REASON_REQUIRED:          'Un refus se motive — écrivez ce que vous avez constaté.',
   REASON_REQUIRED:                  'Un motif est obligatoire.',
@@ -18340,6 +18347,27 @@ window.preparerSortie = async (sid) => {
   }
   const s = (DB.students||[]).find(x => x.id === sid);
   if (!s) { toast('Élève introuvable','error'); return; }
+
+  // Le serveur durci refuse désormais qu'un enseignant prépare la sortie d'un
+  // élève hors de ses classes (STUDENT_OUTSIDE_TEACHER_CLASSES). On le dit
+  // AVANT l'aller-retour : sur un réseau de Kinshasa, un refus qu'on pouvait
+  // prévoir se paie en secondes d'attente devant une classe qui descend.
+  // Ce contrôle ne remplace pas celui du serveur — il le double, et c'est
+  // le serveur qui fait foi.
+  if (S.user.role === 'enseignant') {
+    const aMoi = (DB.classes||[]).some(c => c.id === s.cid &&
+      (c.titulaire_id === S.user.id || c.teacher_id === S.user.id || c.teacher_id_en === S.user.id));
+    if (!aMoi) {
+      openM('Cet élève n’est pas dans vos classes',
+        `<div style="padding:4px 2px">
+          <p style="margin:0 0 10px;font-size:15px"><b>${esc(s.name)}</b></p>
+          <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:11px;padding:12px 14px;color:#92400e;font-size:14px;line-height:1.55">
+            ${esc(_SORTIE_REFUS.STUDENT_OUTSIDE_TEACHER_CLASSES)}</div>
+        </div>`,
+        `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`);
+      return;
+    }
+  }
 
   const r = await _rpc('prepare_student_exit', {
     p_sid: sid, p_gate_label: _portailCourant(), p_manual: false });
@@ -18769,16 +18797,34 @@ window.confirmerDecisionSortie = async (decision) => {
 // L'écran ne dit « envoyé » que si le serveur dit `sent`. Le contrat est
 // explicite : l'e-mail et WhatsApp partent en file au statut `queued`, et un
 // parent à qui on annonce un message jamais parti ne rappellera pas l'école.
+// ── CE QUE LE SERVEUR RENVOIE VRAIMENT ─────────────────────────────────────
+// Écrit le 10 août 2026 après relecture de `private.queue_student_exit_notification`
+// dans le baseline de ChatGPT. La première version lisait `n.email` et
+// `n.whatsapp` : **ces champs n'existent pas.** La fonction rend
+//
+//    { ok, channels:["app"] ou ["app","push"], message, notification_id,
+//      push_status:'queued'|'no_device', push_device_count }
+//
+// et elle SUPPRIME les lignes e-mail et WhatsApp de la file. Deux canaux que
+// j'annonçais donc à partir de champs toujours absents — un champ mort lu par
+// un écran, la faute que nos audits cherchent.
+//
+// Décision canonique de ChatGPT, section E : « les mentions e-mail + WhatsApp
+// sont historiques et ne doivent plus guider le frontend ». Le transport
+// externe final est le Web Push standard depuis le VPS, et **on n'annonce
+// jamais « envoyé »** tant que ce transport n'a pas confirmé son état.
 window._libelleNotif = (n) => {
-  if (!n) return 'Le parent est prévenu dans l’application.';
-  const dit = [];
-  dit.push('Notification dans l’application : envoyée');
-  if (n.email === 'sent')       dit.push('e-mail : envoyé');
-  else if (n.email === 'queued')dit.push('e-mail : en file d’envoi');
-  if (n.whatsapp === 'sent')       dit.push('WhatsApp : envoyé');
-  else if (n.whatsapp === 'queued')dit.push('WhatsApp : en file d’envoi');
-  return esc(dit.join(' · '));
+  const dedans = 'Prévenu dans SchoolSafe';
+  if (!n || !Array.isArray(n.channels)) return dedans + '.';
+  if (!n.channels.includes('push')) {
+    // Pas d'appareil enregistré : le dire, plutôt que de laisser croire qu'un
+    // message est parti sur le téléphone du parent.
+    return esc(dedans + ' — aucun appareil n’est enregistré pour la notification externe.');
+  }
+  const nb = n.push_device_count || 0;
+  return esc(dedans + ` · notification externe en file d’envoi sur ${nb} appareil${nb>1?'s':''}.`);
 };
+
 
 // Le portail n'est pas un écran de consultation : il enregistre une sortie
 // d'enfant. Le contrôle est ici, pas seulement dans la navigation — cacher
