@@ -527,6 +527,29 @@ fois qu'il y avait quelque chose à montrer.
 
 → `tools/audit-portee.mjs`, éprouvé dans les deux sens.
 
+**Une cinquième, commise le 11 août 2026, et elle ne se voit pas à la
+relecture.** En écrivant un commentaire HTML *à l'intérieur d'un littéral de
+gabarit*, j'ai cité un nom de classe entre accents graves :
+
+```js
+return `… <!-- l'action d'une `ww-toolbar` est un `.btn` -->  …`;
+```
+
+L'accent grave **ferme la chaîne**. Tout ce qui suit devient du code, et le
+bloc `<script>` entier cesse de se parser : **l'application ne démarre plus
+du tout**. Le navigateur l'a dit en une ligne, la relecture ne l'aurait
+jamais vu — un commentaire ne se relit pas comme du code.
+
+Deux réflexes : **jamais d'accent grave dans un gabarit**, et le contrôle
+qui coûte trois secondes avant de livrer —
+
+```bash
+node -e "…new Function(bloc)…"   # chaque <script> se parse-t-il ?
+```
+
+`audit-portee` le prend aussi, parce qu'il *parse* le fichier : un audit qui
+lit vraiment le code attrape des fautes qu'il ne cherchait pas.
+
 **Les quatre étaient intactes dans ce dépôt-ci**, aux mêmes écrans, trouvées et
 corrigées le 3 août 2026 (voir `docs/AUDIT_CLAUDE.md` §3). Elles ne se recopient
 pas d'une installation à l'autre : elles se réécrivent. Lancer l'outil avant

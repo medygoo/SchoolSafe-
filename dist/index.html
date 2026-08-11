@@ -29551,7 +29551,9 @@ R.acces_parents = () => {
     <div class="ww-search" style="flex:1">
       <input placeholder="Nom élève ou parent..." oninput="window._accParQ=this.value;clearTimeout(window._dT);window._dT=setTimeout(render,300)" value="${window._accParQ||''}">
     </div>
-    <button onclick="autoActivatePaid()" style="background:#3b6ef0;color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">⚡ Auto payés</button>
+    <!-- 30 px de haut contre 42 pour le champ de recherche à côté. Partout
+         ailleurs, l'action d'une barre ww-toolbar est un .btn .btn-primary. -->
+    <button class="btn btn-primary" onclick="autoActivatePaid()" style="white-space:nowrap;flex-shrink:0">⚡ Auto payés</button>
   </div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
     ${Object.entries(filterLabels).map(([f,l])=>`
@@ -29585,7 +29587,10 @@ R.acces_parents = () => {
           <span style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(par.name)}</span>
           <!-- Le PIN du parent s'affichait ici en clair, à côté de son nom. -->
           ${par.phone?waBtn(par.phone,par.name):''}
-          <button onclick="resetParentPin('${par.id}')" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer;flex-shrink:0;color:var(--text)" title="Envoyer un lien de connexion">🔑</button>
+          <!-- Peint à la main, donc 31,7 × 23 px à côté d'un WhatsApp de 36 :
+               le même défaut que Loms a signalé, dans une autre pièce. Un
+               élément qui se peint lui-même échappe à toutes les reprises. -->
+          <button class="btn btn-outline btn-sm" onclick="resetParentPin('${par.id}')" style="flex-shrink:0" title="Envoyer un lien de connexion">🔑</button>
         </div>`:`<div style="font-size:12px;color:#fbbf24;margin-bottom:8px;padding:6px 10px;background:rgba(217,158,11,.18);border-radius:8px">⚠️ Aucun compte parent lié</div>`}
         ${pTotal>0?`<div style="margin-bottom:8px">
           <div style="height:6px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden">
