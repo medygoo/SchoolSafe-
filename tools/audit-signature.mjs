@@ -118,6 +118,12 @@ const REGLE = {
   // engage l'école ici n'est pas un paraphe : c'est le REGISTRE, qui garde
   // le numéro, l'auteur, la date et le motif de chaque émission.
   imprimerCarte:               ['donnee', 'la carte porte déjà l’emblème'],
+  // La carte de première connexion (Loms, 11 août 2026). Elle n'engage
+  // l'école envers personne et ne certifie aucune donnée dont quelqu'un
+  // répond : elle transporte des identifiants. Une signature n'y voudrait
+  // rien dire — et une signature sans raison d'être dévalue toutes les
+  // autres.
+  _partagerCarte:              ['donnee', 'carte d’identifiants — n’engage ni ne certifie'],
 };
 
 // ── Repérer les documents et ce qu'ils portent ────────────────────────────

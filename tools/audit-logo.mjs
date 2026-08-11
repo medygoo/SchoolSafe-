@@ -181,7 +181,12 @@ const debutsDocuments = new Set(sorties.map(x => debutFonction(x.ligne - 1)));
 //
 // C'est ce qu'on vérifie ici, et rien d'autre. Éprouvé dans les deux sens.
 {
-  const OK_DOC = new Set(['_logoDoc', 'ssBuildBadge', 'ssBuildCarte']);
+  // `_dessinerCarteAcces` (11 août 2026) rejoint les deux constructeurs de
+  // cartes d'élève, et pour la même raison : ce n'est pas un ÉCRAN, c'est une
+  // PIÈCE qu'on remet à quelqu'un. L'emblème y est à sa place ; ce que la
+  // frontière interdit, c'est qu'il reparaisse dans la barre latérale ou
+  // l'écran de connexion.
+  const OK_DOC = new Set(['_logoDoc', 'ssBuildBadge', 'ssBuildCarte', '_dessinerCarteAcces']);
   let hors = 0;
   lignes.forEach((l, i) => {
     if (!/SCHOOL_LOGO_DOC/.test(l)) return;
