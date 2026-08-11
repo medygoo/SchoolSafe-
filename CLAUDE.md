@@ -937,6 +937,48 @@ l'abonnement est devenu légitime. Ce qu'il fallait vérifier n'était pas
 l'absence, mais *passe-t-il par la RPC, et dit-il la vérité quand le serveur
 refuse ?*
 
+### La moitié qui saisit, et la moitié qui lit
+
+**11 août 2026, issue #64.** J'avais livré le portail en deux étapes : il
+affiche le portrait, la photo en pied, la pièce d'identité et la validité de
+l'accréditation. **Il les affichait vides pour tout le monde** — parce
+qu'aucun écran ne permettait de les SAISIR.
+
+Quatre fonctions servies par ChatGPT n'étaient appelées par personne :
+
+```
+save_authorized_pickup_person        set_authorized_pickup_person_status
+save_primary_parent_pickup_identity  set_student_primary_parent
+```
+
+L'écran écrivait directement dans `aps`. Donc : sans le plafond de trois tenu
+par un verrou, sans la normalisation du numéro, sans l'audit — et **sans
+jamais renseigner ce que le portail lit**.
+
+Trois leçons :
+
+1. **Livrer un écran qui LIT sans livrer celui qui ÉCRIT ne livre rien.** Le
+   gardien voyait « Aucune photo en pied » et croyait à un dossier
+   incomplet ; c'était l'application qui n'avait pas de porte d'entrée.
+   Quand on branche une lecture, chercher tout de suite **qui écrit ce
+   qu'elle lit.**
+2. **Une photo n'est pas toujours une image.** Le serveur refuse
+   `data:` et limite à 2048 caractères : ce sont des **adresses**. Une image
+   collée serait refusée avec un code que personne ne relie à la photo. Elle
+   monte donc dans le stockage AVANT l'appel, et si la montée échoue, **on
+   n'appelle pas** — on le dit.
+3. **Une personne autorisée ne se supprime pas, elle se suspend**, avec un
+   motif. Même raison que pour les notifications : le jour où on demande
+   « qui était autorisé en octobre ? », c'est cette ligne-là qu'on relit.
+
+Et le compte qui décide du plafond n'est pas le nombre de lignes : c'est le
+nombre d'**actives, approuvées et non expirées**. Une personne suspendue ne
+prend la place de personne — le serveur le calcule ainsi, l'écran doit le
+calculer pareil, sinon il refuse un ajout que le serveur aurait accepté.
+
+`tools/recette-personnes-autorisees.mjs` tient 31 points ; `--preuve` retire
+le garde-fou de la photo et vérifie que la recette voit passer l'image collée.
+
 ### Les gardes de rôle
 
 Toute fonction exposée globalement qui écrit doit vérifier le rôle.
