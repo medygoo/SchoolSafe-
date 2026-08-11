@@ -18670,7 +18670,12 @@ window._sanctionBloquante = (sid) => {
 };
 
 // ── SCANNER ENTRÉE ──
-R.scanner = () => `
+R.scanner = () => {
+  // Les deux autres écrans du module portaient leur garde, celui-ci non — le
+  // seul des trois. Elle ne remplace pas celle de `processScanEntry`, qui
+  // reste la vraie : cacher un écran ne protège rien.
+  const _g = _requireRole('gardien','enseignant','direction','direction2','direction3'); if (_g) return _g;
+  return `
 <div class="scan-container" style="position:relative">
   <div aria-hidden="true" style="position:absolute;top:60px;left:50%;transform:translateX(-50%);width:200px;height:200px;pointer-events:none;z-index:0">
     <div style="position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(37,99,235,.3);animation:radarPing 2.4s ease-out infinite"></div>
@@ -18702,6 +18707,7 @@ R.scanner = () => `
   <div id="scanResult" style="width:100%;max-width:380px;margin-top:12px"></div>
   <div id="pendingDecision" style="width:100%;max-width:400px;margin-top:12px"></div>
 </div>`;
+};
 
 window.manualScanEntry = () => {
   const code=($('scanInput')?.value||'').trim().toUpperCase();
@@ -19157,7 +19163,16 @@ window.preparerSortie = async (sid) => {
   saveToCrypt();
 
   logAudit('exit_prepare', `${s.name} — ${dejaPrete ? 'préparation déjà en cours' : 'sortie préparée'}`, sid);
-  toast(dejaPrete ? 'Une préparation était déjà en cours' : `${s.name} — le parent est prévenu`, 'success');
+  // ON NE DIT PAS « prévenu » QUAND LE SERVEUR N'A PAS DIT « envoyé ».
+  // `queue_student_exit_notification` rend l'état réel de la file ; l'affirmer
+  // sans le lire, c'est un enseignant qui croit avoir prévenu et un parent qui
+  // ne vient pas. On rapporte ce que le serveur rapporte, et rien de plus.
+  const _n = r.data && r.data.notification;
+  const _envoye = _n && (_n.push_status === 'sent' || (_n.push_device_count || 0) > 0);
+  toast(dejaPrete ? 'Une préparation était déjà en cours'
+      : _envoye ? `${s.name} — le parent est prévenu`
+      : `${s.name} — sortie préparée. Le message au parent est en file : vérifiez qu'il l'a reçu.`,
+      dejaPrete || _envoye ? 'success' : 'warning');
   render();
 };
 
