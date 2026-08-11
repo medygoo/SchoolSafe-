@@ -2668,7 +2668,16 @@ window._CODE_MSG = {
   DUPLICATE_STUDENT:                "Cet élève existe déjà.",
   DUPLICATE_USER:                   "Ce profil existe déjà.",
   EMAIL_IN_USE:                     "Cette adresse e-mail est déjà utilisée.",
-  AUTH_EMAIL_CHANGE_REQUIRED:       "L'adresse d'un compte connecté doit être modifiée par la procédure Auth.",
+  // ── Issue #96, 11 août 2026 — ces deux messages sont devenus FAUX ────────
+  //
+  // Ils disaient « passez par la procédure Auth » et « par le bouton d'accès,
+  // pas par cette fiche ». Depuis que ChatGPT sert `school-contact-change`,
+  // c'est EXACTEMENT par cette fiche que ça se corrige. Un message qui renvoie
+  // au mauvais bouton envoie chercher au mauvais endroit — et c'est ce jour-là
+  // qu'on le croit. Ils ne sont pas effacés : ils restent pour reconnaître un
+  // serveur encore sur l'ancienne version, ou un écran qui n'a pas pris la
+  // bonne porte.
+  AUTH_EMAIL_CHANGE_REQUIRED:       "L'adresse n'a pas pu être corrigée par cette voie. Rechargez la page, puis réessayez.",
   AUTH_ROLE_CHANGE_REQUIRED:        "Le rôle d'un compte connecté doit être modifié par la procédure sécurisée.",
   CANNOT_DISABLE_CURRENT_DIRECTION: "Vous ne pouvez pas désactiver votre propre compte Direction.",
   AUTH_REQUIRED:                    "Votre session a expiré. Reconnectez-vous.",
@@ -2701,8 +2710,22 @@ window._CODE_MSG = {
   NOT_PHONE_ACCOUNT:                "Ce compte n'utilise pas l'accès par téléphone.",
   INVITATION_CONFLICT:              "Une invitation existe déjà pour cette adresse. Rechargez la liste.",
   FORBIDDEN_TARGET_ROLE:            "La Direction 2 ne gère que les enseignants, les gardiens et les parents.",
-  AUTH_PHONE_CHANGE_REQUIRED:       "Le numéro d'un compte déjà connecté se change par le bouton d'accès, pas par cette fiche.",
+  AUTH_PHONE_CHANGE_REQUIRED:       "Le numéro n'a pas pu être corrigé par cette voie. Rechargez la page, puis réessayez.",
   CANNOT_DISABLE_CURRENT_ACCOUNT:   "Vous ne pouvez pas désactiver votre propre compte.",
+
+  // ── Corriger un numéro ou une adresse — issue #96, ChatGPT, 11 août 2026 ──
+  // Codes rendus par l'Edge Function `school-contact-change`.
+  CONTACT_CHANGED:                  "Coordonnée corrigée.",
+  NO_CHANGE:                        "Rien à corriger : le serveur portait déjà cette valeur.",
+  DIRECTION1_REQUIRED_FOR_IDENTITY_CHANGE:
+    "Seule la Direction 1 corrige le numéro ou l'adresse d'une fiche existante. Le reste de la fiche se modifie normalement.",
+  PRIMARY_CONTACT_UNAVAILABLE:
+    "La voie d'envoi choisie n'a pas de coordonnée : renseignez-la, ou choisissez l'autre voie.",
+  ACCOUNT_NOT_LINKED:
+    "Ce profil n'a pas encore d'accès ouvert : sa coordonnée se corrige directement sur la fiche.",
+  // On ne dit PAS « rien n'a été changé » : d'ici, on ne peut pas le vérifier.
+  AUTH_IDENTITY_UPDATE_FAILED:
+    "Le serveur n'a pas pu mettre l'accès à jour. Rechargez la fiche pour voir ce qu'elle porte avant de réessayer.",
 };
 window._codeMsg = code => window._CODE_MSG[code] || ('Erreur serveur : ' + (code || 'inconnue'));
 
@@ -10955,6 +10978,72 @@ window._simpleList = (role, icon, gradient) => {
 window._D2_AUTORISE = ['enseignant', 'gardien', 'parent'];
 window._d2PeutToucher = (role) => window._D2_AUTORISE.includes(_roleUI(role));
 
+// ── CORRIGER UN NUMÉRO OU UNE ADRESSE — issue #96, ChatGPT, 11 août 2026 ────
+//
+// Ce que le serveur fait aujourd'hui, relevé dans
+// `save_school_user_profile_dual_impl` et non déduit :
+//
+//   if v_exists and v_current.auth_user_id is not null then
+//     if v_current.email is distinct from v_email then … AUTH_EMAIL_CHANGE_REQUIRED
+//     if v_current.phone is distinct from v_phone then … AUTH_PHONE_CHANGE_REQUIRED
+//
+// Donc dès qu'un compte a un accès ouvert, cette fiche NE PEUT PAS corriger
+// une faute de frappe dans son numéro. Ce n'est pas un obstacle à contourner
+// — c'est le contrat qui dit où passer : l'Edge Function
+// `school-contact-change` (verify_jwt), qui tourne côté serveur avec la clé
+// que le navigateur ne voit jamais, met `public.users`, `public.profiles` et
+// l'identité Supabase Auth d'accord, et **ne touche pas au mot de passe**.
+//
+// C'est ce dernier point qui la sépare de « Réinitialiser l'accès » :
+// corriger un chiffre dans un numéro ne doit pas obliger quelqu'un à
+// recevoir un nouveau code et à tout recommencer. Deux gestes, deux boutons.
+window._changerContact = async (uid, champ, valeur) => {
+  if (!uid || (champ !== 'phone' && champ !== 'email'))
+    return { ok:false, code:'VALIDATION_ERROR' };
+  const r = await _edgeFn('school-contact-change', {
+    app_user_id: uid, field: champ, value: valeur || '',
+  });
+  if (!r.ok) return r;
+  // `NO_CHANGE` est un succès du contrat : le serveur portait déjà la valeur.
+  return {
+    ok: true,
+    code: (r.data && r.data.code) || 'CONTACT_CHANGED',
+    user: (r.data && r.data.user) || null,
+    authChange: !!(r.data && r.data.auth_identity_changed),
+  };
+};
+
+// L'écran ne porte pas les mêmes colonnes selon le profil : le bootstrap de
+// Direction 2 ne charge PAS `users.email`. Afficher un champ vide ferait
+// croire que la fiche n'a pas d'adresse — on ne montre pas une absence qu'on
+// n'a pas vérifiée, et on ne renvoie surtout pas une valeur vide qui
+// l'effacerait. La question est posée à ROLE_LOAD, pas devinée du rôle.
+window._ecranPorteCourriel = () => {
+  const conf = (window.ROLE_LOAD || {})[S.user && S.user.role];
+  const e = ((conf && conf.bootstrap) || []).find(x => x && x.t === 'users');
+  if (!e) return false;
+  const q = e.q || '';
+  return /select=\*/.test(q) || /\bemail\b/.test(q);
+};
+
+// Après une correction d'identité, la fiche locale ne suffit plus : le
+// serveur a pu recalculer `access_channel`, `login_email_enabled`,
+// `login_phone_enabled` — et l'identité Auth technique d'un compte
+// téléphone. On relit la table plutôt que de recopier ce qu'on croit.
+//
+// Une lecture qui ÉCHOUE n'est pas une lecture qui ne trouve RIEN : `_get`
+// rend `null` sur un refus comme sur une panne. Écraser `DB.users` avec ça
+// viderait la liste du personnel sur un hoquet de réseau.
+window._rechargerUsers = async () => {
+  const conf = (window.ROLE_LOAD || {})[S.user && S.user.role];
+  const e = ((conf && conf.bootstrap) || []).find(x => x && x.t === 'users');
+  if (!e) return false;
+  const rows = await _get('users', e.q);
+  if (!Array.isArray(rows)) return false;
+  DB.users = rows;
+  return true;
+};
+
 window.openUserForm = (role, uid) => {
   window._userPhoto = null;
   const users = DB.users||[];
@@ -11017,6 +11106,47 @@ window.openUserForm = (role, uid) => {
       <label class="btn btn-outline btn-sm" style="cursor:pointer">📷 Choisir une photo<input type="file" accept="image/*" style="display:none" onchange="previewUserPhoto(this)"></label>
     </div>
   </div>`;
+
+  // ── Le numéro et l'adresse : qui peut les corriger ici — issue #96 ───────
+  //
+  // Le serveur réserve le changement d'identité à Direction 1, sur toute
+  // fiche EXISTANTE, qu'un accès soit ouvert ou non :
+  //
+  //   if v_exists and v_actor_role='direction2' and (email/phone/role change)
+  //     → DIRECTION1_REQUIRED_FOR_IDENTITY_CHANGE
+  //
+  // Un écran plus permissif que la base n'ouvre aucun droit : il fabrique un
+  // refus que personne ne comprend. On fige donc les deux champs pour les
+  // autres profils, et on DIT pourquoi — ce n'est pas la même chose que
+  // « vous avez mal rempli ».
+  const _dir1 = !!(S.user && S.user.role === 'direction');
+  const _identiteFigee = !!(u && !_dir1);
+  const _porteMail = !u || window._ecranPorteCourriel();
+  const _fige = _identiteFigee ? ' disabled style="opacity:.6;cursor:not-allowed"' : '';
+  const _noteContact = _identiteFigee
+    ? `<div style="font-size:12px;color:var(--text-secondary);background:var(--bg);border-radius:10px;padding:9px 12px;margin:-4px 0 12px">
+         🔒 <strong>Seule la Direction 1 corrige un numéro ou une adresse</strong> sur une fiche
+         existante. Tout le reste de cette fiche reste modifiable ici.
+       </div>`
+    : (u && u.auth_user_id
+      ? `<div style="font-size:12px;color:var(--text-secondary);background:var(--bg);border-radius:10px;padding:9px 12px;margin:-4px 0 12px">
+           ✔️ ${esc(u.name)} a déjà un accès ouvert. Corriger son numéro ou son adresse met son
+           accès à jour <strong>sans changer son mot de passe</strong> — il ou elle se reconnecte
+           avec la nouvelle coordonnée et le même code.<br>
+           Pour lui remettre un <em>nouveau</em> code, c'est le bouton « Réinitialiser l'accès »,
+           qui reste séparé.
+         </div>`
+      : '');
+
+  const _champMail = _porteMail
+    ? `<input class="form-input" id="usr_email" type="email" autocomplete="off"${_fige}
+           value="${u&&u.email?esc(u.email):''}" placeholder="prenom.nom@exemple.com">`
+    : `<input class="form-input" type="email" disabled style="opacity:.6;cursor:not-allowed" value="" placeholder="— non visible depuis ce profil">
+       <div style="font-size:11.5px;margin-top:5px;color:var(--text-muted)">
+         Votre profil ne charge pas les adresses e-mail. Celle de la fiche est conservée telle
+         quelle : enregistrer ici ne l'efface pas.
+       </div>`;
+
   openM(u?`✏️ Modifier — ${u.name}`:`➕ Ajouter ${meta.icon} ${meta.label}`,`
 <input type="hidden" id="usr_id" value="${u?u.id:''}">
 <input type="hidden" id="usr_role" value="${role}">
@@ -11027,15 +11157,15 @@ ${photoOpts}
 </div>
 <div class="form-row">
   <div class="form-group"><label class="form-label">Téléphone</label>
-    <input class="form-input" id="usr_phone" value="${u&&u.phone?esc(u.phone):''}" placeholder="0810000111 ou +243810000111" oninput="window._telApercu('usr_phone','usr_phone_vu')">
+    <input class="form-input" id="usr_phone"${_fige} value="${u&&u.phone?esc(u.phone):''}" placeholder="0810000111 ou +243810000111" oninput="window._telApercu('usr_phone','usr_phone_vu')">
     <div id="usr_phone_vu" style="font-size:11.5px;margin-top:5px;color:var(--text-muted)"></div>
   </div>
   <div class="form-group">
     <label class="form-label">Adresse e-mail</label>
-    <input class="form-input" id="usr_email" type="email" autocomplete="off"
-           value="${u&&u.email?esc(u.email):''}" placeholder="prenom.nom@exemple.com">
+    ${_champMail}
   </div>
 </div>
+${_noteContact}
 <!-- Décision de Loms du 6 août 2026 : « ce n'est pas obligé de mettre les deux.
      C'est soit numéro, soit mail. » Un parent de Kinshasa n'a pas toujours
      d'adresse ; lui en faire créer une pour remplir une case ne sert personne.
@@ -11142,6 +11272,19 @@ window.saveUser = async () => {
   const uid=idEl.value;
   const role=roleEl.value;
   if(S.user.role==='direction2' && !window._d2PeutToucher(role)){toast('Direction 1 et Caisse ne se créent que depuis Direction 1','error');return;}
+  // ── Issue #96 — qui corrige un numéro ou une adresse ─────────────────────
+  //
+  // Le serveur réserve le changement d'identité à Direction 1 sur toute fiche
+  // EXISTANTE. Les champs sont figés à l'écran ; ici on en tire la
+  // conséquence à l'envoi : on n'envoie PAS les clés `phone`/`email`.
+  //
+  //   v_email := case when p_user ? 'email' then … when v_exists then v_current.email
+  //
+  // La clé absente laisse le serveur garder sa valeur — relevé dans
+  // `save_school_user_profile_dual_impl`, pas deviné. C'est la seule façon de
+  // ne pas effacer une adresse que Direction 2 ne voit même pas : une valeur
+  // vide n'écrase pas un repli.
+  const _peutIdentite = !uid || S.user.role === 'direction';
   const courriel=($('usr_email')?.value||'').trim().toLowerCase();
   if(courriel && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courriel)){
     markFieldError('usr_email','Adresse e-mail invalide'); return;
@@ -11165,12 +11308,15 @@ window.saveUser = async () => {
   const phoneRaw=($('usr_phone')?.value||'').trim();
   const phone=phoneRaw?window._telE164(phoneRaw):null;
   if(phoneRaw && !phone){markFieldError('usr_phone','Numéro non reconnu — écrivez 0810000111, 810000111 ou +243810000111');return;}
-  if(!courriel && !phone){
+  // Ces deux contrôles ne valent que si l'écran envoie vraiment les
+  // coordonnées. Quand il ne les envoie pas, il ne les voit pas non plus :
+  // les exiger reviendrait à reprocher une absence qu'on n'a pas vérifiée.
+  if(_peutIdentite && !courriel && !phone){
     markFieldError('usr_phone','Renseignez au moins un numéro OU une adresse e-mail — sinon cette personne ne pourra jamais se connecter');
     return;
   }
   // Deux comptes ne peuvent pas partager un numéro : c'est ce qui les identifie.
-  if(phone){
+  if(_peutIdentite && phone){
     const _dejaTel=(DB.users||[]).find(x=>x.id!==uid && x.phone && window._telE164(x.phone)===phone);
     if(_dejaTel){markFieldError('usr_phone',`Ce numéro est déjà celui de ${_dejaTel.name}`);return;}
   }
@@ -11216,14 +11362,20 @@ window.saveUser = async () => {
   // Le canal principal ne peut pas désigner une coordonnée absente : le
   // serveur refuse (`users_primary_contact_available_check`). On le corrige
   // ici plutôt que de laisser passer une fiche qui sera rejetée.
-  const canalReel = (canal==='email' && !courriel) ? 'phone_whatsapp'
+  // Cette correction n'a de sens que si l'écran connaît les deux coordonnées.
+  // Quand il ne les envoie pas, il ne les voit pas : on transmet le choix tel
+  // quel, et si la coordonnée manque, le serveur répond
+  // PRIMARY_CONTACT_UNAVAILABLE — un refus nommé vaut mieux qu'une voie
+  // d'envoi basculée en silence.
+  const canalReel = !_peutIdentite ? canal
+                  : (canal==='email' && !courriel) ? 'phone_whatsapp'
                   : (canal==='phone_whatsapp' && !phone) ? 'email' : canal;
-  const data={name,role,initials,phone,email:courriel,access_channel:canalReel,...(photo?{photo_url:photo}:{})};
+  const data={name,role,initials,access_channel:canalReel,...(photo?{photo_url:photo}:{}),
+              ...(_peutIdentite ? {phone, email:courriel} : {})};
   window._userPhoto=null;
 
   if(uid){
     // Edit existing user
-    Object.assign(existingUser, data);
     let _deloges = [];
     if(role==='enseignant'){
       const langEn=document.querySelector('[name="usr_lang"]:checked')?.value==='en';
@@ -11256,6 +11408,49 @@ window.saveUser = async () => {
       });
       changedClasses.forEach(c=>pushSync('classes','upsert',c));
     }
+
+    // ── Corriger le numéro ou l'adresse d'un compte relié — issue #96 ──────
+    //
+    // L'IDENTITÉ D'ABORD, LA FICHE ENSUITE, et l'ordre n'est pas un détail :
+    // dans l'autre sens, `save_school_user_profile` verrait encore l'ancienne
+    // coordonnée et rendrait AUTH_PHONE_CHANGE_REQUIRED / AUTH_EMAIL_CHANGE_
+    // REQUIRED. C'est exactement le refus que Loms observait — la fiche
+    // n'était pas en cause, c'est l'application qui frappait à la mauvaise
+    // porte.
+    //
+    // Une fois le contact corrigé, le second appel repasse la MÊME valeur :
+    // `v_current.phone is distinct from v_phone` est alors faux, et le reste
+    // de la fiche s'enregistre normalement.
+    let _contactsCorriges = [];
+    if (_peutIdentite && existingUser.auth_user_id) {
+      const _ancienTel  = existingUser.phone ? (window._telE164(existingUser.phone) || existingUser.phone) : null;
+      const _ancienMail = (existingUser.email || '').trim().toLowerCase();
+      const _aFaire = [];
+      if ((phone || null) !== (_ancienTel || null))
+        _aFaire.push({ f:'phone', v:phone,    champ:'usr_phone', quoi:'le numéro',
+                       ok:'Numéro modifié avec succès' });
+      if (courriel !== _ancienMail)
+        _aFaire.push({ f:'email', v:courriel, champ:'usr_email', quoi:"l'adresse e-mail",
+                       ok:'Adresse e-mail modifiée avec succès' });
+      const _reussis = [];
+      for (const c of _aFaire) {
+        const _r = await window._changerContact(uid, c.f, c.v);
+        if (!_r.ok) {
+          // Rien n'est annoncé comme enregistré : rien ne l'est. Et le refus
+          // se pose sur le CHAMP, pas sur la personne — un doublon n'est pas
+          // une faute de saisie de celui qui remplit le formulaire.
+          markFieldError(c.champ, _codeMsg(_r.code));
+          if (_reussis.length)
+            setTimeout(() => toast(`Déjà corrigé : ${_reussis.join(' et ')}. Le reste, non.`, 'warning'), 500);
+          return;
+        }
+        // `NO_CHANGE` est un succès du contrat, mais il ne s'annonce pas
+        // comme une correction : le serveur portait déjà la valeur.
+        if (_r.code !== 'NO_CHANGE') { _reussis.push(c.quoi); toast(c.ok, 'success'); }
+      }
+      _contactsCorriges = _reussis;
+    }
+
     const _res = await _rpc('save_school_user_profile', { p_user: { id: uid, ...data } });
     if (!_res.ok) {
       const _m = _codeMsg(_res.code);
@@ -11267,6 +11462,10 @@ window.saveUser = async () => {
       else toast(_m, 'error');
       return;
     }
+    // Le serveur a accepté : c'est SEULEMENT maintenant que la fiche locale
+    // change. Elle était écrasée avant l'appel — un refus laissait donc
+    // l'écran afficher une valeur que la base n'a jamais portée.
+    Object.assign(existingUser, data);
     if (_res.data && _res.data.user) Object.assign(existingUser, _res.data.user);
     if (role==='parent') window._rattacherEnfants(uid);
     // Une adresse ajoutée à un profil qui n'en avait pas, et qui reçoit par
@@ -11278,7 +11477,16 @@ window.saveUser = async () => {
                     : 'Profil mis à jour, mais l\'invitation n\'est pas partie — ' + _codeMsg(_inv.code),
             _inv.ok ? 'success' : 'warning');
     }
-    logAudit('user_edit', `${name} — ${role}${_deloges.length?' · remplace '+_deloges.join(', '):''}`, uid);
+    // Une identité corrigée déplace plus que le champ saisi : `access_channel`,
+    // `login_email_enabled`, `login_phone_enabled`, et l'identité Auth
+    // technique d'un compte sans adresse réelle. On relit la table plutôt que
+    // de recopier ce qu'on croit — et si la relecture échoue, on le DIT au
+    // lieu de laisser un écran périmé passer pour à jour.
+    if (_contactsCorriges.length) {
+      const _relu = await window._rechargerUsers();
+      if (!_relu) setTimeout(() => toast('Coordonnée corrigée. La liste n\'a pas pu être relue — rechargez la page pour la voir à jour.', 'warning'), 900);
+    }
+    logAudit('user_edit', `${name} — ${role}${_contactsCorriges.length?' · corrige '+_contactsCorriges.join(' et '):''}${_deloges.length?' · remplace '+_deloges.join(', '):''}`, uid);
     toast(`${name} mis à jour`,'success');
     // Signalé après coup plutôt que bloquant : la direction sait ce qu'elle
     // fait, mais elle doit savoir ce qu'elle vient de faire.

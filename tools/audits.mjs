@@ -36,6 +36,7 @@ const OUTILS = [
   ['notifs',      'recette-notifications.mjs', 'le centre de notifications, exécuté'],
   ['encaissement','recette-auteur-encaissement.mjs','qui a encaissé, sur les reçus'],
   ['autorisees',  'recette-personnes-autorisees.mjs','les personnes autorisées au portail'],
+  ['contact',     'recette-contact.mjs',       'corriger un téléphone ou une adresse'],
 ];
 
 const detail = process.argv.includes('--detail');
