@@ -59,6 +59,34 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: './dist'
+
+      # UNE COURSE QU'ON PERDAIT, ET QU'ON A MISE QUATRE FOIS SUR LE DOS DE GITHUB.
+      #
+      # 11 août 2026. Quatre publications de suite ont échoué au même endroit :
+      #
+      #     Artifact github-pages ... successfully uploaded! ID is 9087938085
+      #     Fetching artifact metadata for "github-pages" → Found 0 artifact(s)
+      #     ✗ No artifacts named "github-pages" were found for this workflow run
+      #
+      # L'archive EXISTAIT — vérifié par l'API : 20 089 846 octets, non
+      # expirée, attachée à la bonne exécution. Elle était simplement cherchée
+      # **0,7 seconde** après avoir été finalisée, et l'index qui la référence
+      # n'était pas encore à jour.
+      #
+      # Ce qui l'a prouvé : le site vitrine, MÊME COMPTE et même mécanisme,
+      # s'est publié sans erreur à la même minute. Son archive fait quelques
+      # mégaoctets ; celle de l'application en fait vingt. Plus l'archive est
+      # grosse, plus l'enregistrement traîne — et l'école est du mauvais côté
+      # du seuil.
+      #
+      # Une attente n'est pas une correction élégante, mais elle exprime
+      # exactement le problème : on laisse à l'index le temps d'exister.
+      - name: Laisser l'archive s'enregistrer
+        run: |
+          echo "L'archive vient d'être téléversée. L'index qui la référence"
+          echo "n'est pas immédiat — sur 20 Mo, il a manqué 0,7 s le 11 août."
+          sleep 30
+
       - id: deployment
         uses: actions/deploy-pages@v4
 
