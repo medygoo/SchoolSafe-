@@ -35,7 +35,7 @@ FROM (
 SELECT
   position('previous_file_id' in pg_get_functiondef(p.oid))>0 AS previous_photo_audited,
   position('archived_at' in pg_get_functiondef(p.oid))>0 AS superseded_photo_archived,
-  position('DELETE FROM public.school_files' in upper(pg_get_functiondef(p.oid)))=0 AS no_metadata_delete
+  position('DELETE FROM PUBLIC.SCHOOL_FILES' in upper(pg_get_functiondef(p.oid)))=0 AS no_metadata_delete
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid=p.pronamespace
 WHERE n.nspname='public'
