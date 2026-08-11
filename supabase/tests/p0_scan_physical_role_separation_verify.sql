@@ -29,10 +29,13 @@ WHERE n.nspname='public'
   AND p.proname IN ('record_entry_scan','record_scan_incident')
 ORDER BY p.proname;
 
--- 3. La liste APS du scanner doit elle aussi utiliser le garde physique.
+-- 3. La liste APS du scanner doit elle aussi utiliser le garde physique et
+-- ne doit exposer le téléphone qu'à Direction 1 / Gardien.
 SELECT
   position('can_physical_scan' in pg_get_functiondef(p.oid))>0 AS aps_physical_guard_present,
-  position("('direction','gardien')" in replace(pg_get_functiondef(p.oid),' ',''))>0 AS phone_restricted_to_direction_guard
+  position('direction' in lower(pg_get_functiondef(p.oid)))>0 AS direction_phone_rule_present,
+  position('gardien' in lower(pg_get_functiondef(p.oid)))>0 AS guard_phone_rule_present,
+  position('direction3' in lower(pg_get_functiondef(p.oid)))=0 AS cashier_not_in_aps_function
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid=p.pronamespace
 WHERE n.nspname='public'
