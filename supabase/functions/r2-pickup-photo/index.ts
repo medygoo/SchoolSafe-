@@ -171,7 +171,10 @@ Deno.serve(async (request: Request) => {
     const identity: Identity | null = appUser?.status === "active"
       ? { appUserId: appUser.id, role: normalizeRole(appUser.role) }
       : null;
-    if (!identity || !["direction", "direction2", "gardien"].includes(identity.role)) {
+    // L'enseignant est inclus uniquement pour le parcours portail de secours.
+    // La relation fichier <-> élève reste contrôlée plus bas, donc ce rôle ne
+    // gagne aucun droit général sur R2.
+    if (!identity || !["direction", "direction2", "gardien", "enseignant"].includes(identity.role)) {
       return reply(origin, 403, { ok: false, code: "PICKUP_PHOTO_FORBIDDEN", request_id: requestId });
     }
 
