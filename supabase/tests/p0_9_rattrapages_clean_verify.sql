@@ -11,9 +11,9 @@ SELECT
     'class_id','class_name_snapshot','school_year','period_month','grade_count','detected_at',
     'teacher_share_pct','teacher_share_amount','school_share_amount','currency',
     'fee_obligation_id','financial_terms_set_at','financial_terms_set_by',
-    'payment_completed_at','payment_confirmed_amount','validated_by_name',
+    'payment_completed_at','payment_confirmed_amount','validated_by_name','validated_by_role',
     'archived_at','archived_by','archive_reason'
-  )) = 19 AS rattrapages_ok,
+  )) = 20 AS rattrapages_ok,
   count(*) FILTER (WHERE table_name='student_fee_obligations' AND column_name='manual_allocation_only') = 1 AS manual_allocation_ok,
   count(*) FILTER (WHERE table_name='convocations' AND column_name IN ('period_month','school_year')) = 2 AS convocations_ok
 FROM information_schema.columns
@@ -108,10 +108,18 @@ SELECT
   EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='public' AND tablename='notifs' AND indexname='uq_notifs_recipient_dedupe') AS notification_dedupe,
   EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.notifs'::regclass AND tgname='notifs_queue_push' AND NOT tgisinternal) AS notification_push_trigger;
 
--- 10. Le mois courant/futur doit être refusé dans la fonction de détection.
-SELECT position('PERIOD_NOT_COMPLETE' in pg_get_functiondef(p.oid)) > 0 AS current_month_guard_present
+-- 10. Garde-fous métier présents dans les fonctions finales.
+SELECT
+  position('PERIOD_NOT_COMPLETE' in pg_get_functiondef(p.oid)) > 0 AS current_month_guard_present
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid=p.pronamespace
 WHERE n.nspname='private' AND p.proname='detect_monthly_rattrapages';
+
+SELECT
+  position('DIRECTION1_OVERRIDE_REQUIRED' in pg_get_functiondef(p.oid)) > 0 AS direction1_override_guard_present,
+  position('RATTRAPAGE_DECISION_FINANCIALLY_LOCKED' in pg_get_functiondef(p.oid)) > 0 AS financial_lock_present
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid=p.pronamespace
+WHERE n.nspname='public' AND p.proname='validate_rattrapage';
 
 -- Aucun test ci-dessus ne révèle montant réel, nom d'enfant, token Push ou secret.
