@@ -1,10 +1,10 @@
 // ════════════════════════════════════════════════════════════════════════════
-//  SchoolSafe — Service Worker  v3
+//  SchoolSafe — Service Worker  v4
 //  Cache offline + Background Sync
 // ════════════════════════════════════════════════════════════════════════════
 
 const CACHE_PREFIX = 'schoolsafe-';
-const CACHE = `${CACHE_PREFIX}v67`;
+const CACHE = `${CACHE_PREFIX}v68`;
 
 // Ressources à mettre en cache au démarrage
 const PRECACHE = [
@@ -64,7 +64,7 @@ self.addEventListener('activate', evt => {
   );
 });
 
-// ── Fetch : Network-First pour index.html, Cache-First pour le reste ──────────
+// ── Fetch : Network-First pour l'interface, Cache-First pour le reste ─────────
 self.addEventListener('fetch', evt => {
   const url = new URL(evt.request.url);
 
@@ -91,22 +91,26 @@ self.addEventListener('fetch', evt => {
   // Bypass pour les vidéos — toujours chargées du réseau, jamais cachées
   if (BYPASS_EXTENSIONS.some(ext => url.pathname.endsWith(ext))) return;
 
-  // Bypass pour les pages outil (diagnostic) — jamais servies du cache
+  // Bypass pour les pages outil (diagnostic/auth) — jamais servies du cache
   if (BYPASS_PATHS.some(p => url.pathname.endsWith(p))) return;
 
-  // Stale-While-Revalidate pour index.html — répond du cache immédiatement,
-  // met à jour le cache en arrière-plan (évite 1,54 Mo bloquant à chaque démarrage)
-  if (url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
+  // Network-First réel pour toute navigation / index.html.
+  // Une ancienne interface ne doit jamais être préférée quand le réseau fonctionne.
+  if (evt.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
     evt.respondWith(
-      caches.open(CACHE).then(cache =>
-        cache.match(evt.request).then(cached => {
-          const netFetch = fetch(evt.request).then(response => {
-            if (response.ok) cache.put(evt.request, response.clone());
-            return response;
-          }).catch(() => cached);
-          return cached || netFetch;
+      fetch(evt.request)
+        .then(async response => {
+          if (response.ok) {
+            const cache = await caches.open(CACHE);
+            await cache.put(evt.request, response.clone());
+          }
+          return response;
         })
-      )
+        .catch(async () => {
+          const direct = await caches.match(evt.request);
+          if (direct) return direct;
+          return caches.match('./index.html');
+        })
     );
     return;
   }
