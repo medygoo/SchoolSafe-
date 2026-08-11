@@ -1,151 +1,301 @@
 -- P0-30b WEB PUSH — DRAFT ONLY
--- This file is intentionally NOT under supabase/migrations/.
--- It ends with ROLLBACK so an accidental execution should persist nothing.
--- Review with Claude, then convert to a real migration only after Loms validation.
+-- Collaborative v2 after Claude PR #79.
+-- NOT a migration. Final ROLLBACK is intentional.
 
 begin;
 
--- The real table already supports provider='webpush' with endpoint/auth/p256dh.
--- Add an address uniqueness rule so one browser subscription cannot remain
--- attached to two SchoolSafe users at the same time.
+-- One Web Push endpoint must identify only one device registry row.
 create unique index if not exists uq_push_subscriptions_webpush_endpoint
   on public.push_subscriptions(endpoint)
   where provider='webpush' and endpoint is not null;
 
--- Public configuration only. The VAPID PRIVATE key must never be stored here.
-create or replace function public.get_webpush_public_config()
+-- Keep the existing settings RPC and expose only the PUBLIC VAPID key.
+create or replace function public.get_safe_settings()
 returns jsonb
 language plpgsql
-stable
-security definer
-set search_path=''
-as $$
+stable security definer
+set search_path to ''
+as $function$
 declare
-  v_uid text := private.current_app_user_id();
-  v_key text;
+  s public.settings%rowtype;
+  r text := private.current_app_role();
 begin
-  if v_uid is null then
-    return jsonb_build_object('ok',false,'code','AUTH_REQUIRED');
+  if r is null then
+    raise exception 'Session inactive' using errcode = '42501';
   end if;
 
-  select nullif(btrim(vapid_public_key),'')
-    into v_key
-  from public.settings
-  order by id
-  limit 1;
+  select * into s from public.settings order by id limit 1;
+  if not found then
+    return '{}'::jsonb;
+  end if;
 
-  return jsonb_build_object(
-    'ok',true,
-    'enabled',v_key is not null,
-    'vapid_public_key',v_key
-  );
+  return jsonb_strip_nulls(jsonb_build_object(
+    'id', s.id,
+    'year', s.year,
+    'school', s.school,
+    'toggles', s.toggles,
+    'horaires', s.horaires,
+    'lockdown', s.lockdown,
+    'retention', s.retention,
+    'trimlocks', s.trimlocks,
+    'currenttrimestre', s.currenttrimestre,
+    'school_type', s.school_type,
+    'session_timeout_min', s.session_timeout_min,
+    'rattrapage_rate', s.rattrapage_rate,
+    'rattrapage_threshold', s.rattrapage_threshold,
+    'vapid_public_key', s.vapid_public_key,
+    'fees', case when r in ('direction', 'direction3', 'parent') then s.fees else null end,
+    'feescontrol', case when r in ('direction', 'direction3', 'parent') then s.feescontrol else null end
+  ));
 end;
-$$;
+$function$;
 
-create or replace function public.register_webpush_device(
-  p_endpoint text,
-  p_p256dh text,
-  p_auth text,
-  p_platform text default 'web',
-  p_app_instance_id text default null,
-  p_device_label text default null,
-  p_user_agent text default null
+-- Preserve the frontend signature already used by Claude #79.
+-- FCM p_token remains the raw FCM token.
+-- Web Push p_token is JSON: {"endpoint":"...","p256dh":"...","auth":"..."}.
+create or replace function public.register_push_device(
+  p_provider text,
+  p_token text,
+  p_platform text default 'web'::text,
+  p_app_instance_id text default null::text,
+  p_device_label text default null::text,
+  p_user_agent text default null::text
 )
 returns jsonb
 language plpgsql
 security definer
-set search_path=''
-as $$
+set search_path to ''
+as $function$
 declare
   v_uid text := private.current_app_user_id();
-  v_endpoint text := nullif(btrim(coalesce(p_endpoint,'')),'');
-  v_p256dh text := nullif(btrim(coalesce(p_p256dh,'')),'');
-  v_auth text := nullif(btrim(coalesce(p_auth,'')),'');
-  v_platform text := lower(btrim(coalesce(p_platform,'web')));
+  v_provider text := lower(btrim(coalesce(p_provider,'fcm')));
+  v_token text := nullif(btrim(coalesce(p_token,'')),'');
+  v_platform text := lower(btrim(coalesce(p_platform,'unknown')));
   v_instance text := nullif(btrim(coalesce(p_app_instance_id,'')),'');
   v_saved public.push_subscriptions%rowtype;
   v_backfilled integer := 0;
+
+  v_webpush jsonb;
+  v_endpoint text;
+  v_p256dh text;
+  v_auth text;
+
+  v_existing_device_id text;
+  v_existing_uid text;
+  v_rotated_ids text[] := array[]::text[];
 begin
   if v_uid is null then
     return jsonb_build_object('ok',false,'code','AUTH_REQUIRED');
   end if;
 
-  if v_endpoint is null
-     or length(v_endpoint) > 4096
-     or v_endpoint !~ '^https://'
-  then
-    return jsonb_build_object('ok',false,'code','INVALID_WEBPUSH_ENDPOINT');
-  end if;
-
-  if v_p256dh is null or length(v_p256dh) not between 40 and 256
-     or v_auth is null or length(v_auth) not between 8 and 256
-  then
-    return jsonb_build_object('ok',false,'code','INVALID_WEBPUSH_KEY');
+  if v_provider not in ('fcm','webpush') then
+    return jsonb_build_object('ok',false,'code','UNSUPPORTED_PROVIDER');
   end if;
 
   if v_platform not in ('web','android','ios','unknown') then
     return jsonb_build_object('ok',false,'code','INVALID_PLATFORM');
   end if;
 
-  if length(coalesce(v_instance,'')) > 200
-     or length(coalesce(p_device_label,'')) > 200
-     or length(coalesce(p_user_agent,'')) > 1000
+  if length(coalesce(v_instance,''))>200
+     or length(coalesce(p_device_label,''))>200
+     or length(coalesce(p_user_agent,''))>1000
   then
     return jsonb_build_object('ok',false,'code','VALIDATION_ERROR');
   end if;
 
-  -- Same installed app/browser instance with a rotated endpoint:
-  -- disable the old subscription before attaching the new one.
-  update public.push_subscriptions
-     set active=false,
-         disabled_at=now(),
-         disabled_reason='ENDPOINT_REPLACED',
-         updated_at=now()
-   where uid=v_uid
-     and provider='webpush'
-     and v_instance is not null
-     and app_instance_id=v_instance
-     and endpoint is distinct from v_endpoint
-     and active;
+  if v_provider='fcm' then
+    if v_token is null or length(v_token) not between 20 and 4096 then
+      return jsonb_build_object('ok',false,'code','INVALID_PUSH_TOKEN');
+    end if;
 
-  insert into public.push_subscriptions(
-    id,uid,provider,token,endpoint,auth,p256dh,platform,
-    app_instance_id,device_label,ua,active,
-    created_at,last_seen_at,updated_at,failure_count
-  )
-  values(
-    'push_'||replace(gen_random_uuid()::text,'-',''),
-    v_uid,'webpush',null,v_endpoint,v_auth,v_p256dh,v_platform,
-    v_instance,
-    nullif(left(btrim(coalesce(p_device_label,'')),200),''),
-    nullif(left(btrim(coalesce(p_user_agent,'')),1000),''),
-    true,now(),now(),now(),0
-  )
-  on conflict(endpoint) where provider='webpush' and endpoint is not null
-  do update set
-    uid=excluded.uid,
-    auth=excluded.auth,
-    p256dh=excluded.p256dh,
-    platform=excluded.platform,
-    app_instance_id=excluded.app_instance_id,
-    device_label=excluded.device_label,
-    ua=excluded.ua,
-    token=null,
-    active=true,
-    last_seen_at=now(),
-    updated_at=now(),
-    disabled_at=null,
-    disabled_reason=null,
-    failure_count=0
-  returning * into v_saved;
+    -- If the same FCM token is moving to another SchoolSafe account, pending
+    -- messages for the previous account must never follow it.
+    select d.id,d.uid
+      into v_existing_device_id,v_existing_uid
+    from public.push_subscriptions d
+    where d.provider='fcm' and d.token=v_token
+    for update;
 
-  -- Backfill relevant unread notifications so enabling a device does not lose
-  -- recent urgent/ack-required notifications already created in SchoolSafe.
+    if v_existing_device_id is not null and v_existing_uid is distinct from v_uid then
+      update private.notification_push_outbox
+         set status='dead',
+             last_error='DEVICE_OWNER_CHANGED',
+             lease_until=null,
+             updated_at=now()
+       where device_id=v_existing_device_id
+         and recipient_user_id is distinct from v_uid
+         and status in ('queued','failed','sending');
+    end if;
+
+    -- A stable app_instance_id lets the same installation rotate its token.
+    if v_instance is not null then
+      select coalesce(array_agg(d.id),'{}'::text[])
+        into v_rotated_ids
+      from public.push_subscriptions d
+      where d.uid=v_uid
+        and d.provider='fcm'
+        and d.app_instance_id=v_instance
+        and d.token is distinct from v_token
+        and d.active;
+
+      if cardinality(v_rotated_ids)>0 then
+        update public.push_subscriptions
+           set active=false,
+               disabled_at=now(),
+               disabled_reason='TOKEN_REPLACED',
+               updated_at=now()
+         where id=any(v_rotated_ids);
+
+        update private.notification_push_outbox
+           set status='dead',
+               last_error='DEVICE_ADDRESS_REPLACED',
+               lease_until=null,
+               updated_at=now()
+         where device_id=any(v_rotated_ids)
+           and status in ('queued','failed','sending');
+      end if;
+    end if;
+
+    insert into public.push_subscriptions(
+      id,uid,provider,token,endpoint,auth,p256dh,platform,app_instance_id,
+      device_label,ua,active,created_at,last_seen_at,updated_at,failure_count
+    ) values (
+      'push_'||replace(gen_random_uuid()::text,'-',''),v_uid,'fcm',v_token,
+      null,null,null,v_platform,v_instance,
+      nullif(left(btrim(coalesce(p_device_label,'')),200),''),
+      nullif(left(btrim(coalesce(p_user_agent,'')),1000),''),
+      true,now(),now(),now(),0
+    )
+    on conflict(provider,token) where token is not null do update set
+      uid=excluded.uid,
+      platform=excluded.platform,
+      app_instance_id=excluded.app_instance_id,
+      device_label=excluded.device_label,
+      ua=excluded.ua,
+      endpoint=null,
+      auth=null,
+      p256dh=null,
+      active=true,
+      last_seen_at=now(),
+      updated_at=now(),
+      disabled_at=null,
+      disabled_reason=null,
+      failure_count=0
+    returning * into v_saved;
+
+  else
+    -- Web Push: p_token is a compact transport envelope chosen by Claude #79.
+    if v_token is null or length(v_token) not between 20 and 4096 then
+      return jsonb_build_object('ok',false,'code','INVALID_PUSH_TOKEN');
+    end if;
+
+    begin
+      v_webpush := v_token::jsonb;
+    exception when others then
+      return jsonb_build_object('ok',false,'code','INVALID_PUSH_TOKEN');
+    end;
+
+    if jsonb_typeof(v_webpush)<>'object' then
+      return jsonb_build_object('ok',false,'code','INVALID_PUSH_TOKEN');
+    end if;
+
+    v_endpoint := nullif(btrim(coalesce(v_webpush->>'endpoint','')),'');
+    v_p256dh := nullif(btrim(coalesce(v_webpush->>'p256dh','')),'');
+    v_auth := nullif(btrim(coalesce(v_webpush->>'auth','')),'');
+
+    if v_endpoint is null
+       or length(v_endpoint)>4096
+       or v_endpoint !~ '^https://'
+       or v_p256dh is null
+       or length(v_p256dh) not between 40 and 256
+       or v_auth is null
+       or length(v_auth) not between 8 and 256
+    then
+      return jsonb_build_object('ok',false,'code','INVALID_PUSH_TOKEN');
+    end if;
+
+    -- Protect account changes on the same browser subscription.
+    select d.id,d.uid
+      into v_existing_device_id,v_existing_uid
+    from public.push_subscriptions d
+    where d.provider='webpush' and d.endpoint=v_endpoint
+    for update;
+
+    if v_existing_device_id is not null and v_existing_uid is distinct from v_uid then
+      update private.notification_push_outbox
+         set status='dead',
+             last_error='DEVICE_OWNER_CHANGED',
+             lease_until=null,
+             updated_at=now()
+       where device_id=v_existing_device_id
+         and recipient_user_id is distinct from v_uid
+         and status in ('queued','failed','sending');
+    end if;
+
+    -- With a stable installation ID, endpoint rotation becomes deterministic.
+    if v_instance is not null then
+      select coalesce(array_agg(d.id),'{}'::text[])
+        into v_rotated_ids
+      from public.push_subscriptions d
+      where d.uid=v_uid
+        and d.provider='webpush'
+        and d.app_instance_id=v_instance
+        and d.endpoint is distinct from v_endpoint
+        and d.active;
+
+      if cardinality(v_rotated_ids)>0 then
+        update public.push_subscriptions
+           set active=false,
+               disabled_at=now(),
+               disabled_reason='ENDPOINT_REPLACED',
+               updated_at=now()
+         where id=any(v_rotated_ids);
+
+        update private.notification_push_outbox
+           set status='dead',
+               last_error='DEVICE_ADDRESS_REPLACED',
+               lease_until=null,
+               updated_at=now()
+         where device_id=any(v_rotated_ids)
+           and status in ('queued','failed','sending');
+      end if;
+    end if;
+
+    insert into public.push_subscriptions(
+      id,uid,provider,token,endpoint,auth,p256dh,platform,app_instance_id,
+      device_label,ua,active,created_at,last_seen_at,updated_at,failure_count
+    ) values (
+      'push_'||replace(gen_random_uuid()::text,'-',''),v_uid,'webpush',null,
+      v_endpoint,v_auth,v_p256dh,v_platform,v_instance,
+      nullif(left(btrim(coalesce(p_device_label,'')),200),''),
+      nullif(left(btrim(coalesce(p_user_agent,'')),1000),''),
+      true,now(),now(),now(),0
+    )
+    on conflict(endpoint) where provider='webpush' and endpoint is not null do update set
+      uid=excluded.uid,
+      token=null,
+      auth=excluded.auth,
+      p256dh=excluded.p256dh,
+      platform=excluded.platform,
+      app_instance_id=excluded.app_instance_id,
+      device_label=excluded.device_label,
+      ua=excluded.ua,
+      active=true,
+      last_seen_at=now(),
+      updated_at=now(),
+      disabled_at=null,
+      disabled_reason=null,
+      failure_count=0
+    returning * into v_saved;
+  end if;
+
+  -- Backfill recent unread/ack-required notifications for the newly registered
+  -- device, without exposing sensitive content on the lock screen.
   insert into private.notification_push_outbox(
     notification_id,recipient_user_id,device_id,provider,payload
   )
   select
-    n.id,n.uid,v_saved.id,'webpush',
+    n.id,n.uid,v_saved.id,v_saved.provider,
     jsonb_build_object(
       'title',case when n.privacy_level='sensitive' then
         case n.category
@@ -165,7 +315,6 @@ begin
         then 'Une information concernant votre enfant est disponible. Ouvrez SchoolSafe.'
         else left(coalesce(n.msg,''),240)
       end,
-      -- Keep both names during the FCM -> Web Push transition.
       'action_url',coalesce(nullif(n.action_url,''),'./?page=notifications&notification='||n.id),
       'url',coalesce(nullif(n.action_url,''),'./?page=notifications&notification='||n.id),
       'tag','schoolsafe-'||n.id,
@@ -183,8 +332,8 @@ begin
     and not n.read
     and n.push_requested
     and (
-      n.created_at >= now()-interval '24 hours'
-      or (n.requires_ack and n.acknowledged_at is null and n.created_at >= now()-interval '30 days')
+      n.created_at>=now()-interval '24 hours'
+      or (n.requires_ack and n.acknowledged_at is null and n.created_at>=now()-interval '30 days')
     )
   on conflict(notification_id,device_id) do nothing;
 
@@ -192,23 +341,23 @@ begin
 
   return jsonb_build_object(
     'ok',true,
-    'code','WEBPUSH_DEVICE_REGISTERED',
+    'code','PUSH_DEVICE_REGISTERED',
     'device_id',v_saved.id,
-    'provider','webpush',
+    'provider',v_saved.provider,
     'platform',v_saved.platform,
     'queued_notifications',v_backfilled
   );
 end;
-$$;
+$function$;
 
--- Queue both currently-supported providers. This does not expose any address to
--- normal users; the rows live in the private outbox.
+-- Queue both supported providers. The registry remains inaccessible directly
+-- to normal clients; only this trusted function reads delivery addresses.
 create or replace function private.queue_push_for_notification()
 returns trigger
 language plpgsql
 security definer
-set search_path=''
-as $$
+set search_path to ''
+as $function$
 declare
   d public.push_subscriptions%rowtype;
   v_title text;
@@ -255,7 +404,6 @@ begin
       jsonb_build_object(
         'title',v_title,
         'body',v_body,
-        -- FCM compatibility fields are preserved; Web Push reads url/tag/urgent.
         'action_url',v_link,
         'url',v_link,
         'tag','schoolsafe-'||new.id,
@@ -272,10 +420,10 @@ begin
 
   return new;
 end;
-$$;
+$function$;
 
--- Preserve the existing FCM claim signature but prevent it from accidentally
--- claiming Web Push rows once Web Push devices exist.
+-- Historical claim remains FCM-only. The ownership equality is defense in
+-- depth against a device that has changed SchoolSafe account.
 create or replace function public.claim_notification_push_batch(p_limit integer default 100)
 returns table(
   outbox_id text,
@@ -288,8 +436,8 @@ returns table(
 )
 language plpgsql
 security definer
-set search_path=''
-as $$
+set search_path to ''
+as $function$
 declare
   v_limit integer:=greatest(1,least(coalesce(p_limit,100),500));
 begin
@@ -306,7 +454,10 @@ begin
   with picked as (
     select o.id
     from private.notification_push_outbox o
-    join public.push_subscriptions d on d.id=o.device_id and d.active
+    join public.push_subscriptions d
+      on d.id=o.device_id
+     and d.active
+     and d.uid=o.recipient_user_id
     where o.provider='fcm'
       and d.provider='fcm'
       and d.token is not null
@@ -327,11 +478,14 @@ begin
   )
   select c.id,c.notification_id,c.device_id,c.provider,d.token,c.payload,c.attempts
   from claimed c
-  join public.push_subscriptions d on d.id=c.device_id and d.active;
+  join public.push_subscriptions d
+    on d.id=c.device_id
+   and d.active
+   and d.uid=c.recipient_user_id;
 end;
-$$;
+$function$;
 
--- Separate service-only claim for the VPS Web Push worker.
+-- Web Push addresses are returned only to a service-role worker on the VPS.
 create or replace function public.claim_webpush_notification_batch(p_limit integer default 100)
 returns table(
   outbox_id text,
@@ -345,8 +499,8 @@ returns table(
 )
 language plpgsql
 security definer
-set search_path=''
-as $$
+set search_path to ''
+as $function$
 declare
   v_limit integer:=greatest(1,least(coalesce(p_limit,100),500));
 begin
@@ -363,7 +517,10 @@ begin
   with picked as (
     select o.id
     from private.notification_push_outbox o
-    join public.push_subscriptions d on d.id=o.device_id and d.active
+    join public.push_subscriptions d
+      on d.id=o.device_id
+     and d.active
+     and d.uid=o.recipient_user_id
     where o.provider='webpush'
       and d.provider='webpush'
       and d.endpoint is not null
@@ -386,20 +543,19 @@ begin
   )
   select c.id,c.notification_id,c.device_id,d.endpoint,d.p256dh,d.auth,c.payload,c.attempts
   from claimed c
-  join public.push_subscriptions d on d.id=c.device_id and d.active;
+  join public.push_subscriptions d
+    on d.id=c.device_id
+   and d.active
+   and d.uid=c.recipient_user_id;
 end;
-$$;
+$function$;
 
-revoke all on function public.get_webpush_public_config() from public,anon;
-revoke all on function public.register_webpush_device(text,text,text,text,text,text,text) from public,anon;
 revoke all on function public.claim_webpush_notification_batch(integer) from public,anon,authenticated;
-
-grant execute on function public.get_webpush_public_config() to authenticated;
-grant execute on function public.register_webpush_device(text,text,text,text,text,text,text) to authenticated;
 grant execute on function public.claim_webpush_notification_batch(integer) to service_role;
 
--- Existing direct-table deny policy remains unchanged.
--- Existing disable_my_push_device() and get_my_push_device_status() remain reused.
--- Existing complete_notification_push_delivery() remains reused for both providers.
+-- Existing grants on get_safe_settings/register_push_device are preserved by
+-- CREATE OR REPLACE. Direct-table deny policy remains unchanged.
+-- disable_my_push_device(), get_my_push_device_status() and
+-- complete_notification_push_delivery() remain unchanged and provider-neutral.
 
 rollback;
