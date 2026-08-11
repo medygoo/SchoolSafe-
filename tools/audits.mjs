@@ -37,6 +37,7 @@ const OUTILS = [
   ['encaissement','recette-auteur-encaissement.mjs','qui a encaissé, sur les reçus'],
   ['autorisees',  'recette-personnes-autorisees.mjs','les personnes autorisées au portail'],
   ['contact',     'recette-contact.mjs',       'corriger un téléphone ou une adresse'],
+  ['scanphys',    'recette-scanner-physique.mjs','scanner physique ≠ accès QR Caisse'],
 ];
 
 const detail = process.argv.includes('--detail');

@@ -2771,13 +2771,36 @@ window._rpc = async (name, params) => {
 // { recorded:true, ... } ou une raison. _rpc() les prendrait pour un refus.
 // Celle-ci rend la donnée brute ; c'est l'appelant qui l'interprète.
 // (Ambiguïté signalée à ChatGPT — en attendant, on ne devine pas.)
+//
+// ⚠️ ELLE RENDAIT `null` POUR TOUT ÉCHEC — refus du serveur comme réseau muet.
+// Son seul appelant, `_enregistrerPassage`, lisait donc un REFUS comme un
+// SILENCE : il retombait sur la file hors ligne, écrivait le passage, et
+// l'écran annonçait « entrée enregistrée » pour un scan que le serveur venait
+// de refuser. C'est la leçon « une lecture qui ÉCHOUE n'est pas une lecture qui
+// ne trouve RIEN », appliquée à une écriture — et elle coûtait une présence.
+//
+// Ce qui les sépare est le SQLSTATE. PostgreSQL le rend toujours sur cinq
+// caractères ; un réseau coupé n'en produit aucun. Sa présence PROUVE donc que
+// le serveur a parlé. C'est la seule chose qu'on puisse affirmer d'ici : on ne
+// devine pas la nature du refus, on constate seulement qu'il y en a eu un.
+window._SQLSTATE = /^[0-9A-Z]{5}$/;
+
 window._rpcData = async (name, params) => {
-  if (!window._authClient) return null;
+  if (!window._authClient) return { ok:false, refus:false, code:'AUTH_REQUIRED' };
   try {
     const { data, error } = await window._authClient.rpc(name, params);
-    if (error) { console.warn('[RPC]', name, error.message); return null; }
-    return data;
-  } catch (e) { console.warn('[RPC]', name, e && e.message); return null; }
+    if (error) {
+      const code = error.code || error.message || 'RPC_ERROR';
+      console.warn('[RPC]', name, code, error.message);
+      return { ok:false, refus:window._SQLSTATE.test(error.code || ''), code };
+    }
+    return { ok:true, data };
+  } catch (e) {
+    // Une exception ici est une panne de transport : rien n'est parvenu au
+    // serveur, donc rien n'a été refusé.
+    console.warn('[RPC]', name, e && e.message);
+    return { ok:false, refus:false, code:(e && e.message) || 'RPC_ERROR' };
+  }
 };
 
 window._edgeFn = async (name, body) => {
@@ -5370,6 +5393,21 @@ window.saveProfile = async () => {
 // Garde des MUTATIONS. `_requireRole` rend du HTML et sert aux pages ; une
 // fonction qui écrit a besoin d'un refus net. Et surtout : cacher un bouton
 // n'est pas une sécurité — une fonction exposée globalement reste appelable.
+
+// QUI A LE DROIT DE SCANNER PHYSIQUEMENT — une seule liste, trois appelants.
+//
+// Elle transcrit `private.can_physical_scan()` de ChatGPT (#94) : Direction 1,
+// Direction 2, Enseignant, Gardien. La CAISSE en est exclue — son besoin est le
+// QR et le dossier financier, pas l'enregistrement d'une entrée ; le PARENT
+// l'est par nature.
+//
+// Elle était écrite trois fois, et les trois copies divergeaient : l'écran
+// admettait la Caisse, `processScanEntry` admettait « tout sauf parent »,
+// `_enregistrerPassage` admettait la Caisse. Une liste plus large que ce que le
+// serveur accepte n'ouvre aucun droit : elle fabrique un refus que personne ne
+// comprend. C'est l'écran qui a tort, jamais la base.
+window.ROLES_SCAN_PHYSIQUE = ['gardien','enseignant','direction','direction2'];
+
 window._denyRole = (...allowed) => {
   if (S.user && allowed.includes(S.user.role)) return false;
   toast('Accès non autorisé', 'error');
@@ -15530,16 +15568,25 @@ R.controle_frais = () => {
   const el = e.sid ? (DB.students||[]).find(x => x.id === e.sid) : null;
   const cl = el ? gc(el.cid) : null;
 
+  // Le bouton menait à `R.scanner`, seul chemin par lequel la Caisse atteignait
+  // l'enregistrement d'une entrée (#94). Depuis la séparation, elle n'y a plus
+  // droit — et un bouton qui répond « Accès refusé » est un défaut, pas une
+  // protection. Il ne s'affiche donc que pour qui peut scanner, et la consigne
+  // dit alors la vérité : à la Caisse, on saisit le matricule.
+  const _peutScanner = S.user && window.ROLES_SCAN_PHYSIQUE.includes(S.user.role);
+
   const recherche = `
   <div class="premium-section">
     <div class="premium-section-title">🔍 Contrôle des frais</div>
     <p style="font-size:12px;color:var(--text-muted);margin:2px 0 12px">
-      Scannez la carte de l'élève ou saisissez son matricule. Le même QR que le portail — aucun second code.</p>
+      ${_peutScanner
+        ? `Scannez la carte de l'élève ou saisissez son matricule. Le même QR que le portail — aucun second code.`
+        : `Saisissez le matricule de l'élève, tel qu'il est écrit sur sa carte.`}</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <input class="form-input" id="cf_code" placeholder="Matricule de l'élève" style="flex:1;min-width:170px"
              onkeydown="if(event.key==='Enter')controlerFrais()">
       <button class="btn btn-primary" onclick="controlerFrais()">Consulter</button>
-      <button class="btn btn-outline" onclick="go('scanner')">📷 Scanner</button>
+      ${_peutScanner ? `<button class="btn btn-outline" onclick="go('scanner')">📷 Scanner</button>` : ''}
     </div>
     ${e.msg ? `<div style="margin-top:11px;padding:11px 13px;background:#fee2e2;color:#991b1b;border-radius:11px;font-size:13px">${esc(e.msg)}</div>` : ''}
   </div>`;
@@ -18674,7 +18721,7 @@ R.scanner = () => {
   // Les deux autres écrans du module portaient leur garde, celui-ci non — le
   // seul des trois. Elle ne remplace pas celle de `processScanEntry`, qui
   // reste la vraie : cacher un écran ne protège rien.
-  const _g = _requireRole('gardien','enseignant','direction','direction2','direction3'); if (_g) return _g;
+  const _g = _requireRole(...window.ROLES_SCAN_PHYSIQUE); if (_g) return _g;
   return `
 <div class="scan-container" style="position:relative">
   <div aria-hidden="true" style="position:absolute;top:60px;left:50%;transform:translateX(-50%);width:200px;height:200px;pointer-events:none;z-index:0">
@@ -18753,13 +18800,32 @@ window._presenceApresScan = (r, att) => {
   return true;
 };
 
+// Pourquoi le passage n'a pas été enregistré, dans les mots de l'école. Le
+// motif était écrit DEUX fois — et les deux copies avaient déjà divergé : celle
+// du retard léger avait perdu « élève inconnu du serveur ». Une seule réponse
+// par question. Le code serveur suit le motif quand il existe : c'est lui qu'on
+// lit au téléphone pour dépanner.
+window._refusPassage = (r) => {
+  const m = { duplicate:        'Déjà enregistré aujourd’hui',
+              unknown_student:  'Élève inconnu du serveur',
+              forbidden:        'Votre profil n’enregistre pas les entrées' }[r && r.raison];
+  return (m || 'Refusé par le serveur') + (r && r.code ? ` (${r.code})` : '');
+};
+
 window._enregistrerPassage = async (rpc, params, logLocal) => {
   // Exposée globalement et elle écrit : elle vérifie donc le rôle elle-même.
-  // Les mêmes que private.can_scan() côté serveur — le parent en est exclu.
-  if (_denyRole('direction','direction2','direction3','enseignant','gardien'))
+  // Les mêmes que private.can_physical_scan() — la Caisse et le parent en sont
+  // exclus. Elle listait `direction3` tant que le serveur s'appuyait sur
+  // can_scan(), qui confondait le droit de scanner et l'accès QR financier.
+  if (_denyRole(...window.ROLES_SCAN_PHYSIQUE))
     return { ok:false, raison:'forbidden' };
   if (window.DB_ONLINE) {
-    const d = await _rpcData(rpc, params);
+    const r = await _rpcData(rpc, params);
+    // Le serveur a REFUSÉ : on ne met rien dans la file. Une file qui porte un
+    // passage refusé le représentera indéfiniment, et l'écran aurait annoncé
+    // une entrée que l'école n'a pas accordée.
+    if (r && r.refus) return { ok:false, raison:'forbidden', code:r.code };
+    const d = r && r.ok ? r.data : null;
     if (d && d.recorded === true) {
       // La ligne rendue par le serveur fait foi ; on garde toutefois notre
       // identifiant si le serveur n'en renvoie pas, car l'écran s'en sert
@@ -18816,9 +18882,10 @@ window._statutPortail = async (sid) => {
 };
 
 window.processScanEntry = async (code, qrSig=null, qrTs=null, cartePermanente=false) => {
-  // Tout le personnel scanne — gardien, enseignant, direction, caisse. Seul
-  // un parent ne peut pas enregistrer une entrée.
-  if(!S.user||S.user.role==='parent'){toast('Accès non autorisé','error');return;}
+  // Elle admettait « tout le personnel sauf le parent », donc la Caisse. Le
+  // serveur sépare désormais le droit de scanner de l'accès QR financier
+  // (#94) : la liste est celle de can_physical_scan(), et rien d'autre.
+  if(_denyRole(...window.ROLES_SCAN_PHYSIQUE)) return;
   if(window._scanBusy) return; // anti-doublon
   window._scanBusy = true;
   try {
@@ -18967,8 +19034,7 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null, cartePermanente=fa
       { p_sid:student.id, p_status:'ontime', p_arr_time:time, p_manual:false }, log);
     window._presenceApresScan(_r, att);
     if (!_r.ok) { showScanResult('red','✕','Entrée refusée',student.name,
-      _r.raison==='duplicate' ? 'Déjà enregistré aujourd\'hui' :
-      _r.raison==='unknown_student' ? 'Élève inconnu du serveur' : 'Refusé par le serveur', time); return; }
+      window._refusPassage(_r), time); return; }
     if(student.pid) await pushNotif(student.pid,`✅ ${student.name} est arrivé(e) à l'heure à ${time}`);
     // Le `else` qui était ici pendait d'un `if(!hasPaid)` retiré avec la fuite
     // financière : l'écran de succès ne s'affichait plus QUE pour les élèves
@@ -18987,7 +19053,7 @@ window.processScanEntry = async (code, qrSig=null, qrTs=null, cartePermanente=fa
       { p_sid:student.id, p_status:'late', p_arr_time:time, p_manual:false }, log);
     window._presenceApresScan(_r, att);
     if (!_r.ok) { showScanResult('red','✕','Entrée refusée',student.name,
-      _r.raison==='duplicate' ? 'Déjà enregistré aujourd\'hui' : 'Refusé par le serveur', time); return; }
+      window._refusPassage(_r), time); return; }
     if(student.pid) await pushNotif(student.pid,`⚠️ ${student.name} est arrivé(e) en retard à ${time}`);
     showScanResult('orange','!','Retard léger',student.name,`${cls?cls.name+' — ':''}L'enfant entre, retard enregistré${_qrWarn?' — '+_qrWarn:''}`,time,log.id,student.id);
     saveToCrypt();

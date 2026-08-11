@@ -1233,6 +1233,61 @@ v_email := case when p_user ? 'email' then … when v_exists then v_current.emai
 `tools/recette-contact.mjs` tient 64 points ; `--preuve` retire la route et
 la recette **revoit la panne d'origine** — aucun numéro corrigé.
 
+### Un refus lu comme un silence devient une entrée enregistrée
+
+**11 août 2026, issue #94.** ChatGPT sépare le droit de **scanner physiquement**
+de l'**accès QR de la caissière** : `private.can_physical_scan()` = Direction 1,
+Direction 2, Enseignant, Gardien — la Caisse dehors. Trois listes du navigateur
+étaient plus larges que lui, et **une liste plus large que le serveur n'ouvre
+aucun droit : elle fabrique un refus que personne ne comprend.**
+
+Elles étaient trois parce qu'elles étaient **recopiées**, et les trois copies
+avaient divergé : l'écran admettait la Caisse, `processScanEntry` admettait
+« tout le personnel sauf le parent », `_enregistrerPassage` admettait la Caisse.
+Une seule liste désormais — `ROLES_SCAN_PHYSIQUE` — et trois appelants.
+
+**Mais le vrai défaut n'était pas la liste, et il ne se voyait pas en la
+lisant.** `_rpcData` rendait `null` pour **tout** échec. Son unique appelant
+lisait donc un REFUS comme un SILENCE, retombait sur la file hors ligne,
+écrivait le passage, inscrivait la présence — et l'écran annonçait l'entrée.
+Mesuré en réinjectant le défaut dans le vrai code : sur un `42501`, l'écran
+affichait **« À l'heure »**.
+
+> **Poser un garde côté serveur sans regarder ce que le navigateur fait de son
+> refus, c'est transformer une sécurité en mensonge.** Le refus était la
+> fonctionnalité ; l'annoncer comme un succès la retournait entièrement.
+
+Trois leçons :
+
+1. **La leçon de « une lecture qui ÉCHOUE n'est pas une lecture qui ne trouve
+   RIEN » vaut aussi pour les ÉCRITURES** — et elle y coûte plus cher : une
+   lecture ratée affiche un vide, une écriture ratée invente un fait.
+2. **Ce qui sépare un refus d'un silence doit être une PREUVE, pas une
+   impression.** Ici le SQLSTATE : PostgreSQL le rend toujours sur cinq
+   caractères, un réseau coupé n'en produit aucun. Sa présence prouve que le
+   serveur a parlé. On ne devine pas la nature du refus — on constate seulement
+   qu'il y en a eu un.
+3. **Et il faut garder l'inverse avec la même force.** Un serveur MUET doit
+   toujours passer par la file : un gardien devant un portail de Kinshasa ne
+   peut pas attendre le réseau. Confondre les deux dans un sens fabrique un
+   mensonge, dans l'autre bloque un portail. La recette tient les deux.
+
+Trouvé au passage, et c'est la famille habituelle : le motif du refus était
+écrit **deux fois**, et la copie du retard léger avait déjà perdu « élève
+inconnu du serveur ». `_refusPassage` répond seul aux deux. Et le bouton
+**`📷 Scanner`** de « Contrôle des frais » — seul chemin par lequel la Caisse
+atteignait l'enregistrement — ne s'affiche plus que pour qui peut scanner :
+**un bouton qui répond « Accès refusé » est un défaut, pas une protection.**
+
+`tools/recette-scanner-physique.mjs` tient 45 points, profil par profil.
+`--preuve` **réinjecte les deux défauts d'origine dans la source réelle** — la
+Caisse dans la liste, et le refus qui retombe dans la file — et vérifie que la
+recette les revoit **tous les deux nommément**, pas seulement en nombre.
+
+**Ce qui reste au serveur :** le DRAFT `p0_scan_physical_role_separation` se
+termine par un `ROLLBACK` volontaire. Le navigateur est prêt ; **la base ne
+l'est pas encore**, et c'est Loms qui décide de la fusion.
+
 ---
 
 ## Les outils
@@ -1260,6 +1315,7 @@ npm run audit        # tout d'un coup
 | `audit-schema.mjs` | code ↔ SQL — lit `supabase/migrations`, et **dit ce qu'il ne peut pas vérifier** |
 | `audit-portee-parent.mjs` | de quelles données un rôle a-t-il réellement besoin |
 | `recette-contact.mjs` | corriger un téléphone ou une adresse, exécuté (`--preuve`) |
+| `recette-scanner-physique.mjs` | scanner physique ≠ accès QR Caisse, et **un refus n'est pas un silence** (`--preuve`) |
 
 **Dans un nouveau dépôt, commencer par les lancer.** Leur sortie *est* la liste
 des manques — au lieu d'en discuter.
