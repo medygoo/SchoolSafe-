@@ -4,7 +4,8 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // DRAFT #89 — signer minimal pour la photo d'un élève.
-// Ne donne aucun accès R2 général au Gardien.
+// L'autorisation métier n'est PAS dupliquée ici : elle vient de
+// public.get_student_photo_file_ref() exécutée avec le JWT de l'appelant.
 
 const DEFAULT_ORIGINS = [
   "https://medygoo.github.io",
@@ -18,15 +19,13 @@ const DEFAULT_ORIGINS = [
 ];
 
 type Json = Record<string, unknown>;
-type Identity = { appUserId: string; role: string };
 
-type Student = {
-  id: string;
-  cid: string | null;
-  pid: string | null;
-  access_parent: boolean | null;
-  archived: boolean | null;
-  photo_file_id: string | null;
+type PhotoRefResult = {
+  ok?: boolean;
+  code?: string;
+  student_id?: string;
+  file_id?: string;
+  legacy_photo_present?: boolean;
 };
 
 type FileRecord = {
@@ -90,7 +89,9 @@ function cors(origin: string | null): Record<string, string> {
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
-  if (origin && allowedOrigins().has(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  if (origin && allowedOrigins().has(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
   return headers;
 }
 
@@ -108,46 +109,15 @@ function reply(origin: string | null, status: number, data: Json): Response {
   });
 }
 
-function normalizeRole(role: string | null | undefined): string {
-  if (role === "direction_pedagogique") return "direction2";
-  if (role === "caisse") return "direction3";
-  return role || "";
-}
-
 function safeFilename(value: string): string {
   return value.replace(/[\r\n"\\]/g, "_").slice(0, 160) || "photo";
 }
 
-async function teacherHasClass(
-  admin: ReturnType<typeof createClient>,
-  teacherId: string,
-  classId: string | null,
-): Promise<boolean> {
-  if (!classId) return false;
-  const { data, error } = await admin
-    .from("classes")
-    .select("id")
-    .eq("id", classId)
-    .or(`teacher_id.eq.${teacherId},teacher_id_en.eq.${teacherId},titulaire_id.eq.${teacherId}`)
-    .maybeSingle();
-  if (error) throw new Error(`Class access lookup failed: ${error.message}`);
-  return Boolean(data);
-}
-
-async function canReadStudentPhoto(
-  admin: ReturnType<typeof createClient>,
-  identity: Identity,
-  student: Student,
-): Promise<boolean> {
-  if (student.archived) return false;
-  if (["direction", "direction2", "gardien"].includes(identity.role)) return true;
-  if (identity.role === "enseignant") {
-    return await teacherHasClass(admin, identity.appUserId, student.cid);
-  }
-  if (identity.role === "parent") {
-    return student.pid === identity.appUserId && student.access_parent !== false;
-  }
-  return false;
+function statusForContractCode(code: string): number {
+  if (code === "FORBIDDEN" || code === "STUDENT_PHOTO_FORBIDDEN") return 403;
+  if (code === "STUDENT_NOT_FOUND" || code === "STUDENT_PHOTO_NOT_SET") return 404;
+  if (code === "STUDENT_ARCHIVED") return 409;
+  return 400;
 }
 
 Deno.serve(async (request: Request) => {
@@ -182,7 +152,12 @@ Deno.serve(async (request: Request) => {
 
   const studentId = String(body.student_id || "").trim();
   if (!studentId || studentId.length > 160) {
-    return reply(origin, 422, { ok: false, code: "VALIDATION_ERROR", field: "student_id", request_id: requestId });
+    return reply(origin, 422, {
+      ok: false,
+      code: "VALIDATION_ERROR",
+      field: "student_id",
+      request_id: requestId,
+    });
   }
 
   try {
@@ -195,52 +170,53 @@ Deno.serve(async (request: Request) => {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
 
+    // Authentifie réellement le JWT avant la RPC métier.
     const { data: authData, error: authError } = await userClient.auth.getUser();
     if (authError || !authData.user) {
       return reply(origin, 401, { ok: false, code: "AUTH_INVALID", request_id: requestId });
     }
 
-    const { data: appUser, error: appUserError } = await admin
-      .from("users")
-      .select("id,role,status")
-      .eq("auth_user_id", authData.user.id)
-      .maybeSingle();
-    if (appUserError) throw new Error(`Identity lookup failed: ${appUserError.message}`);
-    if (!appUser || appUser.status !== "active") {
-      return reply(origin, 403, { ok: false, code: "ACTIVE_ACCOUNT_REQUIRED", request_id: requestId });
+    // Source unique d'autorisation : PostgreSQL + current_app_role/current user.
+    const { data: refData, error: refError } = await userClient.rpc(
+      "get_student_photo_file_ref",
+      { p_sid: studentId },
+    );
+    if (refError) {
+      console.error("student photo ref RPC failed", { requestId, error: refError.message });
+      return reply(origin, 500, {
+        ok: false,
+        code: "STUDENT_PHOTO_CONTRACT_ERROR",
+        request_id: requestId,
+      });
     }
 
-    const identity: Identity = {
-      appUserId: appUser.id,
-      role: normalizeRole(appUser.role),
-    };
-    if (!["direction", "direction2", "gardien", "enseignant", "parent"].includes(identity.role)) {
-      return reply(origin, 403, { ok: false, code: "STUDENT_PHOTO_FORBIDDEN", request_id: requestId });
+    const ref = (refData || {}) as PhotoRefResult;
+    if (!ref.ok) {
+      const code = String(ref.code || "STUDENT_PHOTO_FORBIDDEN");
+      return reply(origin, statusForContractCode(code), {
+        ok: false,
+        code,
+        student_id: studentId,
+        legacy_photo_present: Boolean(ref.legacy_photo_present),
+        request_id: requestId,
+      });
     }
 
-    const { data: studentData, error: studentError } = await admin
-      .from("students")
-      .select("id,cid,pid,access_parent,archived,photo_file_id")
-      .eq("id", studentId)
-      .maybeSingle();
-    if (studentError) throw new Error(`Student lookup failed: ${studentError.message}`);
-    if (!studentData) {
-      return reply(origin, 404, { ok: false, code: "STUDENT_NOT_FOUND", request_id: requestId });
+    const fileId = String(ref.file_id || "").trim();
+    if (!fileId || ref.student_id !== studentId) {
+      return reply(origin, 500, {
+        ok: false,
+        code: "STUDENT_PHOTO_CONTRACT_INVALID",
+        request_id: requestId,
+      });
     }
 
-    const student = studentData as Student;
-    if (!(await canReadStudentPhoto(admin, identity, student))) {
-      return reply(origin, 403, { ok: false, code: "STUDENT_PHOTO_FORBIDDEN", request_id: requestId });
-    }
-
-    if (!student.photo_file_id) {
-      return reply(origin, 404, { ok: false, code: "STUDENT_PHOTO_NOT_SET", request_id: requestId });
-    }
-
+    // Service role n'intervient qu'APRÈS l'autorisation métier, pour obtenir
+    // le chemin R2. On revérifie la relation fichier/élève en défense en profondeur.
     const { data: fileData, error: fileError } = await admin
       .from("school_files")
       .select("id,owner_type,owner_id,category,storage_path,original_name,display_name,mime_type,archived_at,deleted_at")
-      .eq("id", student.photo_file_id)
+      .eq("id", fileId)
       .maybeSingle();
     if (fileError) throw new Error(`File lookup failed: ${fileError.message}`);
     if (!fileData) {
@@ -253,11 +229,15 @@ Deno.serve(async (request: Request) => {
     }
     if (
       file.owner_type !== "student" ||
-      file.owner_id !== student.id ||
+      file.owner_id !== studentId ||
       file.category !== "photo" ||
       !["image/jpeg", "image/png", "image/webp"].includes(file.mime_type)
     ) {
-      return reply(origin, 403, { ok: false, code: "PHOTO_FILE_RELATION_MISMATCH", request_id: requestId });
+      return reply(origin, 403, {
+        ok: false,
+        code: "PHOTO_FILE_RELATION_MISMATCH",
+        request_id: requestId,
+      });
     }
 
     const s3 = new S3Client({
@@ -284,7 +264,7 @@ Deno.serve(async (request: Request) => {
     return reply(origin, 200, {
       ok: true,
       code: "STUDENT_PHOTO_READY",
-      student_id: student.id,
+      student_id: studentId,
       file_id: file.id,
       url,
       expires_in: 300,
@@ -294,6 +274,10 @@ Deno.serve(async (request: Request) => {
     });
   } catch (error) {
     console.error("r2-student-photo failed", { requestId, error: String(error) });
-    return reply(origin, 500, { ok: false, code: "STUDENT_PHOTO_SERVICE_ERROR", request_id: requestId });
+    return reply(origin, 500, {
+      ok: false,
+      code: "STUDENT_PHOTO_SERVICE_ERROR",
+      request_id: requestId,
+    });
   }
 });
