@@ -459,10 +459,21 @@ par »** sinon. Une réserve honnête vaut mieux qu'un nom présenté comme celu
 l'auteur alors qu'il ne l'est pas.
 
 Et la conséquence du principe « avant de lire un champ, vérifier qu'une
-écriture le renseigne » : **six reçus ne peuvent pas nommer leur auteur**, parce
-que `DB.payments` passe à `paid:true` par un `patch` qui ne porte ni qui ni
+écriture le renseigne » : six reçus ne pouvaient pas nommer leur auteur, parce
+que `DB.payments` passait à `paid:true` par un `patch` qui ne portait ni qui ni
 quand. Champ demandé à ChatGPT — écrit côté serveur, car un auteur que le
 navigateur choisirait ne vaudrait rien.
+
+> **SERVI, ET RESTÉ MUET PENDANT DES JOURS.** ChatGPT a livré P0-1 : un
+> déclencheur inscrit `recorded_by`, `recorded_by_name`, `recorded_by_role`
+> sur chaque écriture de `payments`, et les **fige** à la mise à jour pour
+> qu'aucune réimpression ne réécrive l'auteur d'un acte passé. Le navigateur,
+> lui, lisait toujours `by` — l'ancien champ. `_auteurDesLignes` rendait donc
+> `null`, et **les dix-sept documents qui l'appellent retombaient sur
+> « Délivré par »**. L'information était dans la base ; aucun papier ne la
+> portait. Troisième fois que je trouve un lot servi que personne n'appelle :
+> **avant de coder, chercher ce que l'autre a déjà livré** — et **relire cette
+> note-ci avant de la redemander.**
 
 Corrigé au passage : l'autorité du reçu de versement était **la caissière
 elle-même**. La caissière n'est pas sa propre autorité.
@@ -908,6 +919,23 @@ ses contrôles « plus aucune écriture de ce type » cherchaient la chaîne dan
 tout le fichier — **y compris dans les commentaires qui expliquent le
 retrait**. La note qui documente la correction faisait échouer le contrôle
 qui la vérifie. Un outil teste une condition, jamais une chaîne.
+
+**Ce piège s'est refermé TROIS fois** — sur `recette-notifications`, sur son
+contrôle du Web Push, puis sur `recette-auteur-encaissement`. À chaque fois
+la même forme : *« ce fichier ne contient plus X »*, avec un commentaire qui
+explique pourquoi X a été retiré. Le remède tient en une ligne, et il devrait
+être le réflexe :
+
+```js
+const code = source.split('\n').map(l => l.replace(/^\s*\/\/.*$/, '')).join('\n');
+```
+
+Et sa variante plus profonde : **une condition « absence de X » se périme**.
+Le contrôle « aucun `pushManager.subscribe` » était juste tant que
+l'abonnement était un chemin mort ; il est devenu faux le jour où
+l'abonnement est devenu légitime. Ce qu'il fallait vérifier n'était pas
+l'absence, mais *passe-t-il par la RPC, et dit-il la vérité quand le serveur
+refuse ?*
 
 ### Les gardes de rôle
 

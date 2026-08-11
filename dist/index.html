@@ -12942,10 +12942,17 @@ window.downloadRecuPaiement = (sid) => {
       <div style="font-size:12px;color:#5e6c78">Matricule : ${esc(s.mat||'—')} · Classe : ${esc(cl?.name||'—')} · Année : ${yr}</div>
     </div>
     <div style="font-weight:700;font-size:12px;color:#5e6c78;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Détail des frais scolaires</div>
-    ${pays.map(p=>`<div class="row">
-      <span>Frais ${p.t} <span class="${p.paid?'paid':'unpaid'}">${p.paid?'Payé':'Non payé'}</span></span>
+    ${pays.map(p=>{
+      // Chaque ligne payée porte QUI a encaissé et QUAND. Le pied nomme
+      // l'auteur du reçu quand il est unique ; le détail le nomme ligne par
+      // ligne, y compris quand deux caissiers se sont succédé — cas où le
+      // pied, lui, se tait pour ne pas nommer un seul des deux.
+      const a = p.paid ? window._auteurLigne(p) : null;
+      const d = a ? String(p.recorded_at || p.date || '').slice(0,10) : '';
+      return `<div class="row">
+      <span>Frais ${p.t} <span class="${p.paid?'paid':'unpaid'}">${p.paid?'Payé':'Non payé'}</span>${a?`<br><span style="font-size:10px;color:#5e6c78">Encaissé par ${esc(a.nom)}${a.role?' ('+esc(a.role)+')':''}${d?' · '+esc(d):''}</span>`:''}</span>
       <span style="font-weight:${p.paid?700:400};color:${p.paid?'#1f9d6b':'#5e6c78'}">${_cur()}${fees[p.t]||0}</span>
-    </div>`).join('')}
+    </div>`;}).join('')}
     <div class="total">
       <span>TOTAL PAYÉ</span>
       <span>${_cur()}${totalPaid} / ${_cur()}${totalDue}</span>
@@ -13152,6 +13159,16 @@ R.children = () => {
                 <div style="font-size:11px;font-weight:800;color:${paid?'#15603f':'#991b1b'};margin-bottom:3px">${t}</div>
                 <div style="font-size:12px;font-weight:700;color:${paid?'#1f9d6b':'#dc2626'}">${paid?'Payé':'Dû'}</div>
                 <div style="font-size:11px;color:#6f6557;margin-top:2px">${fees[t]?_cur()+fees[t]:'—'}</div>
+                ${(() => {
+                  // Le parent doit pouvoir dire « j'ai payé à Mireille le 12 ».
+                  // C'est ce qui rend une contestation instruisable : sans nom
+                  // ni date, une famille et une école se renvoient une parole
+                  // contre une autre.
+                  const a = paid ? window._auteurLigne(p) : null;
+                  if (!a) return '';
+                  const d = String(p.recorded_at || p.date || '').slice(0,10);
+                  return `<div style="font-size:9.5px;color:#15603f;margin-top:4px;line-height:1.35">${esc(a.nom)}${d?'<br>'+esc(d):''}</div>`;
+                })()}
               </div>`;
             }).join('')}
           </div>
@@ -18287,16 +18304,65 @@ window._notifDirection1 = async (msg) => {
 // qu'une seule ligne n'en porte pas, on rend `null` : le pied de page
 // retombe alors sur « Délivré par », qui est vrai. Nommer quelqu'un comme
 // auteur d'un acte qu'il n'a pas fait est pire que ne nommer personne.
+// ── QUI A ENCAISSÉ — P0-1, servi par ChatGPT ──────────────────────────────
+//
+//  Le serveur inscrit lui-même l'auteur d'un encaissement, par un déclencheur
+//  sur `payments` :
+//
+//      new.recorded_by      := private.current_app_user_id()
+//      new.recorded_by_name := <nom du compte>
+//      new.recorded_by_role := <profil du compte>
+//
+//  …et il les FIGE à la mise à jour (`new.recorded_by := old.recorded_by`),
+//  pour qu'aucune réimpression ne puisse réécrire l'auteur d'un acte passé.
+//
+//  Le navigateur, lui, lisait encore `by` — l'ancien champ, que plus rien ne
+//  renseigne. Le résolveur rendait donc `null`, et les DIX-SEPT documents qui
+//  l'appellent retombaient sur « Délivré par ». Un reçu réimprimé trois mois
+//  plus tard par la Direction n'indiquait pas qui avait encaissé devant la
+//  famille. **L'information était dans la base depuis des jours, et aucun
+//  papier ne la portait.**
+//
+//  ── POURQUOI ON GARDE L'ANCIEN CHAMP EN REPLI ────────────────────────────
+//  Une école en service a déjà des paiements enregistrés avant le
+//  déclencheur. On réconcilie à la LECTURE plutôt que de réécrire son
+//  historique — c'est la règle des deux générations de noms.
+//
+//  ── POURQUOI UN SEUL AUTEUR ──────────────────────────────────────────────
+//  Un reçu couvre parfois plusieurs tranches. Si deux caissiers différents
+//  les ont encaissées, aucun des deux n'est « l'auteur » du reçu : on n'en
+//  nomme aucun, et le pied écrit « Délivré par ». Une réserve honnête vaut
+//  mieux qu'un nom présenté comme celui de l'auteur alors qu'il ne l'est pas.
+window._auteurLigne = (x) => {
+  if (!x) return null;
+  // Ce que le serveur a figé, d'abord.
+  if (x.recorded_by_name) {
+    return { id: x.recorded_by || x.recorded_by_name,
+             nom: x.recorded_by_name,
+             role: (window._roleOfficiel ? window._roleOfficiel(x.recorded_by_role) : x.recorded_by_role) || '' };
+  }
+  // Repli pour les lignes antérieures au déclencheur.
+  const u = x.by ? (DB.users||[]).find(y => y.id === x.by) : null;
+  if (!u) return null;
+  return { id: u.id, nom: u.name,
+           role: (window._roleOfficiel ? window._roleOfficiel(u.role) : u.role) || '' };
+};
+
 window._auteurDesLignes = (lignes) => {
   const l = (lignes||[]).filter(x => x && x.paid);
-  if (!l.length || l.some(x => !x.by)) return null;
-  const ids = [...new Set(l.map(x => x.by))];
-  if (ids.length !== 1) return null;
-  const u = (DB.users||[]).find(x => x.id === ids[0]);
-  if (!u) return null;
-  const dates = l.map(x => x.date).filter(Boolean).sort();
-  return { nom: u.name,
-           role: (window._roleOfficiel ? window._roleOfficiel(u.role) : u.role) || '',
+  if (!l.length) return null;
+  const auteurs = l.map(_auteurLigne);
+  if (auteurs.some(a => !a)) return null;              // une ligne sans auteur → aucun nom
+  const ids = [...new Set(auteurs.map(a => a.id))];
+  if (ids.length !== 1) return null;                    // deux caissiers → aucun nom
+  // La date de l'ACTE, pas celle de l'impression. La colonne est
+  // `recorded_at` — posée par le même déclencheur que l'auteur, et figée
+  // comme lui. J'avais d'abord écrit `paid_at` : ce champ n'existe pas dans
+  // `public.payments`, et l'aurait lu à vide sans qu'aucune erreur ne le
+  // dise. Vérifier le schéma AVANT de lire un champ, pas après.
+  const dates = l.map(x => String(x.recorded_at || x.date || '').slice(0,10))
+                 .filter(Boolean).sort();
+  return { nom: auteurs[0].nom, role: auteurs[0].role,
            le: dates.length ? dates[dates.length-1] : '' };
 };
 
@@ -20650,7 +20716,10 @@ window._enregistrerMouvement = async (opts) => {
   // 4 — NOTIFICATION PARENT
   if(sid&&s?.pid){
     const msg=`🧾 Reçu ${recu_no} — ${label} · ${_cur()}${montant}\n👶 ${s.name} · ${cl?cl.name:'?'}\n💵 ${S.user.name} · ${today()}`;
-    const n={id:'n'+Date.now()+Math.random().toString(36).slice(2,4),uid:s.pid,
+    // `'n'+Date.now()` : deux reçus de la même milliseconde partageaient une
+    // clé, et un seul survivait. Sur un écran de caisse, deux encaissements
+    // consécutifs y arrivent facilement.
+    const n={id:_uid('n_'),uid:s.pid,
       msg,time:nowTime(),date:today(),read:false,type:'receipt',
       receipt:{num:recu_no,student:s.name,mat:s.mat,classe:cl?cl.name:'',
         fee_label:label,motif,note:note||null,montant,
@@ -20799,7 +20868,7 @@ window.sendCaisseReceipt = async (student, rec) => {
   const receiptNum='REC-'+Date.now().toString().slice(-6);
   const triLabel=rec.trimestre?` · ${rec.trimestre}`:'';
   const msg=`🧾 Bordereau #${receiptNum} — ${rec.type_label}${triLabel} · ${_cur()}${rec.amount}\n👶 ${student.name} · ${cl?cl.name:'?'}\n💵 Reçu par : ${S.user.name}\n📅 ${new Date().toLocaleDateString('fr-FR')} à ${rec.time}`;
-  const notif={id:'n'+Date.now(),uid:student.pid,msg,time:rec.time,date:today(),read:false,type:'receipt',
+  const notif={id:_uid('n_'),uid:student.pid,msg,time:rec.time,date:today(),read:false,type:'receipt',
     receipt:{num:receiptNum,student:student.name,mat:student.mat,classe:cl?cl.name:'',
       type_label:rec.type_label,trimestre:rec.trimestre||null,amount:rec.amount,
       note:rec.note||null,by:S.user.name,date:today(),time:rec.time}};
