@@ -979,6 +979,46 @@ calculer pareil, sinon il refuse un ajout que le serveur aurait accepté.
 `tools/recette-personnes-autorisees.mjs` tient 31 points ; `--preuve` retire
 le garde-fou de la photo et vérifie que la recette voit passer l'image collée.
 
+### Supprimer une ligne n'est pas retirer un accès
+
+**11 août 2026, P0-13.** `deleteUser` faisait `pushSync('users','delete')` —
+une suppression sèche. Trois conséquences, et la troisième est la pire :
+
+1. **L'historique disparaissait avec la personne.** Reçus établis, salaires
+   versés, lignes d'audit, notifications envoyées : tout la référence. Le jour
+   où une administration demande « qui a encaissé en octobre ? », le nom
+   n'existe plus.
+2. **Rien ne protégeait le DERNIER compte de Direction.** Le supprimer
+   fermait l'école à tout le monde, sans retour.
+3. **L'accès n'était pas retiré.** Effacer la ligne applicative ne touche pas
+   l'identité d'authentification : la personne « supprimée » pouvait encore
+   se connecter. **L'écran disait « supprimé » et le serveur la laissait
+   entrer.**
+
+Le serveur servait pourtant le cycle entier — `suspend_school_account`,
+`reactivate_school_account`, `prepare_school_account_removal`,
+`confirm_school_account_removal` — et personne ne l'appelait. **Quatrième lot
+servi trouvé muet.**
+
+Trois leçons :
+
+1. **Un retrait d'accès se fait en TROIS temps**, et l'ordre est la garantie :
+   on prépare, une Edge Function retire l'identité, puis on **confirme** — et
+   la confirmation REFUSE si l'identité est encore là. Sans cette troisième
+   étape, on annonce une fermeture qui n'a pas eu lieu.
+2. **Fermer et effacer ne sont pas le même geste.** Suspendre est réversible
+   et garde tout ; retirer l'accès est définitif et garde tout aussi. Rien
+   n'est jamais supprimé — c'est ce qui permet de répondre, dans dix ans, à
+   « qui a fait cela ? ».
+3. **L'état du COMPTE passe avant son canal d'accès.** La pastille affichait
+   « code envoyé » sur un compte suspendu, ce qui envoyait la Direction
+   renvoyer un code à quelqu'un qu'elle venait de fermer.
+
+Et une leçon sur les recettes : **un scénario qu'on fabrique pour atteindre
+une garde du serveur ne prouve rien sur le serveur** — seulement sur sa copie
+en carton. Ce qu'une recette de frontend doit vérifier, c'est ce que l'écran
+FAIT du refus : dit-il ce qui a été refusé, et quoi faire à la place ?
+
 ### Les gardes de rôle
 
 Toute fonction exposée globalement qui écrit doit vérifier le rôle.

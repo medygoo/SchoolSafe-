@@ -10919,7 +10919,10 @@ window._simpleList = (role, icon, gradient) => {
           ${window._boutonAcces(u)}
           <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
           ${(u.email||'').trim()?`<button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')" title="Envoyer l'invitation ou le lien par courriel">🔑 Accès</button>`:''}
-          <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
+          ${(u.status==='suspended'
+              ? `<button class="btn btn-sm" style="background:#dcfce7;border:1.5px solid #6ee7b7;color:#15603f;font-weight:700" onclick="reactiverCompte('${u.id}')">Réactiver</button>`
+              : `<button class="btn btn-sm" style="background:#fef3c7;border:1.5px solid #fcd34d;color:#92400e;font-weight:700" onclick="suspendreCompte('${u.id}')">Suspendre</button>`)}
+            ${S.user.role==='direction'&&u.status!=='removed'?`<button class="btn btn-danger btn-sm" onclick="retirerAccesCompte('${u.id}')">Retirer l’accès</button>`:''}
         </div>
       </div>
     </div>`).join('')}
@@ -11420,169 +11423,208 @@ window.renvoyerInvitation = async (uid) => {
   } finally { if (typeof _fin === 'function') _fin(); }
 };
 
-window.deleteUser = (uid) => {
-  const u=DB.users.find(x=>x.id===uid); if(!u) return;
-  if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
-  if(S.user.role==='direction2' && !window._d2PeutToucher(u.role)){toast('Direction 1 et Caisse ne se suppriment que depuis Direction 1','error');return;}
-  const linked=DB.students.filter(s=>s.pid===uid);
-  showC(`Supprimer ${u.name} ?`,linked.length?`⚠️ ${linked.length} élève(s) lié(s) — le lien parent sera retiré.`:'Cette action est irréversible.',()=>{
-    linked.forEach(s=>{s.pid=null;});
-    if(linked.length){const _sids=linked.map(s=>s.id).join(',');pushSync('students','patch',{pid:null},'id=in.('+_sids+')');}
-    const _clsFr=DB.classes.filter(c=>c.teacher_id===uid);
-    const _clsEn=DB.classes.filter(c=>c.teacher_id_en===uid);
-    // Le titulaire était oublié : la classe gardait une référence vers un
-    // compte disparu, et son en-tête affichait un titulaire introuvable.
-    const _clsTit=DB.classes.filter(c=>c.titulaire_id===uid);
-    _clsFr.forEach(c=>{c.teacher_id=null;});
-    _clsEn.forEach(c=>{c.teacher_id_en=null;});
-    _clsTit.forEach(c=>{c.titulaire_id=null;});
-    if(_clsFr.length) pushSync('classes','patch',{teacher_id:null},'id=in.('+_clsFr.map(c=>c.id).join(',')+')');
-    if(_clsEn.length) pushSync('classes','patch',{teacher_id_en:null},'id=in.('+_clsEn.map(c=>c.id).join(',')+')');
-    if(_clsTit.length) pushSync('classes','patch',{titulaire_id:null},'id=in.('+_clsTit.map(c=>c.id).join(',')+')');
+// ════════════════════════════════════════════════════════════════════════════
+//  LE CYCLE DE VIE D'UN COMPTE — P0-13, servi par ChatGPT
+// ════════════════════════════════════════════════════════════════════════════
+//
+//  CE QUE FAISAIT L'APPLICATION, ET CE QUE ÇA COÛTAIT
+//
+//  `deleteUser` faisait `pushSync('users','delete')` — une SUPPRESSION SÈCHE
+//  de la ligne. Trois conséquences, et la troisième est la pire :
+//
+//   1. **L'historique disparaissait avec la personne.** Salaires versés,
+//      encaissements, lignes d'audit, notifications envoyées : tout référence
+//      ce compte. Le jour où une administration demande « qui a encaissé
+//      en octobre ? », le nom n'existe plus.
+//   2. **L'accès n'était PAS retiré.** Supprimer la ligne applicative ne
+//      touche pas l'identité d'authentification. La personne « supprimée »
+//      pouvait encore se connecter — l'écran disait « supprimé », le serveur
+//      la laissait entrer.
+//   3. Rien ne protégeait le DERNIER compte de Direction. Le supprimer
+//      fermait l'école à tout le monde, définitivement.
+//
+//  ── CE QUE LE SERVEUR SERT, ET QUE PERSONNE N'APPELAIT ────────────────────
+//
+//      suspend_school_account(app_user_id, reason)      motif ≥ 5 caractères
+//      reactivate_school_account(app_user_id)
+//      prepare_school_account_removal(actor_auth, app_user_id, reason)
+//      confirm_school_account_removal(actor_auth, app_user_id, expected_auth)
+//
+//  Le retrait se fait en TROIS temps, et c'est voulu : on prépare, l'identité
+//  d'authentification est retirée, puis on CONFIRME que c'est bien fait. La
+//  confirmation refuse si l'identité est encore là (`AUTH_IDENTITY_STILL_PRESENT`)
+//  ou si ce n'est pas la bonne (`AUTH_IDENTITY_MISMATCH`).
+//
+//  **La ligne n'est jamais supprimée.** Son statut change, et l'historique
+//  reste entier.
 
-    // Le nettoyage des notifications et des appareils appartient au SERVEUR,
-    // et il y est resté sans qu'on le sache. Deux écritures ont été retirées
-    // le 10 août 2026 :
-    //
-    //  · `pushSync('notifs','delete')` — le contrat P0-30 dit qu'une
-    //    notification n'est JAMAIS supprimée. Elle est la preuve que l'école
-    //    a prévenu, et cette preuve survit au compte qui la recevait ;
-    //  · `pushSync('push_subscriptions','delete')` — la table est en refus
-    //    total depuis `p0_32a_explicit_device_registry_deny_policy`. Cette
-    //    ligne ne pouvait pas aboutir, et rien ne le disait.
-    //
-    // On retire seulement le miroir local, pour que l'écran cesse d'afficher
-    // les notifications d'un compte parti.
-    DB.notifs=(DB.notifs||[]).filter(x=>x.uid!==uid);
+window._COMPTE_REFUS = {
+  FORBIDDEN:                   'Votre profil ne permet pas cette opération.',
+  FORBIDDEN_TARGET_ROLE:       'Direction 2 ne touche pas ce profil-là. Passez par Direction 1.',
+  ACTOR_NOT_FOUND:             'Votre compte n’est pas reconnu par le serveur.',
+  TARGET_NOT_FOUND:            'Ce compte n’existe plus.',
+  REASON_REQUIRED:             'Le motif est obligatoire, et d’au moins cinq caractères.',
+  INVALID_REASON:              'Le motif doit faire entre 5 et 500 caractères.',
+  VALIDATION_ERROR:            'Le serveur refuse une des valeurs envoyées.',
+  CANNOT_SUSPEND_CURRENT_ACCOUNT:'Vous ne pouvez pas suspendre votre propre compte.',
+  CANNOT_REMOVE_CURRENT_ACCOUNT: 'Vous ne pouvez pas retirer votre propre accès.',
+  LAST_DIRECTION_ACCOUNT:      'C’est le DERNIER compte de Direction actif. Le retirer fermerait l’école à tout le monde. Créez d’abord une autre Direction.',
+  AUTH_IDENTITY_STILL_PRESENT: 'L’accès de connexion n’a pas encore été retiré du serveur. Recommencez dans un instant.',
+  AUTH_IDENTITY_MISMATCH:      'L’identité retirée ne correspond pas à ce compte. Prévenez ChatGPT — ne recommencez pas.',
+  AUTH_REQUIRED:               'Vous n’êtes pas connecté au serveur.',
+  RPC_REFUSED:                 'Le serveur a refusé sans préciser.',
+  PGRST202:                    'Cette opération n’est pas encore servie par ce serveur.',
+};
+window._compteRefus = (c) => _COMPTE_REFUS[c] || ('Refus du serveur : ' + (c || 'inconnu'));
 
-    DB.users=DB.users.filter(x=>x.id!==uid);
-    pushSync('users','delete',{},'id=eq.'+uid);
-    logAudit('user_delete', `${u.name} — ${u.role}`, uid);
-    toast(`🗑️ ${u.name} supprimé`,'info');
-    saveToCrypt(); render();
-  });
+// Ce qu'un compte devient, dit dans la langue de l'école.
+window._COMPTE_ETATS = {
+  active:    {l:'Actif',            c:'#1f9d6b', bg:'#f0fdf4', b:'#6ee7b7'},
+  suspended: {l:'Suspendu',         c:'#d98a2b', bg:'#fffbeb', b:'#fcd34d'},
+  removed:   {l:'Accès retiré',     c:'#6b7280', bg:'#f8fafc', b:'#e2e8f0'},
+  inactive:  {l:'Inactif',          c:'#6b7280', bg:'#f8fafc', b:'#e2e8f0'},
+};
+window._compteEtat = (u) => _COMPTE_ETATS[u && u.status] || _COMPTE_ETATS.active;
+
+// ── SUSPENDRE ─────────────────────────────────────────────────────────────
+// Réversible, et c'est ce qui la distingue du retrait : un enseignant en
+// congé, un compte prêté, un doute. On suspend, on réactive.
+window.suspendreCompte = (uid) => {
+  const u = (DB.users||[]).find(x => x.id === uid); if (!u) return;
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Accès non autorisé', 'error'); return;
+  }
+  openM(`Suspendre le compte de ${u.name}`, `
+<div style="padding:2px">
+  <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:13px;color:#92400e;line-height:1.55">
+    <b>${esc(u.name)} ne pourra plus se connecter</b>, dès la validation.<br>
+    Son travail reste entier — bulletins, encaissements, historique. La
+    suspension <b>se défait</b> quand vous le décidez.</div>
+  <label class="form-label">Motif <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="cptMotif" maxlength="500" placeholder="Ex. congé sans solde jusqu’en janvier">
+  <p style="font-size:11.5px;color:var(--text-muted);margin:8px 0 0">Au moins cinq caractères — c’est ce que le serveur exige, et c’est ce qui reste au registre.</p>
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-danger" onclick="confirmerSuspension(${JSON.stringify(uid)})">Suspendre</button>`);
 };
 
-R.teachers = () => _simpleList('enseignant','●','linear-gradient(90deg,#2fbf8f,#1f9d6b)');
-R.guardians = () => _simpleList('gardien','🛡️','linear-gradient(90deg,#ff7a4d,#ea580c)');
-R.parents = () => {
-  const parents = DB.users.filter(u => u.role === 'parent');
-  const q = (window._parQ||'').toLowerCase();
-  const list = q ? parents.filter(u=>(u.name||'').toLowerCase().includes(q)||(u.phone&&u.phone.includes(q))) : parents;
-  const _withKids = parents.filter(p=>DB.students.some(s=>s.pid===p.id)).length;
-  const _withPhone = parents.filter(p=>p.phone).length;
-  return _wrapDark(`
-  <div class="hbento" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">
-    <div class="htile" style="background:linear-gradient(135deg,#9b6fd4,#b591e0);color:#fff;padding:13px 10px">
-      <div style="font-size:19px">👪</div><div class="hbig" style="font-size:24px">${parents.length}</div><div class="hsub">parents</div>
-    </div>
-    <div class="htile" style="background:linear-gradient(135deg,#1f9d6b,#2fbf8f);color:#fff;padding:13px 10px">
-      <div style="font-size:19px">🎓</div><div class="hbig" style="font-size:24px">${_withKids}</div><div class="hsub">avec enfants</div>
-    </div>
-    <div class="htile" style="background:linear-gradient(135deg,#2f7bd6,#5b9be8);color:#fff;padding:13px 10px">
-      <div style="font-size:19px">📞</div><div class="hbig" style="font-size:24px">${_withPhone}</div><div class="hsub">avec tél.</div>
-    </div>
-  </div>
-  <div class="ww-toolbar">
-    <div class="ww-search" style="flex:1">
-      <input placeholder="Rechercher un parent..." oninput="window._parQ=this.value;clearTimeout(window._dT);window._dT=setTimeout(render,300)" value="${window._parQ||''}">
-    </div>
-    <button class="btn btn-primary" onclick="openUserForm('parent')">+ Ajouter</button>
-  </div>
-  ${!list.length?`<div style="text-align:center;padding:60px;color:var(--text-muted)"><div style="width:48px;height:48px;border-radius:14px;background:#f0e9fa;margin:0 auto 12px;display:flex;align-items:center;justify-content:center"><div style="width:20px;height:20px;border-radius:50%;background:#9b6fd4"></div></div>Aucun parent — cliquez ➕ pour ajouter</div>`:`
-  <div style="display:flex;flex-direction:column;gap:14px">
-    ${list.map(u=>{
-      const kids = DB.students.filter(s=>s.pid===u.id);
-      return `<div class="premium-section" style="margin-bottom:0;border-left:4px solid #9b6fd4;padding:0;overflow:hidden">
-        <!-- En-tête parent — zone violette identifiante -->
-        <div style="display:flex;align-items:center;gap:12px;padding:14px 16px 12px;background:linear-gradient(90deg,rgba(155,111,212,.09),transparent);border-bottom:2px solid rgba(155,111,212,.18)">
-          <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#9b6fd4,#7c4db8);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;flex-shrink:0;box-shadow:0 4px 12px rgba(155,111,212,.35)">
-            ${u.initials||ini(u.name)}
-          </div>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:16px">${esc(u.name)}</div>
-            <div style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.phone||'—')}</div>
-            <span class="pill" style="background:rgba(155,111,212,.15);color:#9b6fd4;font-size:10px;font-weight:700">👪 Parent · ${kids.length} enfant${kids.length>1?'s':''}</span>
-            ${window._pastilleAcces(u)}
-          </div>
-          <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
-            ${u.phone?waBtn(u.phone,u.name):''}
-            ${window._boutonAcces(u)}
-            <button class="btn btn-outline btn-sm" onclick="openUserForm('parent','${u.id}')">Modifier</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
-          </div>
-        </div>
-
-        <!-- Enfants liés + tutelles -->
-        <div style="padding:12px 16px">
-        <div style="font-size:11px;font-weight:700;color:#5c92ff;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;display:flex;align-items:center;gap:5px">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-          Enfants (${kids.length})
-        </div>
-        ${!kids.length
-          ? `<div style="font-size:13px;color:var(--text-muted);padding:12px;background:var(--bg);border-radius:10px;text-align:center;margin-bottom:0">
-               Aucun enfant lié — allez dans <strong>Élèves</strong> et sélectionnez ce parent dans le champ "Parent lié"
-             </div>`
-          : kids.map(s=>{
-              const cl = gc(s.cid);
-              const [cc,cbg] = clsColor(cl?cl.name:'');
-              const tuts = (DB.aps||[]).filter(a=>a.sid===s.id);
-              const activeTuts = tuts.filter(a=>a.active!==false);
-              return `<div style="background:rgba(37,99,235,.04);border:1px solid rgba(37,99,235,.14);border-left:3px solid #5c92ff;border-radius:12px;padding:12px;margin-bottom:8px">
-                <!-- Info élève -->
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-                  <div style="width:40px;height:40px;border-radius:12px;background:${cbg};color:${cc};display:flex;align-items:center;justify-content:center;font-weight:700;overflow:hidden;flex-shrink:0">
-                    ${s.photo?`<img src="${s.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:12px">`:ini(s.name)}
-                  </div>
-                  <div style="flex:1;min-width:0">
-                    <div style="font-weight:700;font-size:14px">${esc(s.name)}</div>
-                    <div style="font-size:12px;color:var(--text-secondary)">${cl?esc(cl.name):''} · ${esc(s.mat)}</div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <span class="pill" style="background:${activeTuts.length>0?'#d8f3e6':'#fdeccd'};color:${activeTuts.length>0?'#065f46':'#92400e'};font-size:11px">
-                      ${activeTuts.length}/3 tutelles
-                    </span>
-                    ${tuts.length<3?`<button class="btn btn-primary btn-sm" onclick="openTutelleForm('${s.id}')">➕</button>`:''}
-                  </div>
-                </div>
-
-                <!-- Parent principal (toujours autorisé) -->
-                <div style="display:flex;align-items:center;gap:8px;padding:8px 11px;background:rgba(31,157,107,.08);border:1px solid rgba(47,191,143,.3);border-radius:10px;margin-bottom:8px">
-                  <span style="font-size:16px">👑</span>
-                  <div style="flex:1;font-size:13px"><strong>${esc(u.name)}</strong> <span style="color:var(--text-muted);font-size:11px">Parent principal · ${esc(u.phone||'—')}</span></div>
-                  <span class="pill" style="background:#d8f3e6;color:#065f46;font-size:10px">Toujours autorisé</span>
-                </div>
-
-                <!-- Tutelles -->
-                ${!tuts.length
-                  ? `<div style="font-size:12px;color:var(--text-muted);padding:8px;text-align:center">Aucune tutelle — cliquez ➕ pour en ajouter (max 3)</div>`
-                  : `<div style="display:flex;gap:8px;flex-wrap:wrap">
-                      ${tuts.map(t=>{
-                        const active = t.active!==false;
-                        return `<div style="flex:1;min-width:130px;background:var(--bg-card);border:1px solid ${active?'var(--border)':'#efe3d3'};border-radius:10px;padding:9px;text-align:center;opacity:${active?1:0.6}">
-                          <div style="width:48px;height:58px;border-radius:9px;overflow:hidden;margin:0 auto 5px;background:#efe3d3;display:flex;align-items:center;justify-content:center;position:relative">
-                            ${t.photo?`<img src="${t.photo}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:18px;font-weight:700;color:#6f6557">${ini(t.name)}</span>`}
-                            ${!active?`<div style="position:absolute;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center">🚫</div>`:''}
-                          </div>
-                          <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.name.split(' ')[0])}</div>
-                          <div style="font-size:10px;color:var(--text-secondary)">${esc(t.relation||'Tutelle')}</div>
-                          <div style="font-size:10px;color:${active?'#1f9d6b':'#dc2626'};font-weight:600;margin:3px 0">${active?'Autorisé':'Désactivé'}</div>
-                          <div style="display:flex;gap:4px;justify-content:center;margin-top:5px">
-                            <button onclick="openTutelleForm('${s.id}','${t.id}')" style="padding:4px 7px;border-radius:7px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:11px">✏️</button>
-                            ${t.active===false
-                        ? `<button onclick="reactiverTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#dcfce7;color:#15603f;cursor:pointer;font-size:11px;font-weight:700">Réactiver</button>`
-                        : `<button onclick="suspendreTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#fef3c7;color:#92400e;cursor:pointer;font-size:11px;font-weight:700">Suspendre</button>`}
-                          </div>
-                        </div>`;
-                      }).join('')}
-                    </div>`}
-              </div>`;
-            }).join('')}
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`}`);
+window.confirmerSuspension = async (uid) => {
+  const motif = (document.getElementById('cptMotif')?.value || '').trim();
+  if (motif.length < 5) { markFieldError('cptMotif', 'Au moins cinq caractères.'); return; }
+  const r = await _rpc('suspend_school_account', { p_app_user_id: uid, p_reason: motif });
+  if (!r.ok) { toast(_compteRefus(r.code), 'error'); return; }
+  const u = (DB.users||[]).find(x => x.id === uid);
+  if (u && r.data.user) Object.assign(u, r.data.user);
+  saveToCrypt(); closeModal();
+  logAudit('account_suspend', `${u ? u.name : uid} — ${motif}`, uid);
+  toast(`${u ? u.name : 'Compte'} suspendu`, 'success');
+  render();
 };
+
+window.reactiverCompte = (uid) => {
+  const u = (DB.users||[]).find(x => x.id === uid); if (!u) return;
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Accès non autorisé', 'error'); return;
+  }
+  showC(`Réactiver ${u.name} ?`,
+    'Le compte pourra de nouveau se connecter, avec les mêmes droits qu’avant.',
+    async () => {
+      const r = await _rpc('reactivate_school_account', { p_app_user_id: uid });
+      if (!r.ok) { toast(_compteRefus(r.code), 'error'); return; }
+      if (r.data.user) Object.assign(u, r.data.user);
+      saveToCrypt();
+      logAudit('account_reactivate', u.name, uid);
+      toast(`${u.name} peut de nouveau se connecter`, 'success');
+      render();
+    });
+};
+
+// ── RETIRER L'ACCÈS — TROIS TEMPS, ET AUCUNE SUPPRESSION ──────────────────
+window.retirerAccesCompte = (uid) => {
+  const u = (DB.users||[]).find(x => x.id === uid); if (!u) return;
+  // Le serveur réserve le retrait à Direction 1 (`v_actor_role<>'direction'`).
+  if (!S.user || S.user.role !== 'direction') {
+    toast('Seule la Direction 1 retire un accès', 'error'); return;
+  }
+  const eleves = (DB.students||[]).filter(s => s.pid === uid);
+  const classes = (DB.classes||[]).filter(c =>
+    c.teacher_id === uid || c.teacher_id_en === uid || c.titulaire_id === uid);
+  openM(`Retirer l’accès de ${u.name}`, `
+<div style="padding:2px">
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:11px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#991b1b;line-height:1.6">
+    <b>${esc(u.name)} ne pourra plus jamais se connecter avec cet accès.</b><br>
+    Son identité de connexion est retirée du serveur.</div>
+  <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#15603f;line-height:1.6">
+    <b>Rien n’est supprimé.</b> Son nom reste sur les reçus qu’elle a établis,
+    sur les bulletins qu’elle a signés, dans le journal de l’école. C’est ce
+    qui permet de répondre, dans dix ans, à « qui a fait cela ? ».</div>
+  ${eleves.length||classes.length?`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400e;line-height:1.55">
+    <b>À reprendre après :</b>
+    ${eleves.length?`<br>· ${eleves.length} élève${eleves.length>1?'s ont':' a'} ce compte pour parent principal`:''}
+    ${classes.length?`<br>· ${classes.length} classe${classes.length>1?'s lui sont attribuées':' lui est attribuée'}`:''}
+    </div>`:''}
+  <label class="form-label">Motif <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="cptMotif" maxlength="500" placeholder="Ex. a quitté l’école le 30 juin">
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-danger" onclick="confirmerRetraitAcces(${JSON.stringify(uid)})">Retirer l’accès</button>`);
+};
+
+window.confirmerRetraitAcces = async (uid) => {
+  if (!S.user || S.user.role !== 'direction') return;
+  const motif = (document.getElementById('cptMotif')?.value || '').trim();
+  if (motif.length < 5) { markFieldError('cptMotif', 'Au moins cinq caractères.'); return; }
+  const u = (DB.users||[]).find(x => x.id === uid); if (!u) return;
+
+  // L'identité Auth de celui qui agit, telle que le serveur l'attend.
+  const monAuth = S.user.auth_user_id
+    || ((DB.users||[]).find(x => x.id === S.user.id) || {}).auth_user_id || null;
+  if (!monAuth) {
+    toast('Votre identité de connexion n’est pas connue de l’application — reconnectez-vous', 'error');
+    return;
+  }
+  const authCible = u.auth_user_id || null;
+
+  // ── 1 · PRÉPARER ────────────────────────────────────────────────────────
+  const p = await _rpc('prepare_school_account_removal', {
+    p_actor_auth_user_id: monAuth, p_app_user_id: uid, p_reason: motif });
+  if (!p.ok) { toast(_compteRefus(p.code), 'error'); return; }
+
+  // ── 2 · RETIRER L'IDENTITÉ DE CONNEXION ─────────────────────────────────
+  // Cette étape appartient à une Edge Function : le navigateur n'a pas le
+  // droit de toucher à `auth.users`, et c'est très bien ainsi.
+  const e = await _edgeFn('remove-school-account', { app_user_id: uid, reason: motif });
+  if (!e.ok) {
+    openM('L’accès n’a pas pu être retiré', `
+<div style="padding:4px 2px">
+  <p style="margin:0 0 10px"><b>${esc(u.name)}</b></p>
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:11px;padding:12px 14px;color:#991b1b;font-size:14px;line-height:1.55">
+    ${esc(_compteRefus(e.code))}</div>
+  <p style="font-size:12.5px;color:var(--text-secondary);margin:10px 0 0;line-height:1.6">
+    Le retrait a été <b>préparé</b> mais pas achevé : cette personne peut
+    encore se connecter. <b>Suspendez son compte</b> en attendant, pour
+    fermer l’accès tout de suite.</p>
+  <p style="font-size:11.5px;color:var(--text-muted);margin:8px 0 0">Code serveur : <span style="font-family:monospace">${esc(e.code||'—')}</span></p>
+</div>`,
+      `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>
+       <button class="btn btn-danger" onclick="closeModal();suspendreCompte(${JSON.stringify(uid)})">Suspendre maintenant</button>`);
+    return;
+  }
+
+  // ── 3 · CONFIRMER — le serveur vérifie que c'est bien fait ──────────────
+  const c = await _rpc('confirm_school_account_removal', {
+    p_actor_auth_user_id: monAuth, p_app_user_id: uid, p_expected_auth_user_id: authCible });
+  if (!c.ok) { toast(_compteRefus(c.code), 'error'); return; }
+
+  u.status = c.data.status || 'removed';
+  u.auth_user_id = null;
+  u.access_removed_at = c.data.access_removed_at || null;
+  saveToCrypt(); closeModal();
+  logAudit('account_access_removed', `${u.name} — ${motif}`, uid);
+  toast(`${u.name} ne peut plus se connecter — son historique est conservé`, 'success');
+  render();
+};
+
 window._parQ = '';
 
 // ── CLASSES CRUD ──
@@ -28665,7 +28707,10 @@ R.accounts = () => {
             ${u.phone?waBtn(u.phone,u.name):''}
             ${window._boutonAcces(u)}
             <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
+            ${(u.status==='suspended'
+              ? `<button class="btn btn-sm" style="background:#dcfce7;border:1.5px solid #6ee7b7;color:#15603f;font-weight:700" onclick="reactiverCompte('${u.id}')">Réactiver</button>`
+              : `<button class="btn btn-sm" style="background:#fef3c7;border:1.5px solid #fcd34d;color:#92400e;font-weight:700" onclick="suspendreCompte('${u.id}')">Suspendre</button>`)}
+            ${S.user.role==='direction'&&u.status!=='removed'?`<button class="btn btn-danger btn-sm" onclick="retirerAccesCompte('${u.id}')">Retirer l’accès</button>`:''}
           </div>
         </div>`).join('')}
       </div>`}
@@ -29444,6 +29489,19 @@ window._peutOuvrirAcces = (acteurRole, cibleRole) => {
 //  endroit le jour où quelqu'un n'arrive pas à entrer.
 window._etatAccesCompte = (u) => {
   if (!u) return { cle:'inconnu', texte:'—', bg:'#f3f4f6', fg:'#6b7280' };
+  // ── L'ÉTAT DU COMPTE PASSE AVANT SON CANAL D'ACCÈS ────────────────────
+  // Un compte suspendu ou dont l'accès a été retiré ne se connecte plus,
+  // quel que soit son canal. Afficher « code envoyé » sur un compte suspendu
+  // enverrait la Direction renvoyer un code à quelqu'un qu'elle vient
+  // elle-même de fermer — c'est la leçon de la pastille qui ment sur un état.
+  if (u.status === 'suspended')
+    return { cle:'suspendu', texte:'Suspendu',
+             titre:'Ce compte ne peut plus se connecter — la suspension se défait',
+             bg:'#fffbeb', fg:'#92400e' };
+  if (u.status === 'removed' || (u.access_removed_at && !u.auth_user_id))
+    return { cle:'acces_retire', texte:'Accès retiré',
+             titre:'L’identité de connexion a été retirée. L’historique de la personne est conservé.',
+             bg:'#f8fafc', fg:'#6b7280' };
   // Contrat P0-22 du 6 août 2026 : chaque compte porte les DEUX coordonnées,
   // et les deux ouvrent le même compte. Une fiche à moitié remplie n'est donc
   // plus « un choix de canal » : c'est un dossier incomplet, et il se voit.
@@ -29499,6 +29557,9 @@ window._boutonAcces = (u) => {
   const e = window._etatAccesCompte(u);
   // Sans aucune coordonnée, aucune voie n'aboutit : le serveur refuserait.
   if (e.cle === 'sans_contact') return '';
+  // Sur un compte suspendu ou retiré, envoyer un code n'ouvrirait rien : le
+  // serveur refuse la connexion avant même de regarder le code.
+  if (e.cle === 'suspendu' || e.cle === 'acces_retire') return '';
   // Le code WhatsApp demande un numéro. Sans numéro, ce bouton-là ne peut pas
   // aboutir — et un bouton qui ne peut pas réussir est un mensonge poli.
   // L'invitation par courriel reste, elle, accessible par « 🔑 Accès ».
