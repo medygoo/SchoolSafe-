@@ -35,7 +35,9 @@ select
   position('webpush' in pg_get_functiondef('public.register_push_device(text,text,text,text,text,text)'::regprocedure)) > 0
     as shared_register_supports_webpush,
   position('DEVICE_OWNER_CHANGED' in pg_get_functiondef('public.register_push_device(text,text,text,text,text,text)'::regprocedure)) > 0
-    as register_invalidates_pending_rows_on_owner_change;
+    as register_invalidates_pending_rows_on_owner_change,
+  position('app_instance_id' in pg_get_functiondef('public.get_my_push_device_status()'::regprocedure)) > 0
+    as status_exposes_nonsecret_installation_id;
 
 select
   position('d.uid=o.recipient_user_id' in replace(pg_get_functiondef('public.claim_notification_push_batch(integer)'::regprocedure),' ','')) > 0
