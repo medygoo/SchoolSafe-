@@ -1486,10 +1486,32 @@ window.waLink = (phone, msg) => {
   if (!d) return null;
   return 'https://wa.me/' + d + (msg ? '?text=' + encodeURIComponent(msg) : '');
 };
+// LE BOUTON WHATSAPP FAISAIT LA MOITIÉ DES AUTRES — Loms, 11 août 2026 :
+// « il est petit, difficile à utiliser ; qu'il soit de la même taille que
+// les autres. » Mesuré avant de le croire, dans un vrai navigateur :
+//
+//   WA        34,7 × 17,5 px      police 11 px, aucune hauteur minimale
+//   Modifier  74,4 × 36   px      .btn .btn-sm → min-height: 36px
+//
+// La cause n'était pas un réglage de taille : ce n'était pas un bouton.
+// C'était un lien avec ses propres styles écrits à la main, donc il
+// n'héritait d'aucune règle commune — ni la hauteur, ni la police, ni le
+// minimum tactile que `.btn` pose à 44 px pour tout le reste.
+//
+// Deux choses réparées en même temps, et elles se mesurent aussi :
+//
+// 1. **Le blanc sur le vert WhatsApp donne 1,98:1.** C'est illisible, et
+//    l'agrandir ne fait qu'agrandir l'illisible. L'encre sur ce même vert
+//    donne 8,12:1. Le vert reste — c'est lui qui dit « ça sort de
+//    l'application » — mais il ne porte plus de blanc.
+// 2. **« WA » était une abréviation de place, pas un mot.** Elle datait du
+//    temps où le bouton devait tenir dans rien. À 36 px, le mot tient.
 window.waBtn = (phone, name) => {
   const url = waLink(phone, 'Bonjour ' + (name || '') + (name ? ' — ' : '') + (DB.settings?.school?.name||'SchoolSafe') + ' vous contacte.');
   if (!url) return '';
-  return `<a href="${url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:3px;background:#25D366;color:#fff;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;flex-shrink:0">WA</a>`;
+  return `<a href="${url}" target="_blank" rel="noopener" class="btn btn-sm"`
+       + ` style="background:#25D366;color:#1a2228;text-decoration:none;white-space:nowrap;flex-shrink:0"`
+       + ` title="Écrire à ${esc(name||'cette personne')} sur WhatsApp">WhatsApp</a>`;
 };
 
 // ── WHATSAPP MODÈLES PRÉ-DÉFINIS (Direction) ──
@@ -10935,14 +10957,24 @@ window._simpleList = (role, icon, gradient) => {
           </div>
         </div>
         ${role==='enseignant'?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">📚 ${DB.classes.filter(c=>c.teacher_id===u.id||c.teacher_id_en===u.id).map(c=>esc(c.name)).join(', ')||'Aucune classe assignée'}</div>`:''}
-        <div style="display:flex;gap:6px;align-items:center">
+        <!-- La rangée débordait DÉJÀ de la carte avant qu'on agrandisse le
+             bouton WhatsApp : cinq éléments réclamaient 443 px pour 356 px
+             disponibles. Mesuré à 390 px, « Suppr. » commençait à 388 px
+             alors que la carte s'arrête à 383 — il était ENTIÈREMENT hors
+             du cadre, et « Ouvrir l'accès » se cassait sur trois lignes.
+             Un budget se calcule, il ne s'estime pas. Ici il ne tient pas :
+             on laisse donc la rangée passer à la ligne plutôt que d'écraser
+             les boutons — un bouton coupé est un défaut, une seconde ligne
+             n'en est pas un. -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px 6px;align-items:center">
           ${window._pastilleAcces(u)}
-          <span style="flex:1"></span>
-          ${u.phone?waBtn(u.phone,u.name):''}
-          ${window._boutonAcces(u)}
-          <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
-          ${(u.email||'').trim()?`<button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')" title="Envoyer l'invitation ou le lien par courriel">🔑 Accès</button>`:''}
-          <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
+          <span style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;flex:1;min-width:0">
+            ${u.phone?waBtn(u.phone,u.name):''}
+            ${window._boutonAcces(u)}
+            <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
+            ${(u.email||'').trim()?`<button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')" title="Envoyer l'invitation ou le lien par courriel">🔑 Accès</button>`:''}
+            <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
+          </span>
         </div>
       </div>
     </div>`).join('')}
@@ -11713,7 +11745,9 @@ R.parents = () => {
             <span class="pill" style="background:rgba(155,111,212,.15);color:#9b6fd4;font-size:10px;font-weight:700">👪 Parent · ${kids.length} enfant${kids.length>1?'s':''}</span>
             ${window._pastilleAcces(u)}
           </div>
-          <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
+          <!-- Même budget dépassé qu'à la liste du personnel : la rangée
+               passe à la ligne au lieu d'écraser ses boutons. -->
+          <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;justify-content:flex-end">
             ${u.phone?waBtn(u.phone,u.name):''}
             ${window._boutonAcces(u)}
             <button class="btn btn-outline btn-sm" onclick="openUserForm('parent','${u.id}')">Modifier</button>
@@ -28869,7 +28903,9 @@ R.accounts = () => {
             <div style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.phone||'—')}</div>
             ${window._pastilleAcces(u)}
           </div>
-          <div style="display:flex;gap:5px;flex-shrink:0;align-items:center">
+          <!-- Même budget dépassé qu'à la liste du personnel : la rangée
+               passe à la ligne au lieu d'écraser ses boutons. -->
+          <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;justify-content:flex-end">
             ${u.phone?waBtn(u.phone,u.name):''}
             ${window._boutonAcces(u)}
             <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>

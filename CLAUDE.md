@@ -691,6 +691,34 @@ n'en est pas un.
 Tout bloc d'une rangée doit pouvoir rétrécir (`min-width:0`) et toute valeur
 s'abréger — **sauf le courriel**, qui abrégé ne sert plus à rien.
 
+**La même leçon, par l'autre bout — 11 août 2026.** Loms : *« le bouton
+WhatsApp est petit, difficile à utiliser ; qu'il soit de la même taille que
+les autres. »* Mesuré : **34,7 × 17,5 px contre 36 px** pour ses voisins. La
+cause n'était pas un réglage : **ce n'était pas un bouton.** C'était un lien
+avec ses styles écrits à la main, donc il n'héritait d'aucune règle commune —
+ni la hauteur, ni le minimum tactile que `.btn` pose à 44 px pour tout le
+reste. *Un élément qui se peint lui-même échappe à toutes les reprises.*
+
+Et en mesurant la rangée avant de l'agrandir, le vrai défaut est apparu :
+**elle débordait déjà.** Cinq éléments réclamaient 443 px pour 356
+disponibles. À 390 px, « Suppr. » commençait à 388 alors que la carte
+s'arrête à 383 — **entièrement hors du cadre** — et « Ouvrir l'accès » se
+cassait sur trois lignes.
+
+> **Un petit bouton n'est pas toujours un choix de style : c'est souvent le
+> symptôme d'une rangée qui ne tient pas.** On l'avait rapetissé pour le
+> faire entrer, et il n'entrait toujours pas.
+
+Deux choses à en retenir de plus :
+
+1. **Quand le budget ne peut pas tenir, on passe à la ligne.** Un bouton
+   coupé est un défaut ; une seconde ligne n'en est pas un. Écraser des
+   boutons pour tenir sur une ligne, c'est choisir le pire des deux.
+2. **Agrandir un texte illisible ne fait qu'agrandir l'illisible.** Le blanc
+   sur le vert WhatsApp donne **1,98:1**. L'encre sur ce même vert donne
+   **8,12:1**. Le vert reste — c'est lui qui dit « ça sort de l'application »
+   — mais il ne porte plus de blanc.
+
 ### L'argent
 
 Toujours un lecteur de montant dédié, **jamais `parseFloat`** :
