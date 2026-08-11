@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 const CACHE_PREFIX = 'schoolsafe-';
-const CACHE = `${CACHE_PREFIX}v68`;
+const CACHE = `${CACHE_PREFIX}v69`;
 
 // Ressources à mettre en cache au démarrage
 const PRECACHE = [
@@ -97,8 +97,38 @@ self.addEventListener('fetch', evt => {
   // Network-First réel pour toute navigation / index.html.
   // Une ancienne interface ne doit jamais être préférée quand le réseau fonctionne.
   if (evt.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
+    // AMÉLIORÉ, PAS REMPLACÉ — 11 août 2026.
+    //
+    // Le Network-First de ChatGPT corrige une vraie panne : le cache resservait
+    // l'ancienne interface, donc des corrections publiées n'atteignaient
+    // personne. On le garde entier.
+    //
+    // Ce qu'il coûte, et qu'on lui ajoute : sur un réseau de Kinshasa qui
+    // répond en dix secondes, `fetch` ne rend la main qu'au bout de dix
+    // secondes — l'application reste sur un écran blanc alors qu'une version
+    // parfaitement utilisable dort dans le cache. Un `catch` ne s'en aperçoit
+    // pas : une requête LENTE n'est pas une requête en ÉCHEC.
+    //
+    // On borne donc l'attente à 4 secondes : passé ce délai on sert le cache
+    // pour que l'école travaille, ET on laisse la requête réseau finir pour
+    // que le cache soit à jour au prochain démarrage. La fraîcheur est
+    // préservée, l'attente ne l'est plus.
+    const AVEC_DELAI = (requete, ms) => {
+      const reseau = fetch(requete).then(async response => {
+        if (response.ok) {
+          const cache = await caches.open(CACHE);
+          await cache.put(requete, response.clone());
+        }
+        return response;
+      });
+      const repli = new Promise(resolve => setTimeout(async () => {
+        const cached = await caches.match(requete) || await caches.match('./index.html');
+        resolve(cached || null);
+      }, ms));
+      return Promise.race([reseau, repli]).then(r => r || reseau);
+    };
     evt.respondWith(
-      fetch(evt.request)
+      AVEC_DELAI(evt.request, 4000)
         .then(async response => {
           if (response.ok) {
             const cache = await caches.open(CACHE);
