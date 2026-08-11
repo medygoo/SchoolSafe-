@@ -1118,6 +1118,55 @@ qui compare l'empreinte du hash Auth). Sans cet appel, `must_change_password`
 reste vrai : la personne croit avoir terminé et ne voit toujours rien. Un écran
 qui félicite pendant que le serveur bloque est la pire des réponses.
 
+### Un refus du serveur dit où passer — il ne dit pas d'abandonner
+
+**11 août 2026, issue #96.** Loms : sur un compte qui a déjà un accès ouvert,
+« Modifier » ne pouvait pas corriger une faute de frappe dans un numéro. Le
+serveur refusait, et il avait raison :
+
+```sql
+if v_exists and v_current.auth_user_id is not null then
+  if v_current.phone is distinct from v_phone then … AUTH_PHONE_CHANGE_REQUIRED
+```
+
+Changer un numéro, c'est changer une **identité de connexion** — cela ne se
+fait pas par la même porte qu'un changement d'initiales. La porte existait
+depuis le matin même : l'Edge Function `school-contact-change`, qui met
+`public.users`, `public.profiles` et l'identité Auth d'accord **sans toucher
+au mot de passe**. C'est ce dernier point qui la sépare de « Réinitialiser
+l'accès » : corriger un chiffre ne doit pas obliger quelqu'un à recevoir un
+nouveau code et à tout recommencer. **Deux gestes, deux boutons.**
+
+Et l'ordre des deux appels est la garantie, pas un détail : l'identité
+d'abord, la fiche ensuite. Dans l'autre sens, `save_school_user_profile` voit
+encore l'ancienne coordonnée et rend le même refus.
+
+Trois défauts trouvés en tirant le fil, et chacun se voit par une famille :
+
+1. **Le message renvoyait au mauvais bouton.** `AUTH_PHONE_CHANGE_REQUIRED`
+   disait *« se change par le bouton d'accès, pas par cette fiche »*. Depuis
+   la livraison, c'est exactement par cette fiche. Une leçon périmée est plus
+   dangereuse qu'une leçon absente — un message aussi.
+2. **La fiche locale était écrasée AVANT l'appel.** `Object.assign` en tête du
+   chemin : un refus laissait l'écran afficher une valeur que la base n'a
+   jamais portée. On ne change ce qu'on montre qu'après le succès.
+3. **Direction 2 effaçait l'adresse qu'elle ne voyait pas.** Son `ROLE_LOAD`
+   ne charge pas `users.email` : le champ s'affichait vide, et **partait
+   vide**. Corriger un nom d'enseignant lui retirait son adresse, sans un mot.
+
+Le remède du troisième vient du serveur lui-même, et il vaut partout :
+
+```sql
+v_email := case when p_user ? 'email' then … when v_exists then v_current.email end
+```
+
+> **Une clé ABSENTE garde la valeur du serveur ; une clé vide l'efface.**
+> Quand l'écran ne voit pas un champ, il ne l'envoie pas — et il écrit qu'il
+> est conservé, au lieu de laisser croire qu'il n'existe pas.
+
+`tools/recette-contact.mjs` tient 64 points ; `--preuve` retire la route et
+la recette **revoit la panne d'origine** — aucun numéro corrigé.
+
 ---
 
 ## Les outils
@@ -1144,6 +1193,7 @@ npm run audit        # tout d'un coup
 | `audit-writes.mjs` | les écritures dont l'échec est invisible |
 | `audit-schema.mjs` | code ↔ SQL — lit `supabase/migrations`, et **dit ce qu'il ne peut pas vérifier** |
 | `audit-portee-parent.mjs` | de quelles données un rôle a-t-il réellement besoin |
+| `recette-contact.mjs` | corriger un téléphone ou une adresse, exécuté (`--preuve`) |
 
 **Dans un nouveau dépôt, commencer par les lancer.** Leur sortie *est* la liste
 des manques — au lieu d'en discuter.
