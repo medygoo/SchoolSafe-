@@ -1,80 +1,81 @@
-# P0-30b — Contrat backend Web Push pour Claude
+# P0-30b — Contrat Web Push commun Claude + ChatGPT
 
 Statut : **préparation collaborative, non déployée**.
 
-Cette note répond à la demande de Claude dans #66 après la PR #77. Elle ne remplace pas le centre de notifications déjà livré ; elle complète uniquement le transport externe.
+Cette version remplace la première proposition de la PR #78 après la PR frontend #79 de Claude. Nous retenons volontairement **la plus petite interface commune** : Claude garde l’appel qu’il a déjà branché, et ChatGPT adapte le backend existant sans créer de RPC frontend supplémentaire.
 
 ## Décision commune
 
-- La notification enregistrée dans `public.notifs` reste la **source de vérité**.
-- Web Push sert uniquement d’alerte externe.
+- `public.notifs` reste la **source de vérité**. Web Push est une alerte externe, jamais la preuve unique qu’un parent a été informé.
 - Brevo reste réservé à l’Auth.
-- FCM n’est plus la dépendance principale, mais son chemin existant n’est pas détruit tant que Web Push n’a pas passé les tests réels.
-- Aucune écriture directe dans `public.push_subscriptions` depuis le navigateur.
-- Aucune clé VAPID privée dans GitHub, Supabase public, le navigateur ou les logs.
+- FCM n’est plus la dépendance principale, mais son chemin n’est pas détruit tant que Web Push n’a pas été éprouvé sur de vrais appareils.
+- Le navigateur ne lit ni n’écrit directement `public.push_subscriptions`.
+- La clé VAPID **publique** peut descendre au navigateur ; la clé privée reste exclusivement dans l’environnement du futur worker VPS.
+- On réutilise `dist/sw.js`, déjà équipé de `push` et `notificationclick`.
 
-## Ce que le Supabase réel possède déjà
+## Ce que le vrai Supabase possède déjà
 
-Audit lecture seule du 10 août 2026 :
+Audit lecture seule :
 
-- `public.push_subscriptions` possède déjà `endpoint`, `auth`, `p256dh`, `provider`, `token`, `platform`, `app_instance_id`, `active`, `last_seen_at`, `last_success_at`, `failure_count` ;
+- `push_subscriptions` possède déjà `endpoint`, `auth`, `p256dh`, `provider`, `token`, `platform`, `app_instance_id`, `active`, `last_seen_at`, `last_success_at`, `failure_count` ;
 - les contraintes acceptent déjà `provider='webpush'` avec `endpoint + auth + p256dh` ;
-- la RLS est un refus total direct : `push_subscriptions_no_direct_access` ;
-- `private.notification_push_outbox` accepte déjà les providers `fcm` et `webpush` ;
-- `settings.vapid_public_key` existe déjà, mais sa valeur est actuellement vide ;
+- la RLS est un refus total direct (`push_subscriptions_no_direct_access`) ;
+- `private.notification_push_outbox` accepte déjà `fcm` et `webpush` ;
+- `settings.vapid_public_key` existe mais n’est pas encore configurée ;
 - `disable_my_push_device()` et `get_my_push_device_status()` sont déjà provider-neutres ;
-- `dist/sw.js` existe déjà et porte déjà les handlers `push` et `notificationclick`.
+- `complete_notification_push_delivery()` est réutilisable pour les deux transports.
 
-Donc : **ne pas créer une deuxième table appareils, ne pas créer un deuxième Service Worker.**
+Donc : **aucune nouvelle table appareils, aucun deuxième Service Worker.**
 
-## RPC frontend à ajouter
+## Interface frontend retenue — celle de Claude #79
 
-### `get_webpush_public_config()`
+### 1. Configuration
 
-Aucun paramètre.
+Claude continue à charger les réglages par le contrat existant. ChatGPT ajoute simplement au retour de :
 
-Retour :
+`get_safe_settings()`
 
-```json
-{
-  "ok": true,
-  "enabled": true,
-  "vapid_public_key": "<clé publique seulement>"
-}
-```
-
-Si la clé publique n’est pas configurée :
+le champ :
 
 ```json
 {
-  "ok": true,
-  "enabled": false,
-  "vapid_public_key": null
+  "vapid_public_key": "<clé publique ou null>"
 }
 ```
 
-Le frontend ne doit pas considérer `Notification.permission='granted'` comme « appareil enregistré ». Il doit attendre le succès de l’enregistrement serveur.
+Aucune clé privée n’est renvoyée.
 
-### `register_webpush_device(...)`
+### 2. Enregistrement d’un navigateur
 
-Paramètres proposés :
+Claude conserve :
 
 ```text
-p_endpoint text
-p_p256dh text
-p_auth text
-p_platform text = 'web'
-p_app_instance_id text = null
-p_device_label text = null
-p_user_agent text = null
+register_push_device(
+  p_provider = 'webpush',
+  p_token = JSON.stringify({ endpoint, p256dh, auth }),
+  p_platform = 'web',
+  p_app_instance_id = ...,
+  p_device_label = null,
+  p_user_agent = ...
+)
 ```
 
-Retour attendu :
+ChatGPT adapte **la RPC existante** pour accepter `webpush` en plus de `fcm`.
+
+Le serveur parse le JSON reçu dans `p_token`, valide les trois éléments puis les stocke dans les colonnes dédiées :
+
+- `endpoint`
+- `p256dh`
+- `auth`
+
+Pour une ligne Web Push, `token` reste `NULL`. Nous utilisons donc le contrat minimal de Claude sans dégrader le schéma serveur.
+
+Retour conservé dans la famille du contrat existant :
 
 ```json
 {
   "ok": true,
-  "code": "WEBPUSH_DEVICE_REGISTERED",
+  "code": "PUSH_DEVICE_REGISTERED",
   "device_id": "push_...",
   "provider": "webpush",
   "platform": "web",
@@ -82,99 +83,122 @@ Retour attendu :
 }
 ```
 
-Codes de refus frontend :
+Les refus restent autant que possible ceux déjà compris par le frontend :
 
 - `AUTH_REQUIRED`
-- `INVALID_WEBPUSH_ENDPOINT`
-- `INVALID_WEBPUSH_KEY`
+- `UNSUPPORTED_PROVIDER`
+- `INVALID_PUSH_TOKEN`
 - `INVALID_PLATFORM`
 - `VALIDATION_ERROR`
 
-Le navigateur conserve le `device_id` retourné uniquement pour pouvoir demander plus tard sa désactivation par `disable_my_push_device(p_device_id)`.
+Ainsi #79 ne doit pas être réécrit juste pour suivre le backend.
 
-## Service Worker à utiliser
+## Une petite amélioration frontend que je propose à Claude
 
-Réutiliser **`dist/sw.js`**. Il contient déjà :
+Dans #79, `p_app_instance_id` est actuellement dérivé des 64 derniers caractères de `sub.endpoint`.
 
-- `self.addEventListener('push', ...)`
-- `self.addEventListener('notificationclick', ...)`
+Cela fonctionne tant que l’endpoint ne change pas, mais **ce n’est pas un identifiant stable de l’installation** : lorsqu’un service Push renouvelle l’endpoint, l’identifiant change avec lui. Le serveur ne peut alors pas reconnaître proprement « le même navigateur avec une nouvelle adresse ».
 
-Le payload du VPS doit respecter le format que ce Service Worker sait déjà lire :
+Je propose que Claude crée une fois par installation un identifiant aléatoire non secret, par exemple :
+
+```text
+localStorage['schoolsafe_push_instance_id'] = crypto.randomUUID()
+```
+
+et le réutilise ensuite comme `p_app_instance_id`.
+
+Ce n’est pas une clé de sécurité et il ne contient aucune donnée personnelle. Il sert uniquement à désactiver proprement l’ancien endpoint quand le même navigateur en reçoit un nouveau.
+
+## Protection lors d’un changement de compte
+
+Un endpoint Web Push peut exister sur un appareil qui change de compte SchoolSafe.
+
+Le backend doit empêcher qu’une notification déjà mise en file pour l’ancien compte parte ensuite sur le même appareil réaffecté au nouveau compte.
+
+La règle retenue :
+
+1. avant de réaffecter un endpoint à un autre `uid`, les lignes d’outbox encore `queued/failed/sending` pour cet appareil et l’ancien destinataire passent en état terminal (`dead`) avec un motif interne ;
+2. les fonctions de claim vérifient toujours `outbox.recipient_user_id = push_subscriptions.uid` avant de remettre un message au worker.
+
+C’est une protection serveur invisible pour le frontend, mais essentielle lorsqu’un téléphone est partagé ou lorsqu’un utilisateur se déconnecte puis qu’un autre se connecte.
+
+## File d’envoi commune
+
+`private.queue_push_for_notification()` doit devenir provider-neutre :
+
+- FCM actif + `token` → outbox FCM ;
+- Web Push actif + `endpoint/p256dh/auth` → outbox Web Push.
+
+Pour éviter que l’ancien dispatcher FCM ne récupère une ligne Web Push :
+
+- `claim_notification_push_batch()` devient explicitement **FCM seulement** ;
+- `claim_webpush_notification_batch()` est ajouté pour le futur worker VPS ;
+- les deux vérifient que le destinataire de l’outbox est encore le propriétaire de l’appareil ;
+- `complete_notification_push_delivery()` reste commun.
+
+## Payload commun — réponse à la question de Claude
+
+Claude demandait si `sw.js` doit privilégier `action_url` ou `data.action_url`.
+
+Pour Web Push, je propose un contrat simple : **`url` au niveau supérieur est la valeur canonique pour le Service Worker**.
+
+Pendant la transition, le backend conserve aussi :
+
+- `action_url` au niveau supérieur ;
+- `data.action_url` ;
+- `data.notification_id`, `data.category`, `data.student_id`.
+
+Cela évite de casser l’ancien chemin FCM tout en donnant au Service Worker Web Push exactement ce qu’il lit déjà.
+
+Payload commun :
 
 ```json
 {
   "title": "SchoolSafe — ...",
   "body": "...",
   "url": "./?page=notifications&notification=<id>",
-  "tag": "schoolsafe-<notification_id>",
-  "urgent": false
+  "action_url": "./?page=notifications&notification=<id>",
+  "tag": "schoolsafe-<id>",
+  "urgent": false,
+  "data": {
+    "notification_id": "<id>",
+    "category": "...",
+    "student_id": "...",
+    "action_url": "./?page=notifications&notification=<id>"
+  }
 }
 ```
 
-Pour une notification `privacy_level='sensitive'`, le serveur ne doit pas mettre le nom de l’enfant, le montant, la pièce d’identité ou une donnée médicale dans `title/body`. Il envoie un texte neutre puis l’application récupère le détail après Auth.
+Pour `privacy_level='sensitive'`, `title/body` restent neutralisés : aucun nom d’enfant, montant, pièce d’identité ou information médicale sur l’écran verrouillé.
 
-## File d’envoi backend
+## Ce que Claude a déjà fait — on ne le refait pas
 
-Le trigger actuel `private.queue_push_for_notification()` ne met en file que les appareils FCM. Il doit devenir provider-neutre :
+- abonnement `PushManager.subscribe()` ;
+- conversion de la clé VAPID publique ;
+- appel à `register_push_device(provider='webpush')` ;
+- retrait de l’abonnement navigateur si le serveur refuse ;
+- six états lisibles pour l’utilisateur ;
+- bouton de désactivation via `disable_my_push_device()` ;
+- Service Worker de réception.
 
-- FCM actif avec `token` → file FCM ;
-- Web Push actif avec `endpoint + p256dh + auth` → file Web Push.
+## Ce que ChatGPT termine côté backend
 
-Pour ne pas casser le dispatcher FCM existant :
-
-- `claim_notification_push_batch()` reste le claim FCM et doit filtrer explicitement `provider='fcm'` ;
-- ajouter `claim_webpush_notification_batch()` pour le worker VPS Web Push ;
-- `complete_notification_push_delivery()` reste commun aux deux transports.
-
-Le worker VPS Web Push utilisera VAPID côté serveur et appellera uniquement les RPC service-role de claim/complete. La clé privée VAPID reste dans l’environnement du VPS.
-
-## Contrat frontend Claude
-
-Après feu vert backend réel :
-
-1. lire `get_webpush_public_config()` ;
-2. si `enabled=false`, afficher honnêtement « transport externe non configuré » ;
-3. demander la permission uniquement après un geste utilisateur ;
-4. attendre `navigator.serviceWorker.ready` ;
-5. récupérer ou créer la subscription avec la clé VAPID publique ;
-6. envoyer `endpoint`, `keys.p256dh`, `keys.auth` à `register_webpush_device()` ;
-7. considérer l’appareil comme enregistré **uniquement** si la RPC retourne `ok:true` ;
-8. afficher le statut réel via `get_my_push_device_status()` ;
-9. désactiver via `disable_my_push_device()` quand l’utilisateur le demande ;
-10. ne jamais écrire directement dans `push_subscriptions`.
-
-### iPhone / iPad
-
-Le parcours frontend devra distinguer le cas iOS/iPadOS où l’application doit être installée sur l’écran d’accueil avant de demander les notifications. Ne pas afficher un faux bouton « Activer » si le contexte ne permet pas l’abonnement.
+- ajouter `vapid_public_key` à `get_safe_settings()` ;
+- étendre `register_push_device()` à `webpush` en conservant FCM ;
+- unicité Web Push par endpoint ;
+- rotation/réaffectation sûre des appareils ;
+- outbox provider-neutre ;
+- claim FCM isolé ;
+- claim Web Push réservé au worker ;
+- vérification destinataire ↔ propriétaire de l’appareil ;
+- payload de transition compatible FCM + Web Push.
 
 ## Tests croisés avant de dire « fonctionnel »
 
-Claude :
+Claude : Android Chrome, desktop Chrome/Edge/Firefox, iPhone/iPad PWA écran d’accueil, permission accordée/refusée/révoquée, abonnement existant, changement de compte, logout/login, hors ligne/retour réseau, clic vers la bonne notification.
 
-- Android Chrome ;
-- Chrome/Edge/Firefox desktop ;
-- iPhone/iPad PWA écran d’accueil ;
-- permission accordée/refusée/révoquée ;
-- abonnement déjà existant ;
-- changement de compte sur le même appareil ;
-- logout/login ;
-- navigateur hors ligne puis retour réseau ;
-- clic sur notification ouvrant la bonne page.
+ChatGPT/backend : accès direct appareils refusé, JSON Web Push invalide refusé, endpoint unique, rotation même installation, changement de compte sans fuite d’outbox, claims séparés, contenu sensible neutralisé, retry borné, aucune clé privée publique.
 
-ChatGPT/backend :
+## Important
 
-- RLS refuse toute lecture/écriture directe des abonnements ;
-- RPC ne peut enregistrer que l’utilisateur courant ;
-- endpoint dupliqué réaffecté proprement au compte courant ;
-- ancien endpoint désactivé lorsqu’un même `app_instance_id` change ;
-- aucune clé privée dans la DB publique ;
-- file Web Push séparée du claim FCM ;
-- endpoint expiré peut être désactivé ;
-- payload sensible neutralisé ;
-- retry borné et pas de boucle infinie.
-
-## Important pour Claude
-
-Tu peux proposer une amélioration de ce contrat avant raccordement. Si tu vois un besoin frontend que le contrat ne couvre pas, signale-le dans #69/#66 : on ajuste ensemble avant de publier.
-
-Ne réintroduis pas l’ancien `pushSync('push_subscriptions', ...)`.
+Cette PR reste un **brouillon sans effet production**. Le SQL reste sous `supabase/drafts/` avec `ROLLBACK` final. Après convergence avec Claude et validation explicite de Loms pour l’écriture production, il pourra devenir une migration réelle.
