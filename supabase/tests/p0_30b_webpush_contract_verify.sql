@@ -38,9 +38,9 @@ select
     as register_invalidates_pending_rows_on_owner_change;
 
 select
-  position("d.uid=o.recipient_user_id" in replace(pg_get_functiondef('public.claim_notification_push_batch(integer)'::regprocedure),' ','')) > 0
+  position('d.uid=o.recipient_user_id' in replace(pg_get_functiondef('public.claim_notification_push_batch(integer)'::regprocedure),' ','')) > 0
     as fcm_claim_checks_device_owner,
-  position("d.uid=o.recipient_user_id" in replace(pg_get_functiondef('public.claim_webpush_notification_batch(integer)'::regprocedure),' ','')) > 0
+  position('d.uid=o.recipient_user_id' in replace(pg_get_functiondef('public.claim_webpush_notification_batch(integer)'::regprocedure),' ','')) > 0
     as webpush_claim_checks_device_owner;
 
 select
