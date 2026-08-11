@@ -11569,7 +11569,9 @@ R.parents = () => {
                           <div style="font-size:10px;color:${active?'#1f9d6b':'#dc2626'};font-weight:600;margin:3px 0">${active?'Autorisé':'Désactivé'}</div>
                           <div style="display:flex;gap:4px;justify-content:center;margin-top:5px">
                             <button onclick="openTutelleForm('${s.id}','${t.id}')" style="padding:4px 7px;border-radius:7px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:11px">✏️</button>
-                            <button onclick="deleteTutelle('${t.id}')" style="padding:4px 7px;border-radius:7px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-size:11px">Suppr.</button>
+                            ${t.active===false
+                        ? `<button onclick="reactiverTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#dcfce7;color:#15603f;cursor:pointer;font-size:11px;font-weight:700">Réactiver</button>`
+                        : `<button onclick="suspendreTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#fef3c7;color:#92400e;cursor:pointer;font-size:11px;font-weight:700">Suspendre</button>`}
                           </div>
                         </div>`;
                       }).join('')}
@@ -19653,9 +19655,35 @@ R.authorized = () => {
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:700">${parent?esc(parent.name):'— Aucun parent principal'}</div>
               <div style="font-size:11px;color:var(--text-secondary)">👑 Parent principal · ${parent?esc(parent.phone||'—'):'Non lié'}</div>
+              ${!parent?(() => {
+                // Sans parent principal, le serveur refuse même de PRÉPARER
+                // une sortie (PRIMARY_PARENT_REQUIRED). On le désigne ici,
+                // plutôt que de laisser l'enseignant buter dessus à 14 h.
+                const cands=(DB.users||[]).filter(u=>u.role==='parent'&&u.status!=='inactive');
+                if(!cands.length) return `<div style="font-size:11px;color:#991b1b;margin-top:3px">Aucun compte parent n’existe encore.</div>`;
+                return `<select class="form-select" style="font-size:11px;padding:3px 6px;margin-top:4px" onchange="if(this.value)definirParentPrincipal('${s.id}',this.value)">
+                  <option value="">Désigner le parent principal…</option>
+                  ${cands.map(u=>`<option value="${esc(u.id)}">${esc(u.name)}${u.phone?' · '+esc(u.phone):''}</option>`).join('')}
+                </select>`;
+              })():''}
             </div>
-            <span class="pill" style="background:#dbeafe;color:#205fae;font-size:10px">COMPTE APP</span>
+            ${parent?`<button class="btn btn-outline btn-sm" style="font-size:11px;white-space:nowrap" onclick="identiteParentPrincipal('${parent.id}')">🪪 Identité portail</button>`:''}
           </div>
+          ${(() => {
+            // Le parent principal est la personne la plus attendue au portail,
+            // et c'est la seule dont l'identité n'était nulle part : le serveur
+            // refusait sa présentation avec PRIMARY_PARENT_IDENTITY_INCOMPLETE
+            // sans qu'aucun écran ne permette de la compléter. On le dit ici,
+            // avant que la famille se présente et reparte sans l'enfant.
+            if (!parent) return '';
+            const manque = [];
+            if (!parent.photo_url) manque.push('la photo de portrait');
+            if (!parent.identity_full_body_photo_url) manque.push('la photo en pied');
+            if (!parent.identity_document_type || !parent.identity_document_last4) manque.push('la pièce d’identité');
+            if (!manque.length) return '';
+            return `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:8px 11px;margin-bottom:8px;font-size:11.5px;color:#92400e;line-height:1.5">
+              <b>Le portail ne pourra pas l’identifier</b> — il manque ${esc(manque.join(', '))}.</div>`;
+          })()}
           ${tuts.length?`<div style="display:flex;gap:8px;flex-wrap:wrap">
             ${tuts.map(t=>`<div style="flex:1;min-width:120px;background:var(--bg);border-radius:12px;padding:10px;border:1px solid var(--border);text-align:center;position:relative">
               <div style="width:60px;height:70px;border-radius:10px;overflow:hidden;margin:0 auto 6px;background:#efe3d3;display:flex;align-items:center;justify-content:center">
@@ -19666,7 +19694,9 @@ R.authorized = () => {
               <div style="font-size:11px;color:var(--text-muted)">${esc(t.phone||'—')}</div>
               <div style="display:flex;gap:4px;margin-top:6px">
                 <button class="btn btn-outline btn-sm" style="flex:1;padding:4px" onclick="openTutelleForm('${s.id}','${t.id}')">✏️</button>
-                <button class="btn btn-danger btn-sm" style="padding:4px 6px" onclick="deleteTutelle('${t.id}')">Suppr.</button>
+                ${t.active===false
+                        ? `<button onclick="reactiverTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#dcfce7;color:#15603f;cursor:pointer;font-size:11px;font-weight:700">Réactiver</button>`
+                        : `<button onclick="suspendreTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#fef3c7;color:#92400e;cursor:pointer;font-size:11px;font-weight:700">Suspendre</button>`}
               </div>
             </div>`).join('')}
           </div>`:`<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:8px">Aucune tutelle secondaire — cliquez ➕ pour en ajouter</div>`}
@@ -19738,14 +19768,13 @@ R.authorized = () => {
                     <div style="font-size:11px;margin-top:4px;color:${active?'#1f9d6b':'#dc2626'};font-weight:600">${active?'Autorisé à récupérer':'🚫 Accès désactivé'}</div>
                   </div>
                   <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-                    <button onclick="toggleTutelle('${t.id}',${!active})"
-                      style="padding:8px 12px;border-radius:10px;border:none;cursor:pointer;font-size:12px;font-weight:600;
-                        background:${active?'#fee2e2':'#d8f3e6'};color:${active?'#dc2626':'#1f9d6b'}">
-                      ${active?'🚫 Désactiver':'Activer'}
-                    </button>
+                    ${t.status_note?`<div style="font-size:10.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:5px 8px;max-width:180px;line-height:1.4">${esc(t.status_note)}</div>`:''}
+                    ${t.valid_until?`<div style="font-size:10.5px;color:${t.valid_until<today()?'#dc2626':'var(--text-muted)'}">${t.valid_until<today()?'Expirée le ':'Valable jusqu’au '}${esc(t.valid_until)}</div>`:''}
                     <div style="display:flex;gap:4px">
                       <button onclick="openTutelleForm('${s.id}','${t.id}')" style="padding:5px 8px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:11px">✏️</button>
-                      <button onclick="deleteTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#fee2e2;color:#dc2626;cursor:pointer;font-size:11px">Suppr.</button>
+                      ${t.active===false
+                        ? `<button onclick="reactiverTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#dcfce7;color:#15603f;cursor:pointer;font-size:11px;font-weight:700">Réactiver</button>`
+                        : `<button onclick="suspendreTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#fef3c7;color:#92400e;cursor:pointer;font-size:11px;font-weight:700">Suspendre</button>`}
                     </div>
                   </div>
                 </div>`;
@@ -19811,144 +19840,340 @@ window._apQ = '';
 
 window.openTutelleForm = (sid, tid) => {
   const s=(DB.students||[]).find(x=>x.id===sid); if(!s) return;
-  // Contrôle accès : direction peut tout modifier, parent uniquement ses propres enfants
-  const isParent = S.user&&S.user.role==='parent';
-  if(!S.user||(!isParent && !['direction','direction2'].includes(S.user.role))){toast('Accès non autorisé','error');return;}
-  if(isParent && s.pid!==S.user.id){toast('Accès non autorisé','error');return;}
+  // Le serveur ne laisse enregistrer une personne autorisée qu'à la Direction
+  // (`v_role not in ('direction','direction2') → FORBIDDEN`). L'écran dit la
+  // même chose, sinon un parent remplit onze champs pour être refusé à la fin.
+  if(!S.user || !['direction','direction2'].includes(S.user.role)){
+    openM('Ajouter une personne autorisée',
+      `<div style="padding:4px 2px"><p style="margin:0 0 10px">Seule la Direction enregistre les personnes autorisées à récupérer un enfant.</p>
+       <p style="font-size:13px;color:var(--text-secondary);margin:0;line-height:1.6">Passez au bureau avec la personne, sa pièce d’identité et une photo. L’école vérifie, enregistre, et le gardien la reconnaîtra au portail.</p></div>`,
+      `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`);
+    return;
+  }
   const t=tid?(DB.aps||[]).find(x=>x.id===tid):null;
-  const existing=(DB.aps||[]).filter(a=>a.sid===sid);
-  if(!t && existing.length>=3){toast('Maximum 3 tutelles par élève','error');return;}
+  // Le plafond de trois ne compte que les ACTIVES et NON EXPIRÉES — c'est le
+  // compte que le serveur tient. Une personne suspendue ne prend pas la place
+  // de quelqu'un d'autre.
+  const auj=today();
+  const actives=(DB.aps||[]).filter(a=>a.sid===sid && a.active && a.approval_status==='approved'
+    && (!a.valid_until || a.valid_until>=auj));
+  if(!t && actives.length>=3){
+    toast('Trois personnes autorisées actives — suspendez-en une d’abord','error'); return;
+  }
   const RELATIONS=['Père','Mère','Grand-père','Grand-mère','Oncle','Tante','Frère','Sœur','Tuteur légal','Autre'];
-  openM(t?`✏️ Modifier tutelle — ${s.name}`:`➕ Ajouter tutelle — ${s.name}`,`
-<input type="hidden" id="tut_sid" value="${sid}">
-<input type="hidden" id="tut_id" value="${tid||''}">
-<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px">
-  <div id="tut_photo_preview" onclick="$('tut_photo_input').click()" style="width:80px;height:100px;border-radius:12px;background:#efe3d3;display:flex;align-items:center;justify-content:center;font-size:30px;overflow:hidden;margin-bottom:8px;cursor:pointer;border:3px dashed var(--border)">
-    ${t&&t.photo?`<img src="${t.photo}" style="width:100%;height:100%;object-fit:cover">`:'+'}
-  </div>
-  <input type="file" id="tut_photo_input" accept="image/*" style="display:none" onchange="tutPhotoChange(this)">
-  <input type="hidden" id="tut_photo_data" value="${t&&t.photo?t.photo:''}">
-  <span style="font-size:11px;color:#f59e0b;cursor:pointer" onclick="$('tut_photo_input').click()">📷 Photo recommandée pour identification au portail</span>
+  const photoBloc=(id,titre,val,aide)=>`
+  <div style="flex:1;text-align:center">
+    <div id="${id}_apercu" onclick="document.getElementById('${id}_input').click()" style="width:84px;height:106px;border-radius:12px;background:#efe3d3;display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;margin:0 auto 6px;cursor:pointer;border:3px dashed var(--border)">
+      ${val?`<img src="${esc(val)}" style="width:100%;height:100%;object-fit:cover">`:'+'}
+    </div>
+    <input type="file" id="${id}_input" accept="image/*" style="display:none" onchange="_apsLirePhoto(this,'${id}')">
+    <input type="hidden" id="${id}" value="${esc(val||'')}">
+    <div style="font-size:11px;font-weight:800">${titre}</div>
+    <div style="font-size:10px;color:var(--text-muted);line-height:1.35">${aide}</div>
+  </div>`;
+  openM(t?`Modifier — ${s.name}`:`Personne autorisée — ${s.name}`,`
+<input type="hidden" id="tut_sid" value="${esc(sid)}">
+<input type="hidden" id="tut_id" value="${esc(tid||'')}">
+<div style="display:flex;gap:14px;margin-bottom:14px;justify-content:center">
+  ${photoBloc('tut_photo_data','Portrait','','le visage, de face')}
+  ${photoBloc('tut_photo_full_data','En pied','','pour reconnaître à deux mètres')}
 </div>
 <div class="form-row">
-  <div class="form-group" style="flex:2"><label class="form-label">Nom complet *</label><input class="form-input" id="tut_name" value="${t?esc(t.name):''}" placeholder="Ex: Lomela Jean"></div>
-  <div class="form-group"><label class="form-label">Téléphone *</label><input class="form-input" id="tut_phone" value="${t&&t.phone?esc(t.phone):''}" placeholder="+243..."></div>
+  <div class="form-group" style="flex:2"><label class="form-label">Nom complet *</label><input class="form-input" id="tut_name" value="${t?esc(t.name):''}" placeholder="Ex. Lomela Jean"></div>
+  <div class="form-group"><label class="form-label">Téléphone *</label><input class="form-input" id="tut_phone" value="${t&&t.phone?esc(t.phone):''}" placeholder="0810 000 111"></div>
 </div>
-<div class="form-group"><label class="form-label">Lien de parenté *</label>
+<div class="form-group"><label class="form-label">Lien avec l’enfant *</label>
   <select class="form-select" id="tut_relation">
-    ${RELATIONS.map(r=>`<option value="${r}" ${t&&t.relation===r?'selected':''}>${r}</option>`).join('')}
+    ${RELATIONS.map(r=>`<option value="${r}"${t&&t.relation===r?' selected':''}>${r}</option>`).join('')}
   </select>
-</div>`,
-`<button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveTutelle()">💾 ${t?'Mettre à jour':'Enregistrer'}</button>`);
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Pièce d’identité *</label>
+    <select class="form-select" id="tut_doc_type"><option value="">—</option>
+      ${_APS_PIECES.map(pc=>`<option${t&&t.id_doc_type===pc?' selected':''}>${esc(pc)}</option>`).join('')}
+    </select></div>
+  <div class="form-group"><label class="form-label">Derniers chiffres *</label>
+    <input class="form-input" id="tut_doc_last4" maxlength="12" value="${t&&t.id_doc_last4?esc(t.id_doc_last4):''}" placeholder="Ex. 4821"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Autorisé à partir du</label>
+    <input class="form-input" type="date" id="tut_valid_from" value="${t&&t.valid_from?esc(t.valid_from):''}"></div>
+  <div class="form-group"><label class="form-label">Jusqu’au <span style="font-weight:400;color:var(--text-muted)">(facultatif)</span></label>
+    <input class="form-input" type="date" id="tut_valid_until" value="${t&&t.valid_until?esc(t.valid_until):''}"></div>
+</div>
+<p style="font-size:11.5px;color:var(--text-muted);margin:4px 0 0;line-height:1.5">
+  Les deux photos et la pièce sont obligatoires : c’est avec elles que le gardien
+  décide de laisser partir un enfant. Le numéro complet de la pièce n’est jamais
+  enregistré — seulement ses derniers chiffres.</p>`,
+`<button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveTutelle()">${t?'Mettre à jour':'Enregistrer'}</button>`);
+  // Les photos déjà enregistrées sont des ADRESSES : on les remet après le
+  // rendu, pour ne pas les réécrire en base64 à la première ouverture.
+  if(t){
+    const mettre=(id,v)=>{const h=document.getElementById(id);const a=document.getElementById(id+'_apercu');
+      if(h&&v){h.value=v;} if(a&&v){a.innerHTML=`<img src="${v}" style="width:100%;height:100%;object-fit:cover">`;}};
+    setTimeout(()=>{mettre('tut_photo_data',t.photo);mettre('tut_photo_full_data',t.photo_full_body);},30);
+  }
+};
+// `tutPhotoChange` est retirée : elle ne gérait qu'UNE photo, et le portail
+// en demande deux — le portrait et l'en-pied. `_apsLirePhoto` sert les deux,
+// et le même code sert aussi l'identité du parent principal.
+window._APS_REFUS = {
+  FORBIDDEN:                 'Seule la Direction enregistre les personnes autorisées.',
+  ACTOR_NOT_FOUND:           'Votre compte n’est pas reconnu par le serveur.',
+  INVALID_PAYLOAD:           'Formulaire mal formé.',
+  STUDENT_NOT_FOUND:         'Cet élève n’existe pas ou il est archivé.',
+  MAX_THREE_AUTHORIZED:      'Cet élève a déjà trois personnes autorisées actives. Suspendez-en une avant d’en ajouter une autre.',
+  STUDENT_CHANGE_FORBIDDEN:  'Une personne autorisée ne peut pas changer d’élève. Créez-en une nouvelle.',
+  INVALID_VALIDITY_PERIOD:   'La date de fin est antérieure à la date de début.',
+  AUTHORIZED_PERSON_NOT_FOUND:'Cette personne n’est plus au registre.',
+  REASON_REQUIRED:           'Une suspension se motive — écrivez pourquoi.',
+  IDENTITY_INCOMPLETE:       'Impossible de réactiver : il manque une photo ou la pièce d’identité.',
+  UNSUPPORTED_ACTION:        'Action inconnue du serveur.',
+  PARENT_NOT_FOUND:          'Ce compte n’est pas un parent actif.',
+  REFERENCE_NOT_FOUND:       'Une référence de ce formulaire n’existe pas côté serveur.',
+  RPC_REFUSED:               'Le serveur a refusé sans préciser.',
+  PGRST202:                  'Cette opération n’est pas encore servie par ce serveur.',
+};
+// Le serveur dit AUSSI quel champ ne va pas. Un « formulaire invalide » sans
+// nom de champ fait relire les onze lignes une par une.
+window._APS_CHAMPS = {
+  name:'le nom', relation:'le lien de parenté', phone:'le numéro de téléphone',
+  photo_portrait:'la photo de portrait', photo_full_body:'la photo en pied',
+  id_doc_type:'le type de pièce', id_doc_last4:'les derniers chiffres de la pièce',
+  validity:'les dates de validité',
+};
+window._apsRefus = (r) => {
+  if (r && r.code === 'VALIDATION_ERROR') {
+    const c = (r.raw && r.raw.field) || (r.data && r.data.field);
+    return c ? `Le serveur refuse ${_APS_CHAMPS[c] || c}.` : 'Le serveur refuse une des valeurs saisies.';
+  }
+  return _APS_REFUS[r && r.code] || ('Refus du serveur : ' + ((r && r.code) || 'inconnu'));
 };
 
-window.tutPhotoChange = (input) => {
-  const file=input.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const apply=data=>{$('tut_photo_data').value=data;$('tut_photo_preview').innerHTML=`<img src="${data}" style="width:100%;height:100%;object-fit:cover">`;};
-    if(window.openPhotoCrop){
-      openPhotoCrop(e.target.result, 3/4, cropped=>{
-        const pa=COMPRESS.photo_ap;
-        const img=new Image();
-        img.onload=()=>apply(window._fitProfile(img, 'photo_ap'));
-        img.src=cropped;
-      });
-    } else {
-      const img=new Image();
-      img.onload=()=>{
-        apply(window._fitProfile(img, 'photo_ap'));
-      };
-      img.src=e.target.result;
-    }
-  };
-  reader.readAsDataURL(file);
+// Les pièces admises en RDC. Le serveur accepte tout texte de 80 caractères ;
+// une liste évite que « CE », « carte élec. » et « Carte d'électeur » soient
+// trois pièces différentes dans le registre.
+window._APS_PIECES = ['Carte d’électeur', 'Passeport', 'Permis de conduire',
+                      'Carte de service', 'Attestation de perte de pièce'];
+
+// ── LA PHOTO MONTE D'ABORD, ET SI ELLE NE MONTE PAS, ON LE DIT ────────────
+window._apsPhotoUrl = async (valeur, nom) => {
+  if (!valeur) return { ok:false, motif:'absente' };
+  if (valeur.indexOf('data:') !== 0) return { ok:true, url:valeur };   // déjà une adresse
+  const url = await window._photoToStorage(valeur, 'autorisees', nom);
+  // `_photoToStorage` rend la valeur d'origine quand la montée échoue. Une
+  // image collée serait refusée par le serveur avec un code que personne ne
+  // relie à la photo : on s'arrête ici, en le disant.
+  if (!url || url.indexOf('data:') === 0) return { ok:false, motif:'transfert' };
+  if (url.length > 2048) return { ok:false, motif:'trop_longue' };
+  return { ok:true, url };
 };
 
+// ── ENREGISTRER UNE PERSONNE AUTORISÉE ────────────────────────────────────
 window.saveTutelle = async () => {
-  const _idField = $('tut_id');
-  if (_idField && !_idField.value) _idField.value = _uid('ap_');
-  const _pf = $('tut_photo_data');
-  if (_pf && _pf.value && _pf.value.indexOf('data:') === 0) {
-    _pf.value = await window._photoToStorage(_pf.value, 'autorisees', _idField ? _idField.value : _uid('ap_'));
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Seule la Direction enregistre les personnes autorisées', 'error'); return;
   }
-  return _saveTutelleInner();
+  const sid  = $('tut_sid')?.value;
+  const tid  = $('tut_id')?.value || null;
+  const nom  = ($('tut_name')?.value || '').trim();
+  const lien = ($('tut_relation')?.value || '').trim();
+  const telBrut = ($('tut_phone')?.value || '').trim();
+  const piece   = ($('tut_doc_type')?.value || '').trim();
+  const quatre  = ($('tut_doc_last4')?.value || '').trim();
+  const debut   = ($('tut_valid_from')?.value || '').trim();
+  const fin     = ($('tut_valid_until')?.value || '').trim();
+
+  if (!nom)  { markFieldError('tut_name', 'Le nom est obligatoire.'); return; }
+  if (!lien) { markFieldError('tut_relation', 'Le lien avec l’enfant est obligatoire.'); return; }
+
+  // Le numéro est normalisé ici pour MONTRER ce qui sera enregistré. Le
+  // serveur refait la même chose — c'est lui qui fait foi.
+  const tel = window._telE164 ? _telE164(telBrut) : telBrut;
+  if (!tel) { markFieldError('tut_phone', 'Numéro impossible à lire. Exemple : 0810 000 111.'); return; }
+  if (!piece)  { markFieldError('tut_doc_type', 'La pièce d’identité est obligatoire — c’est elle que le gardien demandera.'); return; }
+  if (quatre.length < 2) { markFieldError('tut_doc_last4', 'Au moins deux caractères.'); return; }
+
+  const base = tid || _uid('ap_');
+  const p1 = await _apsPhotoUrl($('tut_photo_data')?.value, base + '_portrait');
+  if (!p1.ok) {
+    markFieldError('tut_name', p1.motif === 'absente'
+      ? 'La photo de portrait est obligatoire : sans elle, le gardien ne peut identifier personne.'
+      : 'La photo de portrait n’a pas pu être transférée. Réessayez quand le réseau revient.');
+    return;
+  }
+  const p2 = await _apsPhotoUrl($('tut_photo_full_data')?.value, base + '_pied');
+  if (!p2.ok) {
+    markFieldError('tut_name', p2.motif === 'absente'
+      ? 'La photo en pied est obligatoire : c’est elle qui permet de reconnaître quelqu’un à deux mètres.'
+      : 'La photo en pied n’a pas pu être transférée. Réessayez quand le réseau revient.');
+    return;
+  }
+
+  const r = await _rpc('save_authorized_pickup_person', { p_person: {
+    id: tid || null, sid, name: nom, relation: lien, phone: tel,
+    photo_portrait: p1.url, photo_full_body: p2.url,
+    id_doc_type: piece, id_doc_last4: quatre,
+    valid_from: debut || null, valid_until: fin || null,
+  }});
+  if (!r.ok) { toast(_apsRefus(r), 'error'); return; }
+
+  // On n'écrit en local QU'APRÈS le succès, et on écrit ce que le serveur
+  // rend — pas ce qu'on croyait envoyer.
+  const enr = r.data.person || {};
+  const i = (DB.aps = DB.aps || []).findIndex(a => a.id === enr.id);
+  if (i >= 0) DB.aps[i] = enr; else DB.aps.push(enr);
+  saveToCrypt();
+  logAudit('aps_save', `${nom} — ${lien} — autorisé pour un élève`, sid);
+  toast(r.data.code === 'AUTHORIZED_PERSON_CREATED'
+    ? `${nom} peut désormais récupérer l’enfant`
+    : `${nom} mis à jour`, 'success');
+  closeModal(); render();
 };
 
-function _saveTutelleInner() {
-  const sid=$('tut_sid').value;
-  const tid=$('tut_id').value;
-  const s=(DB.students||[]).find(x=>x.id===sid);
-  if(!s||(S.user.role==='parent'?s.pid!==S.user.id:!['direction','direction2'].includes(S.user.role))){toast('Accès non autorisé','error');return;}
-  const name=($('tut_name').value||'').trim().slice(0,80);
-  if(!name){toast('Entrez le nom','error');return;}
-  const relation=$('tut_relation').value;
-  const phone=($('tut_phone').value||'').trim().slice(0,30)||null;
-  const photo=$('tut_photo_data').value||null;
-  if(!photo) toast('⚠️ Sans photo, l\'identification au portail sera difficile','info');
-  const dejaLa=(DB.aps||[]).find(a=>a.id===tid);
-  // Le plafond était vérifié à l'ouverture du formulaire. Entre-temps, une
-  // autre tutelle a pu être créée depuis un autre appareil.
-  if(!dejaLa && (DB.aps||[]).filter(a=>a.sid===sid).length>=3){toast('Maximum 3 tutelles par élève','error');return;}
-  const data={sid,name,relation,phone,photo,active:dejaLa?(dejaLa.active!==false):true};
-  if(dejaLa){
-    Object.assign(dejaLa,data);
-    pushSync('aps','upsert',{id:tid,...data});
-    toast(`${name} mis à jour`,'success');
-  } else {
-    const nt={id:tid||_uid('ap_'),...data};
-    (DB.aps=DB.aps||[]).push(nt);
-    pushSync('aps','upsert',nt);
-    toast(`✅ ${name} enregistré comme tutelle`,'success');
+// ── SUSPENDRE — ON NE SUPPRIME PLUS ───────────────────────────────────────
+window.suspendreTutelle = (tid) => {
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Seule la Direction suspend une autorisation', 'error'); return;
   }
-  closeModal(); saveToCrypt(); render();
+  const t = (DB.aps||[]).find(x => x.id === tid); if (!t) return;
+  openM(`Suspendre ${t.name}`, `
+<div style="padding:2px">
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:13px;color:#991b1b;line-height:1.55">
+    <b>${esc(t.name)} ne pourra plus récupérer l’enfant</b>, dès la validation.<br>
+    Rien n’est effacé : la personne reste au registre, suspendue.</div>
+  <label class="form-label">Pourquoi ? <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="apsMotif" maxlength="200" placeholder="Ex. la famille a retiré son autorisation">
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-danger" onclick="confirmerStatutTutelle(${JSON.stringify(tid)},'suspend')">Suspendre</button>`);
 };
 
-window.deleteTutelle = (tid) => {
-  const t=(DB.aps||[]).find(x=>x.id===tid); if(!t) return;
-  // Contrôle accès : direction ou parent de l'enfant. Le test ne retenait
-  // que le cas du parent — gardiens et enseignants passaient au travers.
-  if(!S.user){toast('Accès non autorisé','error');return;}
-  if(S.user.role==='parent'){
-    const s=(DB.students||[]).find(x=>x.id===t.sid);
-    if(!s||s.pid!==S.user.id){toast('Accès non autorisé','error');return;}
-  } else if(!['direction','direction2'].includes(S.user.role)){
-    toast('Accès non autorisé','error');return;
+window.reactiverTutelle = (tid) => {
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Seule la Direction réactive une autorisation', 'error'); return;
   }
-  showC(`Supprimer ${t.name} ?`,'Cette personne ne pourra plus récupérer l\'enfant.',()=>{
-    DB.aps=(DB.aps||[]).filter(x=>x.id!==tid);
-    pushSync('aps','delete',{},'id=eq.'+tid);
-    toast(`🗑️ ${t.name} supprimé`,'info');
-    saveToCrypt(); render();
-  });
+  const t = (DB.aps||[]).find(x => x.id === tid); if (!t) return;
+  showC(`Réactiver ${t.name} ?`,
+    'Le serveur vérifiera que sa photo, sa photo en pied et sa pièce sont bien enregistrées, et que l’élève n’a pas déjà trois personnes actives.',
+    () => confirmerStatutTutelle(tid, 'reactivate'));
 };
 
-window.toggleTutelle = (tid, newActive) => {
-  const t = (DB.aps||[]).find(x=>x.id===tid); if(!t) return;
-  const s = (DB.students||[]).find(x=>x.id===t.sid);
-  if(!S.user || !s || s.pid !== S.user.id){ toast('Accès non autorisé','error'); return; }
-  t.active = !!newActive;
-  pushSync('aps','patch',{active:!!newActive},'id=eq.'+tid);
-  (DB.users||[]).filter(u=>u.role==='direction'||u.role==='direction2').forEach(u=>{
-    const notif={id:_uid('n_'),uid:u.id,
-      msg:`🔑 ${S.user.name} a ${newActive?'activé':'désactivé'} l'autorisation de ${t.name} pour ${s.name}`,
-      time:nowTime(),date:today(),read:false,type:'info'};
-    (DB.notifs=DB.notifs||[]).unshift(notif); pushSync('notifs','post',notif);
-  });
-  toast(`${newActive?'Autorisé':'Désactivé'} — ${t.name}`,'success');
-  saveToCrypt(); render();
+window.confirmerStatutTutelle = async (tid, action) => {
+  const motif = (document.getElementById('apsMotif')?.value || '').trim();
+  if (action === 'suspend' && motif.length < 3) {
+    markFieldError('apsMotif', 'Le motif reste au registre — il ne peut pas être vide.'); return;
+  }
+  const r = await _rpc('set_authorized_pickup_person_status', {
+    p_person_id: tid, p_action: action, p_reason: action === 'suspend' ? motif : null });
+  if (!r.ok) { toast(_apsRefus(r), 'error'); return; }
+  const enr = r.data.person || {};
+  const i = (DB.aps = DB.aps || []).findIndex(a => a.id === enr.id);
+  if (i >= 0) DB.aps[i] = enr;
+  saveToCrypt(); closeModal();
+  logAudit(action === 'suspend' ? 'aps_suspend' : 'aps_reactivate',
+    `${enr.name || ''}${motif ? ' — ' + motif : ''}`, enr.sid);
+  toast(action === 'suspend' ? `${enr.name} suspendu` : `${enr.name} de nouveau autorisé`, 'success');
+  render();
 };
-// LE PARENT NE SIGNALE PLUS RIEN — Loms, 4 août 2026.
-//
-// « Les parents reçoivent les reçus des paiements. Ils ne signalent pas. Il
-//   vient payer ; quand la Caisse ou la Direction 1 enregistre son paiement,
-//   c'est à ce moment-là qu'il reçoit le reçu. »
-//
-// Ce bouton faisait déclarer au parent qu'il avait payé. Deux écrans lisaient
-// ensuite cette déclaration comme si c'était un encaissement : le REÇU de
-// rattrapage et l'état financier de l'élève. L'école pouvait donc imprimer un
-// reçu pour de l'argent qu'elle n'avait jamais reçu. Les deux lisent
-// désormais `paid`, qui n'est écrit que par un vrai encaissement.
+
+// ── L'IDENTITÉ DU PARENT PRINCIPAL ────────────────────────────────────────
+// Le parent principal est la personne la plus attendue au portail, et c'est
+// la seule dont l'identité n'était nulle part : le portail refusait sa
+// présentation avec PRIMARY_PARENT_IDENTITY_INCOMPLETE, sans qu'aucun écran
+// ne permette de la compléter.
+window.identiteParentPrincipal = (parentId) => {
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Seule la Direction complète cette identité', 'error'); return;
+  }
+  const u = (DB.users||[]).find(x => x.id === parentId);
+  if (!u) { toast('Parent introuvable', 'error'); return; }
+  openM(`Identité au portail — ${u.name}`, `
+<div style="padding:2px">
+  <p style="font-size:13px;color:var(--text-secondary);margin:0 0 12px;line-height:1.6">
+    Ces informations servent <b>uniquement au portail</b>, pour que le gardien
+    reconnaisse la personne qui vient chercher l’enfant.</p>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">Photo de portrait</label>
+      <input class="form-input" type="file" accept="image/*" onchange="_apsLirePhoto(this,'pp_portrait')">
+      <div id="pp_portrait_apercu" style="margin-top:6px">${u.photo_url?`<img src="${esc(u.photo_url)}" style="width:74px;height:92px;object-fit:cover;border-radius:8px">`:''}</div>
+      <input type="hidden" id="pp_portrait" value="${esc(u.photo_url||'')}"></div>
+    <div class="form-group"><label class="form-label">Photo en pied</label>
+      <input class="form-input" type="file" accept="image/*" onchange="_apsLirePhoto(this,'pp_pied')">
+      <div id="pp_pied_apercu" style="margin-top:6px">${u.identity_full_body_photo_url?`<img src="${esc(u.identity_full_body_photo_url)}" style="width:74px;height:92px;object-fit:cover;border-radius:8px">`:''}</div>
+      <input type="hidden" id="pp_pied" value="${esc(u.identity_full_body_photo_url||'')}"></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label class="form-label">Pièce d’identité</label>
+      <select class="form-select" id="pp_doc_type">
+        <option value="">—</option>
+        ${_APS_PIECES.map(p=>`<option${u.identity_document_type===p?' selected':''}>${esc(p)}</option>`).join('')}
+      </select></div>
+    <div class="form-group"><label class="form-label">Derniers chiffres</label>
+      <input class="form-input" id="pp_doc_last4" maxlength="12" value="${esc(u.identity_document_last4||'')}" placeholder="Ex. 4821"></div>
+  </div>
+  <p style="font-size:11.5px;color:var(--text-muted);margin:8px 0 0;line-height:1.5">
+    Le numéro complet de la pièce n’est jamais enregistré — seulement ses
+    derniers chiffres, pour confronter sans conserver.</p>
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-primary" onclick="enregistrerIdentiteParent(${JSON.stringify(parentId)})">Enregistrer</button>`);
+};
+
+window._apsLirePhoto = (input, champId) => {
+  const f = input.files && input.files[0]; if (!f) return;
+  const lecteur = new FileReader();
+  lecteur.onload = (e) => {
+    const data = e.target.result;
+    const h = document.getElementById(champId); if (h) h.value = data;
+    const a = document.getElementById(champId + '_apercu');
+    if (a) a.innerHTML = `<img src="${data}" style="width:74px;height:92px;object-fit:cover;border-radius:8px">`;
+  };
+  lecteur.readAsDataURL(f);
+};
+
+window.enregistrerIdentiteParent = async (parentId) => {
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) return;
+  const piece  = (document.getElementById('pp_doc_type')?.value || '').trim();
+  const quatre = (document.getElementById('pp_doc_last4')?.value || '').trim();
+  if (!piece)  { markFieldError('pp_doc_type', 'La pièce est obligatoire.'); return; }
+  if (quatre.length < 2) { markFieldError('pp_doc_last4', 'Au moins deux caractères.'); return; }
+
+  const p1 = await _apsPhotoUrl(document.getElementById('pp_portrait')?.value, parentId + '_portrait');
+  if (!p1.ok) { toast(p1.motif === 'absente' ? 'La photo de portrait est obligatoire'
+    : 'La photo de portrait n’a pas pu être transférée', 'error'); return; }
+  const p2 = await _apsPhotoUrl(document.getElementById('pp_pied')?.value, parentId + '_pied');
+  if (!p2.ok) { toast(p2.motif === 'absente' ? 'La photo en pied est obligatoire'
+    : 'La photo en pied n’a pas pu être transférée', 'error'); return; }
+
+  const r = await _rpc('save_primary_parent_pickup_identity', {
+    p_parent_id: parentId, p_photo_portrait: p1.url, p_photo_full_body: p2.url,
+    p_id_doc_type: piece, p_id_doc_last4: quatre });
+  if (!r.ok) { toast(_apsRefus(r), 'error'); return; }
+  const u = (DB.users||[]).find(x => x.id === parentId);
+  if (u) Object.assign(u, {
+    photo_url: p1.url, identity_full_body_photo_url: p2.url,
+    identity_document_type: piece, identity_document_last4: quatre });
+  saveToCrypt(); closeModal();
+  logAudit('parent_pickup_identity', `Identité au portail complétée — ${u ? u.name : parentId}`);
+  toast('Identité enregistrée — le portail peut désormais l’identifier', 'success');
+  render();
+};
+
+// ── DÉSIGNER LE PARENT PRINCIPAL ──────────────────────────────────────────
+window.definirParentPrincipal = async (sid, parentId) => {
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Seule la Direction désigne le parent principal', 'error'); return;
+  }
+  const r = await _rpc('set_student_primary_parent', { p_sid: sid, p_parent_id: parentId });
+  if (!r.ok) { toast(_apsRefus(r), 'error'); return; }
+  const s = (DB.students||[]).find(x => x.id === sid);
+  if (s) s.pid = parentId;
+  saveToCrypt();
+  logAudit('primary_parent_set', `Parent principal désigné`, sid);
+  toast('Parent principal enregistré', 'success');
+  render();
+};
 
 window.planifierConvocation = (cid) => {
   if(!S.user||!['direction','direction2'].includes(S.user.role)) return;
