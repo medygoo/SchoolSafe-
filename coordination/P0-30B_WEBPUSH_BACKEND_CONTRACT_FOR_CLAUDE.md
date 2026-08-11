@@ -93,7 +93,7 @@ Les refus restent autant que possible ceux déjà compris par le frontend :
 
 Ainsi #79 ne doit pas être réécrit juste pour suivre le backend.
 
-## Une petite amélioration frontend que je propose à Claude
+## Identité stable de ce téléphone / navigateur
 
 Dans #79, `p_app_instance_id` est actuellement dérivé des 64 derniers caractères de `sub.endpoint`.
 
@@ -107,7 +107,23 @@ localStorage['schoolsafe_push_instance_id'] = crypto.randomUUID()
 
 et le réutilise ensuite comme `p_app_instance_id`.
 
-Ce n’est pas une clé de sécurité et il ne contient aucune donnée personnelle. Il sert uniquement à désactiver proprement l’ancien endpoint quand le même navigateur en reçoit un nouveau.
+Ce n’est pas une clé de sécurité et il ne contient aucune donnée personnelle. Il sert uniquement à reconnaître le même navigateur après rotation de l’endpoint.
+
+### Important : ne pas confondre “le compte a un appareil” et “ce téléphone est actif”
+
+Le `active_device_count` du centre indique le nombre total d’appareils actifs du **compte**. Il ne permet pas de conclure que le navigateur actuellement ouvert est enregistré.
+
+Exemple : un parent active les notifications sur Téléphone A. Il ouvre ensuite SchoolSafe sur Téléphone B. `active_device_count=1`, mais Téléphone B n’est pas encore enregistré.
+
+Pour éviter ce faux état, ChatGPT complète le retour existant de `get_my_push_device_status()` avec `app_instance_id`. Claude pourra alors comparer l’identifiant local stable avec les appareils actifs retournés par le serveur.
+
+Le statut « actif sur ce téléphone » doit être vrai uniquement si :
+
+- permission navigateur accordée ;
+- abonnement navigateur présent ;
+- **et** `get_my_push_device_status()` contient un appareil actif dont `app_instance_id` correspond à l’identifiant local de cette installation.
+
+Après rechargement, ce contrôle remplace l’inférence actuelle fondée seulement sur `active_device_count`.
 
 ## Protection lors d’un changement de compte
 
@@ -185,6 +201,7 @@ Pour `privacy_level='sensitive'`, `title/body` restent neutralisés : aucun nom 
 
 - ajouter `vapid_public_key` à `get_safe_settings()` ;
 - étendre `register_push_device()` à `webpush` en conservant FCM ;
+- inclure `app_instance_id` dans le statut appareils du compte ;
 - unicité Web Push par endpoint ;
 - rotation/réaffectation sûre des appareils ;
 - outbox provider-neutre ;
@@ -195,7 +212,7 @@ Pour `privacy_level='sensitive'`, `title/body` restent neutralisés : aucun nom 
 
 ## Tests croisés avant de dire « fonctionnel »
 
-Claude : Android Chrome, desktop Chrome/Edge/Firefox, iPhone/iPad PWA écran d’accueil, permission accordée/refusée/révoquée, abonnement existant, changement de compte, logout/login, hors ligne/retour réseau, clic vers la bonne notification.
+Claude : Android Chrome, desktop Chrome/Edge/Firefox, iPhone/iPad PWA écran d’accueil, permission accordée/refusée/révoquée, abonnement existant, deux téléphones pour le même compte, changement de compte, logout/login, hors ligne/retour réseau, clic vers la bonne notification.
 
 ChatGPT/backend : accès direct appareils refusé, JSON Web Push invalide refusé, endpoint unique, rotation même installation, changement de compte sans fuite d’outbox, claims séparés, contenu sensible neutralisé, retry borné, aucune clé privée publique.
 
