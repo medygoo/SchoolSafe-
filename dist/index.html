@@ -1205,7 +1205,7 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
          change rien. L'application reconnaît ce qui est tapé et le montre. -->
     <div class="login-field">
       <svg class="lfi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20c0-3.3 3.6-5.5 8-5.5s8 2.2 8 5.5"/><circle cx="12" cy="8" r="4"/></svg>
-      <input class="login-input" id="LN" type="text" inputmode="email" placeholder="Numéro ou adresse e-mail" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <input class="login-input" id="LN" type="text" inputmode="email" placeholder="Numéro, e-mail, abréviation ou nom de connexion" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false">
     </div>
     <div id="LN_VU" style="font-size:11.5px;color:rgba(255,255,255,.72);text-align:center;margin:-6px 0 8px;min-height:15px"></div>
     <div class="login-field" style="margin-bottom:4px">
@@ -4888,7 +4888,25 @@ window._voieDe = (saisie) => {
     const m = v.toLowerCase();
     return { voie: 'mail', valeur: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m) ? m : null };
   }
-  return { voie: 'tel', valeur: window._telE164(v) };
+  const tel = window._telE164(v);
+  if (tel) return { voie: 'tel', valeur: tel };
+  // ── Le troisième identifiant — Loms, 11 août 2026 ────────────────────────
+  //
+  // « Téléphone, abréviation OU nom de connexion, avec le même mot de passe. »
+  //
+  // Le navigateur ne peut PAS savoir lequel des deux on lui a tapé : il ne lit
+  // pas `users` avant la connexion — la RLS le lui interdit, et c'est tout
+  // l'objet du relais `school-login`. Il envoie donc le texte tel quel sur UN
+  // canal, et c'est `resolve_school_login_identity` qui tranche. Deviner ici
+  // reviendrait à refuser une abréviation valide parce qu'elle ressemble à un
+  // nom de connexion.
+  //
+  // Un chiffre seul ne peut être ni l'un ni l'autre : c'est un numéro mal tapé,
+  // et le dire ainsi vaut mieux que « identifiant inconnu ».
+  if (/^[0-9+\s().-]+$/.test(v)) return { voie: 'tel', valeur: null };
+  if (/^[A-Za-z0-9][A-Za-z0-9._-]{1,31}$/.test(v))
+    return { voie: 'identifiant', valeur: v.trim() };
+  return { voie: 'identifiant', valeur: null };
 };
 
 // Ce qu'on affiche sous le champ pendant la frappe : la forme exacte sous
@@ -4902,13 +4920,15 @@ window._telApercuConnexion = () => {
   if (!brut) { vu.textContent = ''; return; }
   const { voie, valeur } = window._voieDe(brut);
   if (valeur) {
-    vu.textContent = (voie === 'tel') ? ('Connexion au numéro ' + valeur)
-                                      : ('Connexion à l’adresse ' + valeur);
+    vu.textContent = (voie === 'tel')  ? ('Connexion au numéro ' + valeur)
+                   : (voie === 'mail') ? ('Connexion à l’adresse ' + valeur)
+                   : ('Connexion avec l’identifiant ' + valeur);
     vu.style.color = 'rgba(255,255,255,.82)';
   } else {
     vu.textContent = (voie === 'tel')
       ? 'Numéro non reconnu — 0810000111 ou +243810000111'
-      : 'Adresse e-mail incomplète';
+      : (voie === 'mail') ? 'Adresse e-mail incomplète'
+      : 'Identifiant non reconnu';
     vu.style.color = '#ffc9c9';
   }
 };
@@ -4950,7 +4970,12 @@ window._loginRelais = async (channel, identifier, password) => {
 };
 
 async function _loginWithSupabaseAuth(identifiant, password, voie) {
-  const r = await window._loginRelais(voie === 'tel' ? 'phone' : 'email', identifiant, password);
+  // `identifier` est le canal demandé à ChatGPT pour l'abréviation et le nom
+  // de connexion (voir coordination/). Tant qu'il n'est pas servi, le serveur
+  // rend INVALID_CREDENTIALS — et l'écran le DIT au lieu d'accuser le mot de
+  // passe : un refus mal nommé envoie ressaisir vingt fois un code juste.
+  const canal = voie === 'tel' ? 'phone' : voie === 'mail' ? 'email' : 'identifier';
+  const r = await window._loginRelais(canal, identifiant, password);
 
   if (!r.ok) {
     const attendre = (r.raw && r.raw.retry_after_seconds) || 900;
@@ -4960,7 +4985,9 @@ async function _loginWithSupabaseAuth(identifiant, password, voie) {
     const dit = {
       INVALID_CREDENTIALS: voie === 'tel'
         ? 'Numéro ou mot de passe incorrect'
-        : 'E-mail ou mot de passe incorrect',
+        : voie === 'mail' ? 'E-mail ou mot de passe incorrect'
+        : 'Abréviation, nom de connexion ou mot de passe incorrect — si vous venez de recevoir vos identifiants, essayez avec votre numéro de téléphone',
+      UNSUPPORTED_CHANNEL: 'La connexion par abréviation ou nom de connexion n’est pas encore ouverte sur le serveur — utilisez votre numéro ou votre adresse e-mail',
       TOO_MANY_ATTEMPTS: `Trop d’essais — réessayez dans ${mins} minute${mins > 1 ? 's' : ''}`,
       LOGIN_TEMPORARILY_UNAVAILABLE: 'Le serveur de l’école ne répond pas — votre mot de passe n’est pas en cause, réessayez',
       CLIENT_KEY_REQUIRED: 'Cette version de l’application n’est pas reconnue par le serveur — signalez-le',
@@ -5017,13 +5044,14 @@ async function _tryLoginInner() {
   const rawSecret = $('LP')?.value || '';
 
   if (window._authClient) {
-    if (!rawLogin) { $('PM').textContent = 'Entrez votre numéro ou votre adresse e-mail'; return; }
+    if (!rawLogin) { $('PM').textContent = 'Entrez votre numéro, votre adresse e-mail, votre abréviation ou votre nom de connexion'; return; }
     // L'identifiant part sous la forme que le serveur connaît, ou il ne part pas.
     const { voie, valeur } = window._voieDe(rawLogin);
     if (!valeur) {
       $('PM').textContent = (voie === 'tel')
         ? 'Numéro non reconnu — écrivez 0810000111 ou +243810000111'
-        : 'Adresse e-mail incomplète';
+        : (voie === 'mail') ? 'Adresse e-mail incomplète'
+        : 'Identifiant non reconnu — un numéro, une adresse e-mail, une abréviation ou un nom de connexion';
       return;
     }
     if (!rawSecret) { $('PM').textContent = 'Entrez votre mot de passe'; return; }
@@ -29766,6 +29794,301 @@ window._boutonAcces = (u) => {
        + `onclick="_envoyerLienWhatsApp('${u.id}')">${neuf?'🔗 Ouvrir l’accès':'🔁 Nouveau code'}</button>`;
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  LA CARTE DE PREMIÈRE CONNEXION — modèle DYNAMIQUE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Décision de Loms, 11 août 2026. Le visuel qu'il a validé est conservé tel
+//  quel et devient un GABARIT : aucune donnée d'utilisateur n'est écrite en
+//  dur dans l'image, et aucune donnée d'exemple ne part jamais.
+//
+//  CE QUI EST À MOI, CE QUI EST À CHATGPT — relevé dans le code servi, pas
+//  déduit :
+//
+//    • le code temporaire est FABRIQUÉ PAR LE SERVEUR : c'est le mot de passe
+//      Auth que `parent-phone-access` pose par la clé d'administration. Le
+//      navigateur ne l'invente pas et ne doit pas l'inventer. Il le REÇOIT.
+//      Sa forme d'aujourd'hui est `Sa-1234-5678` ; Loms en veut une autre —
+//      deux lettres, six chiffres. C'est une ligne dans `tempCode()`.
+//    • l'abréviation existe déjà : c'est `users.initials`, et `saveUser` la
+//      tient déjà unique.
+//    • le NOM DE CONNEXION n'existe dans aucune colonne de `public.users`.
+//      On ne l'invente pas côté navigateur : un identifiant affiché qui
+//      n'ouvre rien est pire que pas d'identifiant du tout.
+window._FORMAT_CODE_TEMP = /^[A-Za-z]{2}[0-9]{6}$/;
+window._codeAuFormat = (code) => window._FORMAT_CODE_TEMP.test(String(code == null ? '' : code).trim());
+
+// Les trois identifiants d'un compte, lus sur la fiche réelle. `null` quand la
+// donnée n'existe pas — jamais une valeur de remplissage.
+window._identifiantsDe = (u) => ({
+  tel:   u && u.phone ? (window._telE164(u.phone) || u.phone) : null,
+  abrev: u && u.initials ? String(u.initials).trim().toUpperCase() : null,
+  login: u && u.login_name ? String(u.login_name).trim().toLowerCase() : null,
+});
+
+// Le message WhatsApp, dans les mots arrêtés par Loms. Il ne porte AUCUNE
+// donnée de l'enfant — ni nom, ni classe, ni note, ni montant, ni santé : un
+// message se transfère, se lit par-dessus l'épaule, et reste dans un
+// téléphone prêté.
+//
+// Une ligne dont la valeur manque ne s'imprime pas. Écrire « Nom de
+// connexion : — » ferait chercher quelque chose qui n'existe pas.
+window._messageAccesWhatsApp = (ids, code, expiresAt) => {
+  const ecole = (DB.settings && DB.settings.school && DB.settings.school.name)
+             || 'Complexe Scolaire Le Sage / The Wise School International';
+  const lignes = [];
+  if (ids.tel)   lignes.push('Téléphone : ' + ids.tel);
+  if (ids.abrev) lignes.push('Abréviation : ' + ids.abrev);
+  if (ids.login) lignes.push('Nom de connexion : ' + ids.login);
+  lignes.push('Code temporaire : ' + code);
+  const combien = [ids.tel, ids.abrev, ids.login].filter(Boolean).length;
+  const exp = expiresAt ? new Date(expiresAt) : null;
+  const heure = exp && !isNaN(exp) ? exp.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) : null;
+  return 'Bienvenue à SchoolSafe\n'
+    + ecole + '\n'
+    + 'Votre accès personnel à SchoolSafe est prêt.\n\n'
+    + lignes.join('\n') + '\n\n'
+    + 'À votre première connexion, utilisez '
+    + (combien > 1 ? 'l’un de vos identifiants ci-dessus' : 'votre identifiant ci-dessus')
+    + ' avec votre code temporaire. SchoolSafe vous demandera ensuite de créer votre mot de passe personnel.\n'
+    + (heure ? 'Ce code expire à ' + heure + '.\n' : '')
+    + 'Ne le transmettez à personne.';
+};
+
+// ── Le dessin de la carte ────────────────────────────────────────────────
+//
+// On DESSINE la carte sur un canvas ; on ne photographie pas du HTML.
+// Rastériser une page dépend du navigateur, de la largeur de la fenêtre et du
+// moment où les images arrivent — et quand une seule condition manque, on
+// n'obtient pas une erreur, on obtient du blanc. Un dessin, lui, donne
+// toujours le même résultat.
+//
+// UNE IMAGE CHARGÉE PAR SON ADRESSE CONTAMINE LE CANVAS, et un canvas
+// contaminé refuse `toBlob` — « Tainted canvases may not be exported ».
+// Trouvé en dessinant la carte dans un vrai navigateur, pas en le supposant :
+// l'emblème de l'école est un `data:` et ne contamine rien, mais le logo du
+// logiciel est un fichier, et il faisait échouer TOUTE la carte.
+//
+// On le relit donc en `data:` avant de le dessiner. Si cette lecture échoue —
+// hors ligne, fichier absent, ouverture depuis le disque — on rend `null` :
+// la carte se dessine sans ce logo plutôt que de ne pas se dessiner du tout.
+window._imgChargee = async (src) => {
+  if (!src) return null;
+  let source = src;
+  if (!/^data:/.test(src)) {
+    try {
+      const r = await fetch(src);
+      if (!r.ok) return null;
+      const b = await r.blob();
+      source = await new Promise((ok) => {
+        const fr = new FileReader();
+        fr.onload = () => ok(fr.result);
+        fr.onerror = () => ok(null);
+        fr.readAsDataURL(b);
+      });
+      if (!source) return null;
+    } catch (e) { return null; }
+  }
+  return await new Promise((ok) => {
+    const i = new Image();
+    i.onload = () => ok(i);
+    i.onerror = () => ok(null);
+    i.src = source;
+  });
+};
+
+window._carteRoundRect = (c, x, y, w, h, r) => {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y,     x + w, y + h, r);
+  c.arcTo(x + w, y + h, x,     y + h, r);
+  c.arcTo(x,     y + h, x,     y,     r);
+  c.arcTo(x,     y,     x + w, y,     r);
+  c.closePath();
+};
+
+// Rend un Blob PNG de la carte, remplie avec les VRAIES informations.
+window._dessinerCarteAcces = async (ids, code) => {
+  const L = 1120, H = 1400;
+  const cv = document.createElement('canvas');
+  cv.width = L; cv.height = H;
+  const c = cv.getContext('2d');
+  if (!c) return null;
+
+  const OR = '#f0b429', OR_CLAIR = '#ffd268', BLANC = '#ffffff';
+  const fond = c.createLinearGradient(0, 0, L, H);
+  fond.addColorStop(0, '#0b1c4a'); fond.addColorStop(0.5, '#08163b'); fond.addColorStop(1, '#050f2b');
+  c.fillStyle = fond; c.fillRect(0, 0, L, H);
+
+  c.strokeStyle = OR; c.lineWidth = 3;
+  window._carteRoundRect(c, 18, 18, L - 36, H - 36, 26); c.stroke();
+
+  const centre = (txt, y, police, couleur) => {
+    c.font = police; c.fillStyle = couleur; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+    c.fillText(txt, L / 2, y);
+  };
+
+  // Les deux emblèmes : celui du logiciel à gauche, celui de l'école à droite.
+  const [logi, ecoleImg] = await Promise.all([
+    window._imgChargee('logo-schoolsafe.png'),
+    window._imgChargee(window.SCHOOL_LOGO_DOC || null),
+  ]);
+  if (logi) { const h = 230, l = h * (logi.width / logi.height); c.drawImage(logi, 300 - l / 2, 70, l, h); }
+  if (ecoleImg) {
+    c.save(); c.beginPath(); c.arc(795, 195, 118, 0, Math.PI * 2); c.closePath(); c.clip();
+    c.fillStyle = '#fff'; c.fillRect(677, 77, 236, 236);
+    c.drawImage(ecoleImg, 677, 77, 236, 236); c.restore();
+    c.strokeStyle = OR; c.lineWidth = 3; c.beginPath(); c.arc(795, 195, 118, 0, Math.PI * 2); c.stroke();
+  }
+  c.strokeStyle = 'rgba(240,180,41,.45)'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(560, 85); c.lineTo(560, 310); c.stroke();
+
+  centre('Bienvenue à', 425, '700 52px system-ui, sans-serif', BLANC);
+  // « School » en blanc, « Safe » en or — le titre du logiciel, tel que validé.
+  c.font = '800 108px system-ui, sans-serif'; c.textAlign = 'left';
+  const l1 = c.measureText('School').width, l2 = c.measureText('Safe').width;
+  const x0 = (L - (l1 + l2)) / 2;
+  c.fillStyle = BLANC; c.fillText('School', x0, 545);
+  c.fillStyle = OR;    c.fillText('Safe',   x0 + l1, 545);
+
+  c.strokeStyle = 'rgba(240,180,41,.55)'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(130, 592); c.lineTo(L - 130, 592); c.stroke();
+
+  const ecoleNom = (DB.settings && DB.settings.school && DB.settings.school.name)
+                || 'Complexe Scolaire Le Sage / The Wise School International';
+  centre(ecoleNom, 640, '700 31px system-ui, sans-serif', OR);
+  centre('Une enfant protégé, un parent informé', 688, '400 25px system-ui, sans-serif', 'rgba(255,255,255,.85)');
+  centre('Votre accès personnel a été créé avec succès.', 765, '700 30px system-ui, sans-serif', BLANC);
+
+  // ── Le panneau des identifiants ────────────────────────────────────────
+  const py = 815, ph = 370;
+  c.fillStyle = 'rgba(255,255,255,.05)';
+  window._carteRoundRect(c, 120, py, L - 240, ph, 22); c.fill();
+  c.strokeStyle = OR; c.lineWidth = 3;
+  window._carteRoundRect(c, 120, py, L - 240, ph, 22); c.stroke();
+
+  const bandeau = c.createLinearGradient(0, py - 30, 0, py + 22);
+  bandeau.addColorStop(0, OR_CLAIR); bandeau.addColorStop(1, OR);
+  c.fillStyle = bandeau;
+  window._carteRoundRect(c, 245, py - 32, 630, 62, 16); c.fill();
+  centre('Identifiants de première connexion', py + 9, '800 30px system-ui, sans-serif', '#0b1c4a');
+
+  // Une ligne dont la valeur manque ne s'imprime PAS : un identifiant écrit
+  // qui n'ouvre rien envoie la famille se plaindre d'un code qui « ne marche
+  // pas », alors que c'est la ligne elle-même qui n'aurait pas dû être là.
+  const rangs = [];
+  if (ids.tel)   rangs.push(['Téléphone', ids.tel]);
+  if (ids.abrev) rangs.push(['Abréviation', ids.abrev]);
+  if (ids.login) rangs.push(['Nom de connexion', ids.login]);
+  rangs.push(['Code temporaire', code]);
+
+  const pas = (ph - 80) / rangs.length;
+  let y = py + 52 + pas / 2;
+  for (let i = 0; i < rangs.length; i++) {
+    c.textAlign = 'left'; c.textBaseline = 'middle';
+    c.font = '700 28px system-ui, sans-serif'; c.fillStyle = BLANC;
+    c.fillText(rangs[i][0], 200, y);
+    c.fillStyle = 'rgba(255,255,255,.55)'; c.fillText(':', 560, y);
+    c.font = '800 34px system-ui, sans-serif'; c.fillStyle = OR;
+    c.fillText(String(rangs[i][1]), 610, y);
+    if (i < rangs.length - 1) {
+      c.strokeStyle = 'rgba(255,255,255,.14)'; c.lineWidth = 1;
+      c.setLineDash([5, 6]);
+      c.beginPath(); c.moveTo(200, y + pas / 2); c.lineTo(L - 200, y + pas / 2); c.stroke();
+      c.setLineDash([]);
+    }
+    y += pas;
+  }
+
+  c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  c.strokeStyle = OR; c.lineWidth = 3;
+  c.beginPath(); c.arc(168, 1258, 34, 0, Math.PI * 2); c.stroke();
+  c.font = '800 40px system-ui, sans-serif'; c.fillStyle = OR;
+  c.textAlign = 'center'; c.fillText('i', 168, 1272);
+  c.textAlign = 'left'; c.font = '700 25px system-ui, sans-serif'; c.fillStyle = BLANC;
+  const combien = rangs.length - 1;
+  [ 'À la première connexion, utilisez ' + (combien > 1 ? 'l’un de vos' : 'votre'),
+    (combien > 1 ? 'identifiants ci-dessus' : 'identifiant ci-dessus') + ' avec le code temporaire,',
+    'puis créez votre mot de passe personnel.' ]
+    .forEach((t, i) => c.fillText(t, 232, 1236 + i * 34));
+
+  return await new Promise((ok) => cv.toBlob(ok, 'image/png'));
+};
+
+// ── Remettre la carte et le message ──────────────────────────────────────
+//
+// CE QUE `wa.me` NE SAIT PAS FAIRE, et qu'on ne fait donc pas semblant de
+// faire : joindre un fichier. Le lien `wa.me` ne transporte QUE du texte.
+// Sans l'API WhatsApp Business — payante, et que Loms n'a pas — aucune image
+// ne peut être attachée automatiquement. Prétendre le contraire ferait
+// envoyer un message vide de sa carte sans que personne s'en aperçoive.
+//
+// Donc deux gestes, et l'écran le dit :
+//   1. « Partager la carte » — le partage natif de l'appareil (Web Share avec
+//      fichier) quand il existe : WhatsApp y apparaît comme destination et
+//      l'image part vraiment. Sinon la carte se télécharge, prête à joindre.
+//   2. « Ouvrir WhatsApp » — le texte prérempli, qui lui part toujours.
+window._carteEnCours = null;
+
+window.ouvrirCarteAcces = async (uid, code, expiresAt, action) => {
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Accès non autorisé', 'error'); return;
+  }
+  const u = (DB.users || []).find(x => x.id === uid);
+  if (!u) { toast('Compte introuvable — rechargez', 'error'); return; }
+  const ids = window._identifiantsDe(u);
+  const msg = window._messageAccesWhatsApp(ids, code, expiresAt);
+  const blob = await window._dessinerCarteAcces(ids, code);
+  const url = blob ? URL.createObjectURL(blob) : null;
+  window._carteEnCours = { uid, blob, url, msg, tel: ids.tel, nom: u.name };
+
+  // Ce qui manque se dit ici, à la Direction, et JAMAIS dans le message du
+  // parent : une réserve honnête vaut mieux qu'un identifiant inventé.
+  const manques = [];
+  if (!ids.login) manques.push('le <strong>nom de connexion</strong> n’existe pas encore côté serveur');
+  if (!window._codeAuFormat(code)) manques.push('le <strong>code</strong> n’est pas encore au format « 2 lettres + 6 chiffres »');
+
+  openM(`📇 Accès de ${esc(u.name)}`, `
+  ${url ? `<img src="${url}" alt="Carte de première connexion" style="width:100%;border-radius:14px;display:block;margin-bottom:12px">`
+        : `<div style="padding:14px;background:#fef3c7;color:#92400e;border-radius:10px;margin-bottom:12px;font-size:13px">
+             La carte n’a pas pu être dessinée sur cet appareil. Le message ci-dessous, lui, est prêt.</div>`}
+  <div style="font-size:12.5px;line-height:1.6;background:var(--bg);border-radius:10px;padding:10px 13px;margin-bottom:10px">
+    <strong>WhatsApp ne peut pas joindre l’image tout seul.</strong> Partagez d’abord la carte,
+    puis ouvrez WhatsApp pour le texte — ou envoyez seulement le texte, il suffit pour se connecter.
+  </div>
+  ${manques.length ? `<div style="font-size:12.5px;line-height:1.6;background:#fef3c7;color:#92400e;border-radius:10px;padding:10px 13px;margin-bottom:10px">
+    ⚠️ Pour l’instant, ${manques.join(' et ')}. La carte n’écrit que ce qui fonctionne vraiment.</div>` : ''}
+  <pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.55;background:var(--bg);border-radius:10px;padding:11px 13px;margin:0">${esc(msg)}</pre>`,
+  `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>
+   <button class="btn btn-outline" onclick="window._partagerCarte()">📤 Partager la carte</button>
+   <button class="btn btn-primary" onclick="window._ouvrirWhatsAppAcces()">💬 Ouvrir WhatsApp</button>`);
+};
+
+window._partagerCarte = async () => {
+  const k = window._carteEnCours;
+  if (!k || !k.blob) { toast('La carte n’a pas pu être préparée', 'error'); return; }
+  const f = new File([k.blob], `schoolsafe-acces-${(k.nom||'compte').replace(/[^a-zA-Z0-9]+/g,'-').toLowerCase()}.png`,
+                     { type: 'image/png' });
+  // On ne PROMET le partage natif que si l'appareil l'accepte réellement pour
+  // un fichier. `navigator.share` existe sur des navigateurs qui refusent les
+  // fichiers : appeler sans demander produirait une erreur silencieuse.
+  if (navigator.canShare && navigator.canShare({ files: [f] }) && navigator.share) {
+    try { await navigator.share({ files: [f], text: k.msg }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = k.url; a.download = f.name; a.click();
+  toast('Carte enregistrée — joignez-la dans WhatsApp', 'info');
+};
+
+window._ouvrirWhatsAppAcces = () => {
+  const k = window._carteEnCours;
+  if (!k) return;
+  const lien = waLink(k.tel, k.msg);
+  if (!lien) { toast('Numéro inutilisable — corrigez-le dans sa fiche', 'error'); return; }
+  window.open(lien, '_blank', 'noopener');
+};
+
 window._envoyerLienWhatsApp = async (uid, confirmerRemplacement) => {
   // Exposée globalement, et elle ouvre un accès : elle porte sa garde.
   if (!S.user || !['direction','direction2'].includes(S.user.role)) {
@@ -29840,28 +30163,21 @@ window._envoyerLienWhatsApp = async (uid, confirmerRemplacement) => {
     const code = r.data && r.data.temporary_code;
     if (!code) { toast('Le serveur n’a pas renvoyé de code — signalez-le','error'); return; }
 
-    const ecole = (DB.settings?.school?.name) || 'votre école';
     const exp = r.data.expires_at ? new Date(r.data.expires_at) : null;
-    const heure = exp ? exp.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : null;
     const mins = exp ? Math.max(1, Math.round((exp - Date.now())/60000)) : 30;
-    // Le message ne porte AUCUNE donnée de l'enfant : ni nom, ni classe, ni
-    // note, ni montant, ni santé. Un message WhatsApp se transfère, se lit
-    // par-dessus l'épaule, et reste dans un téléphone prêté.
-    const msg = `Bonjour, votre accès ${ecole} est prêt.\n\n`
-      + `Identifiant : ${r.data.phone || tel}\n`
-      + `Code temporaire : ${code}\n\n`
-      + (heure ? `Ce code expire à ${heure} et ne fonctionne qu’une seule fois.\n` : `Ce code expire dans ${mins} minutes.\n`)
-      + `Créez votre code personnel à la première connexion.\n`
-      + `Ne le transmettez à personne.`;
-    const url = waLink(tel, msg);
-    if (!url) { toast('Numéro inutilisable — corrigez-le dans sa fiche','error'); return; }
-
-    // On trace QUI, POUR QUI, QUAND — jamais le code lui-même.
-    logAudit('acces_telephone', `${u.name} — accès téléphone ${action==='reset'?'réinitialisé':'ouvert'} et code envoyé par WhatsApp par ${window._acteur()}`, uid);
+    // ── Le parcours arrêté par Loms le 11 août 2026 ──────────────────────
+    //
+    // On n'ouvre plus WhatsApp en aveugle : on prépare la CARTE au design
+    // validé, remplie avec les vraies informations de cette personne, et on
+    // laisse deux gestes séparés — partager l'image, ouvrir le texte. Le
+    // message et la carte portent exactement les mêmes lignes.
+    logAudit('acces_telephone', `${u.name} — accès téléphone ${action==='reset'?'réinitialisé':'ouvert'} par ${window._acteur()}`, uid);
     if (!u.auth_user_id && action === 'provision') u.auth_user_id = '(ouvert)';
+    // Le serveur vient d'invalider l'accès temporaire précédent : le compte
+    // doit de nouveau créer son mot de passe. C'est ce que dit `must_change_password`.
     u.must_change_password = true;
-    window.open(url, '_blank', 'noopener');
-    toast(`WhatsApp ouvert pour ${u.name} — le code expire dans ${mins} min`, 'success');
+    await window.ouvrirCarteAcces(uid, code, r.data.expires_at, action);
+    toast(`Accès ${action==='reset'?'réinitialisé':'ouvert'} pour ${u.name} — le code expire dans ${mins} min`, 'success');
     render();
   } finally { _fin(); }
 };
