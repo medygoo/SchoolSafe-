@@ -22,6 +22,39 @@ Il vient d'une autre installation de SchoolSafe, pour **la même école**.
 GitHub est le seul canal entre les deux agents : issues, branches, Pull
 Requests, `docs/`. Rien ne passe d'une plateforme à l'autre automatiquement.
 
+### Ordre de Loms — 10 août 2026 : on collabore, on ne se contredit pas
+
+> *« Je ne vous ai pas mis ici, toi et ChatGPT, pour que vous vous
+> contredisiez. Vous êtes là pour trouver des solutions, en associant vos
+> idées, pour que l'application soit stable, puissante et fonctionnelle.
+> Chacun a son point fort — je répartis le travail, mais ça n'empêche pas
+> que vous vous donniez des idées. Vous n'êtes pas là pour freiner mon
+> projet. Vous allez collaborer pour finir mon projet. »*
+
+Ce qui a provoqué l'ordre : je rendais des **blocages**. J'ouvrais deux
+documents de ChatGPT, je montrais qu'ils se contredisaient, et je m'arrêtais
+là en attendant qu'il tranche. Techniquement juste, et **inutile à Loms** :
+son projet n'avançait pas d'un jour.
+
+La règle qui remplace :
+
+> **On ne rend pas un blocage — on rend SA MOITIÉ DU TRAVAIL déjà faite,
+> et la plus petite chose qui reste à l'autre.**
+
+Éprouvé le jour même sur le Web Push. Version « blocage » : *« aucun appareil
+ne peut être enregistré, il faut que tu changes ça »*. Version collaboration :
+le service worker savait déjà recevoir, j'ai écrit l'abonnement, il appelle la
+vraie fonction, et il ne reste à ChatGPT que **deux lignes** — accepter une
+valeur de plus dans `p_provider`, et rendre la clé publique dans
+`get_safe_settings`. Le jour où il les écrit, tout fonctionne sans toucher au
+navigateur.
+
+Et le corollaire, qui n'est pas une permission de mentir : **appeler le vrai
+contrat et rapporter la vraie réponse** reste la règle. Un refus du serveur
+s'affiche dans les mots de l'école, avec son code pour le dépannage. Ce qui
+change, c'est qu'on ne s'arrête plus au refus : on a déjà posé tout ce qui
+peut l'être autour.
+
 ### Consigne OBLIGATOIRE de Loms — le canal avant tout
 
 1. **Brancher la communication est la PREMIÈRE chose à faire**, avant de coder,

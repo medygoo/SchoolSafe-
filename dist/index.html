@@ -9982,46 +9982,158 @@ window.archiverToutesLues = () => {
     });
 };
 
-// ── L'APPAREIL ET LA NOTIFICATION EXTÉRIEURE ───────────────────────────────
+// ── L'APPAREIL ET LA NOTIFICATION EXTÉRIEURE — Web Push depuis le VPS ──────
 //
-//  ÉTAT VÉRIFIÉ LE 10 AOÛT 2026, ET C'EST UN BLOCAGE À SIGNALER :
+//  Décision de Loms, 10 août 2026 : « on passe sur VPS, on utilise les
+//  sous-domaines, le service de notifications du VPS et Brevo ». Décision
+//  canonique de ChatGPT du même jour : Web Push standard (Push API + Service
+//  Worker + VAPID), Brevo pour l'Auth seulement, Firebase abandonné.
 //
-//  · le navigateur s'abonnait au Web Push (VAPID) puis écrivait DIRECTEMENT
-//    dans `push_subscriptions`. Depuis la migration
-//    `p0_32a_explicit_device_registry_deny_policy`, cette table est en refus
-//    total : **l'écriture ne pouvait plus aboutir, et rien ne le disait** ;
-//  · la seule fonction d'enregistrement servie, `register_push_device`,
-//    n'accepte que `provider = 'fcm'` — elle refuse tout le reste avec
-//    `UNSUPPORTED_PROVIDER`.
+//  LE SERVICE WORKER SAIT DÉJÀ RECEVOIR. `dist/sw.js` écoute `push` et
+//  `notificationclick` en Web Push standard, sans une ligne de Firebase. Ce
+//  qui manquait était l'abonnement et son enregistrement.
 //
-//  Or la décision canonique du 10 août retire Firebase et retient le **Web
-//  Push standard depuis le VPS**. Il n'existe donc, aujourd'hui, AUCUN chemin
-//  par lequel un appareil puisse être enregistré.
+//  ── CE QU'ON APPELLE, ET POURQUOI CETTE FORME ────────────────────────────
+//  `register_push_device(p_provider, p_token, p_platform, p_app_instance_id,
+//   p_device_label, p_user_agent)` existe et est servie. Elle n'accepte
+//  aujourd'hui que `provider='fcm'`. Pour le Web Push, l'« abonnement » est
+//  un triplet — endpoint + p256dh + auth — qui tient dans `p_token` en JSON
+//  (≈300 caractères, la fonction en accepte 4096).
 //
-//  On ne garde pas un repli qui ne peut pas aboutir : il transformerait une
-//  absence de contrat en « votre téléphone est enregistré ». L'écran dit ce
-//  qui est vrai, et la demande est déposée à ChatGPT.
+//  C'est le plus petit changement possible côté serveur : accepter une
+//  valeur de plus dans `p_provider`. Aucune colonne à ajouter, aucune RPC à
+//  écrire. Proposé à ChatGPT sur l'issue #66.
+//
+//  ── ON N'INVENTE RIEN, ET ON NE MENT PAS ─────────────────────────────────
+//  On appelle le VRAI contrat et on rapporte la VRAIE réponse. Si le serveur
+//  répond `UNSUPPORTED_PROVIDER`, l'écran le dit dans les mots de l'école —
+//  pas « votre téléphone est enregistré ». Le jour où le serveur accepte
+//  `webpush`, cela fonctionne sans toucher une ligne ici.
+
+// La clé VAPID publique arrive en base64url ; `pushManager.subscribe` veut
+// des octets. Une clé mal transcodée échoue avec une erreur que personne ne
+// relie à la clé — d'où la conversion isolée et testable.
+window._vapidOctets = (b64) => {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const brut = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(brut, c => c.charCodeAt(0));
+};
+
+window._PUSH_REFUS = {
+  AUTH_REQUIRED:       'Vous n’êtes pas connecté au serveur.',
+  UNSUPPORTED_PROVIDER:'Le serveur de l’école n’accepte pas encore les notifications de ce type. Vos messages restent tous dans SchoolSafe.',
+  INVALID_PUSH_TOKEN:  'Cet appareil a produit un abonnement que le serveur refuse.',
+  INVALID_PLATFORM:    'Type d’appareil inconnu du serveur.',
+  VALIDATION_ERROR:    'Les informations de l’appareil dépassent ce que le serveur accepte.',
+  PGRST202:            'L’enregistrement des appareils n’est pas servi par ce serveur.',
+  RPC_REFUSED:         'Le serveur a refusé sans préciser.',
+};
+window._pushRefus = (c) => _PUSH_REFUS[c] || ('Refus du serveur : ' + (c || 'inconnu'));
+
+// L'état, en un mot, pour que l'écran n'ait pas à le déduire.
+//   'impossible'  le navigateur ne sait pas faire
+//   'refuse'      la personne a dit non
+//   'a_activer'   rien n'a encore été demandé
+//   'sans_cle'    l'école n'a pas publié sa clé d'envoi
+//   'serveur_non' le serveur refuse encore ce type d'abonnement
+//   'actif'       l'appareil est enregistré
+window._pushEtat = () => {
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return 'impossible';
+  if (Notification.permission === 'denied') return 'refuse';
+  if (window._pushDernierRefus === 'UNSUPPORTED_PROVIDER' || window._pushDernierRefus === 'PGRST202') return 'serveur_non';
+  if (!DB.settings?.vapid_public_key) return 'sans_cle';
+  if (Notification.permission !== 'granted') return 'a_activer';
+  return (_centreEtat && _centreEtat.appareils) ? 'actif' : 'a_activer';
+};
+
 window.activerNotificationsExterieures = async () => {
-  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+  const etat = _pushEtat();
+  if (etat === 'impossible') {
     toast('Ce navigateur ne sait pas recevoir de notifications', 'warning'); return;
   }
+  if (etat === 'sans_cle') {
+    openM('Envoi vers le téléphone', `
+<div style="padding:2px">
+  <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:11px;padding:12px 14px;font-size:13.5px;color:#92400e;line-height:1.6">
+    <b>L’école n’a pas encore publié sa clé d’envoi.</b><br>
+    C’est un réglage du serveur, pas de votre téléphone.
+    <b>Toutes vos notifications restent dans SchoolSafe</b> — aucune n’est perdue.</div>
+</div>`, `<button class="btn btn-primary" onclick="closeModal()">J’ai compris</button>`);
+    return;
+  }
+
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') {
-    toast('Vous avez refusé les notifications — vous les verrez dans SchoolSafe', 'info');
+    toast('Notifications refusées — vous les verrez dans SchoolSafe', 'info');
     render(); return;
   }
-  // L'autorisation du navigateur est acquise ; l'enregistrement côté serveur
-  // attend le contrat de transport. On le dit, on ne le simule pas.
-  openM('Notifications autorisées', `
+
+  let sub;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _vapidOctets(DB.settings.vapid_public_key),
+      });
+    }
+  } catch (e) {
+    toast('Cet appareil n’a pas pu s’abonner — vos messages restent dans SchoolSafe', 'warning');
+    console.warn('[PUSH]', e && e.message);
+    render(); return;
+  }
+
+  const j = sub.toJSON();
+  // Le triplet Web Push voyage dans `p_token`. Rien d'autre n'est envoyé :
+  // ni identifiant d'élève, ni nom, ni numéro.
+  const r = await _rpc('register_push_device', {
+    p_provider: 'webpush',
+    p_token: JSON.stringify({ endpoint: j.endpoint, p256dh: j.keys?.p256dh, auth: j.keys?.auth }),
+    p_platform: 'web',
+    p_app_instance_id: (sub.endpoint || '').slice(-64),
+    p_device_label: null,
+    p_user_agent: (navigator.userAgent || '').slice(0, 200),
+  });
+
+  if (!r.ok) {
+    window._pushDernierRefus = r.code;
+    // On ne garde pas un abonnement que le serveur ignore : il ferait croire
+    // au navigateur qu'il est branché, et le prochain essai ne referait rien.
+    try { await sub.unsubscribe(); } catch (_) {}
+    openM('Envoi vers le téléphone', `
 <div style="padding:2px">
   <p style="margin:0 0 10px">Votre navigateur accepte les notifications de SchoolSafe.</p>
   <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:11px;padding:12px 14px;font-size:13.5px;color:#92400e;line-height:1.6">
-    <b>L’envoi vers le téléphone n’est pas encore branché.</b><br>
-    Le service d’envoi de l’école est en cours d’installation sur son serveur.
-    En attendant, <b>toutes vos notifications restent dans SchoolSafe</b> —
-    aucune n’est perdue.</div>
-</div>`,
-    `<button class="btn btn-primary" onclick="closeModal()">J’ai compris</button>`);
+    ${esc(_pushRefus(r.code))}</div>
+  <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0">Code serveur : <span style="font-family:monospace">${esc(r.code||'—')}</span></p>
+</div>`, `<button class="btn btn-primary" onclick="closeModal()">J’ai compris</button>`);
+    render(); return;
+  }
+
+  window._pushDernierRefus = null;
+  window._pushAppareil = r.data.device_id || null;
+  const enFile = r.data.queued_notifications || 0;
+  logAudit('push_device_register', 'Appareil enregistré pour les notifications');
+  toast(enFile
+    ? `Appareil enregistré — ${enFile} notification${enFile>1?'s':''} en attente vous seront envoyées`
+    : 'Appareil enregistré — vous serez prévenu sur ce téléphone', 'success');
+  if (S.page === 'notifications') await chargerCentreNotifs(_centreEtat.categorie);
+  render();
+};
+
+window.desactiverNotificationsExterieures = async () => {
+  if (!window._pushAppareil) { toast('Aucun appareil enregistré depuis ce téléphone', 'info'); return; }
+  const r = await _rpc('disable_my_push_device', { p_device_id: window._pushAppareil });
+  if (!r.ok) { toast(_pushRefus(r.code), 'error'); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+  } catch (_) {}
+  window._pushAppareil = null;
+  toast('Cet appareil ne recevra plus de notification — elles restent dans SchoolSafe', 'success');
+  if (S.page === 'notifications') await chargerCentreNotifs(_centreEtat.categorie);
   render();
 };
 
@@ -10092,18 +10204,28 @@ R.notifications = () => {
     <div style="margin-top:8px"><button class="btn btn-sm btn-outline" onclick="chargerCentreNotifs('')">Réessayer</button></div>
   </div>`:''}
 
-  <div style="background:${permis==='granted'?'var(--bg-secondary,#f8fafc)':'#eff6ff'};border:1px solid ${permis==='granted'?'var(--border-light,#e2e8f0)':'#93c5fd'};border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:12.5px;line-height:1.6;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <div style="flex:1;min-width:180px">
-      ${permis==='granted'
-        ? `<b>Notifications autorisées sur cet appareil.</b> ${_centreEtat.appareils
-            ? `${_centreEtat.appareils} appareil${_centreEtat.appareils>1?'s':''} enregistré${_centreEtat.appareils>1?'s':''}.`
-            : `<span style="color:#92400e">L’envoi vers le téléphone n’est pas encore branché — tout reste dans SchoolSafe.</span>`}`
-        : permis==='denied'
-          ? `<b>Les notifications sont bloquées</b> dans les réglages de ce navigateur. Vos messages restent tous ici.`
-          : `<b>Recevoir un avertissement sur ce téléphone ?</b> Vos messages resteront de toute façon dans SchoolSafe.`}
-    </div>
-    ${permis==='default'?`<button class="btn btn-primary btn-sm" onclick="activerNotificationsExterieures()">Activer les notifications</button>`:''}
-  </div>
+  ${(() => {
+    // L'état de l'envoi extérieur, en une phrase vraie. Six situations, six
+    // phrases : « ça ne marche pas » sans dire pourquoi envoie un parent
+    // fouiller les réglages de son téléphone alors que le manque est ailleurs.
+    const e = _pushEtat();
+    const bleu = {bg:'#eff6ff', b:'#93c5fd'}, vert = {bg:'#f0fdf4', b:'#6ee7b7'},
+          ambre = {bg:'#fffbeb', b:'#fcd34d'}, gris = {bg:'var(--bg-secondary,#f8fafc)', b:'var(--border-light,#e2e8f0)'};
+    const M = {
+      impossible:  [gris,  `Ce navigateur ne sait pas recevoir de notifications. <b>Tous vos messages restent ici.</b>`, null],
+      refuse:      [ambre, `<b>Les notifications sont bloquées</b> dans les réglages de ce navigateur. Vos messages restent tous ici.`, null],
+      sans_cle:    [ambre, `<b>L’envoi vers le téléphone n’est pas encore ouvert par l’école.</b> Tout reste dans SchoolSafe.`, null],
+      serveur_non: [ambre, `<b>Le serveur de l’école n’accepte pas encore ce type d’abonnement.</b> Tout reste dans SchoolSafe — rien n’est perdu.`, null],
+      a_activer:   [bleu,  `<b>Être prévenu sur ce téléphone ?</b> Vos messages resteront de toute façon dans SchoolSafe.`, 'Activer les notifications'],
+      actif:       [vert,  `<b>Ce téléphone est enregistré.</b> ${_centreEtat.appareils} appareil${_centreEtat.appareils>1?'s':''} recevront les avertissements de l’école.`, null],
+    };
+    const [c, texte, bouton] = M[e] || M.a_activer;
+    return `<div style="background:${c.bg};border:1px solid ${c.b};border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:12.5px;line-height:1.6;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">${texte}</div>
+      ${bouton?`<button class="btn btn-primary btn-sm" onclick="activerNotificationsExterieures()">${esc(bouton)}</button>`:''}
+      ${e==='actif'?`<button class="btn btn-outline btn-sm" onclick="desactiverNotificationsExterieures()">Ne plus recevoir ici</button>`:''}
+    </div>`;
+  })()}
 
   ${cats.length>1?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
     <button class="btn btn-sm ${_centreEtat.categorie?'btn-outline':'btn-primary'}" style="font-size:11px" onclick="chargerCentreNotifs('')">Toutes</button>

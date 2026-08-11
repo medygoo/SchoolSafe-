@@ -112,6 +112,7 @@ globalThis._rpc = async (nom, p) => {
   return { ok:false, code:'PGRST202' };
 };
 
+const vraiRpc = globalThis._rpc;
 function extraire(a,b){ const i=html.indexOf(a); if(i<0) throw new Error(a); const j=html.indexOf(b,i); if(j<0) throw new Error(b); return html.slice(i,j); }
 const bloc = extraire('window._notifTexte = (n) =>', '// `clearAllNotifs` est retirée');
 const diff = extraire('window.sendBroadcast = async () => {', '\n// ═══════════════════════════════════════════\n//  DIRECTION — INSCRIPTIONS');
@@ -217,12 +218,66 @@ ok('un enseignant ne diffuse pas une annonce',
    toasts.some(t=>/Accès non autorisé/.test(t.m)), '');
 
 // ═══ 8 · PLUS AUCUN CHEMIN MORT VERS LE PUSH ═════════════════════════════
-ok('l’abonnement Web Push qui ne pouvait pas aboutir est retiré',
-   !/pushManager\.subscribe/.test(code), '');
 ok('plus aucune écriture directe dans push_subscriptions',
    !/pushSync\('push_subscriptions'/.test(code), '');
-ok('et l’écran ne promet pas un envoi qui n’existe pas',
-   /pas encore branché/.test(R.notifications()) || true, '');
+
+// ═══ 9 · L'ABONNEMENT WEB PUSH — il appelle le vrai contrat ══════════════
+// Il ne s'agit plus de vérifier qu'il est ABSENT — il est là, et c'est bien.
+// La condition qui compte : passe-t-il par la RPC, et dit-il la vérité quand
+// le serveur refuse ? Un outil teste une condition, pas une chaîne.
+S.user = { id:'u_par', name:'Un parent', role:'parent' };
+let abonnementRetire = false;
+const faireNavigateur = (permission, cleVapid) => {
+  globalThis.Notification = { permission, requestPermission: async () => permission };
+  globalThis.PushManager = function(){};
+  const sub = { endpoint:'https://push.example/abc123', toJSON:()=>({endpoint:'https://push.example/abc123',
+      keys:{p256dh:'BPabcdef0123456789', auth:'authsecret012345'}}),
+    unsubscribe: async () => { abonnementRetire = true; return true; } };
+  try{Object.defineProperty(globalThis,'navigator',{value:{ userAgent:'node-test', onLine:true,
+    serviceWorker:{ ready: Promise.resolve({ pushManager:{
+      getSubscription: async () => null, subscribe: async () => sub } }) } },configurable:true});}catch(_){}
+  globalThis.atob = (s) => Buffer.from(s, 'base64').toString('binary');
+  DB.settings.vapid_public_key = cleVapid;
+};
+
+// a · sans clé, on ne demande rien et on le dit
+faireNavigateur('default', null);
+ok('sans clé d’envoi, l’état est « sans_cle »', _pushEtat()==='sans_cle', _pushEtat());
+const avantSansCle = appels.length;
+await activerNotificationsExterieures();
+ok('et aucun appel n’est fait au serveur', appels.length===avantSansCle, '');
+ok('l’écran explique que c’est un réglage de l’école',
+   modal && /clé d’envoi/.test(modal.b), '');
+
+// b · avec clé, l'abonnement part vers la VRAIE fonction
+faireNavigateur('granted', 'BEl62iUYgUivxIkv69yViEuiBIa1HI0kQ0BCZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0k');
+await activerNotificationsExterieures();
+const reg = appels.filter(a=>a.nom==='register_push_device').pop();
+ok('l’abonnement appelle register_push_device', !!reg, '');
+ok('avec provider = webpush, pas fcm', reg && reg.p.p_provider==='webpush', reg && reg.p.p_provider);
+ok('le triplet endpoint/p256dh/auth voyage dans le jeton',
+   reg && /endpoint/.test(reg.p.p_token) && /p256dh/.test(reg.p.p_token) && /auth/.test(reg.p.p_token), '');
+ok('et RIEN d’autre — ni élève, ni nom, ni numéro',
+   reg && !/student|eleve|phone|\+243/.test(reg.p.p_token), reg && reg.p.p_token.slice(0,60));
+
+// c · le serveur refuse : on le DIT, et on ne garde pas un abonnement mort
+globalThis._rpc = async (nom, p) => { appels.push({nom,p});
+  if (nom === 'register_push_device') return { ok:false, code:'UNSUPPORTED_PROVIDER' };
+  return vraiRpc(nom, p); };
+abonnementRetire = false;
+faireNavigateur('granted', 'BEl62iUYgUivxIkv69yViEuiBIa1HI0kQ0BCZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0lHZ0k');
+await activerNotificationsExterieures();
+ok('un refus du serveur est annoncé dans les mots de l’école',
+   modal && /n’accepte pas encore/.test(modal.b), modal?modal.b.slice(0,60):'aucune modale');
+ok('le code serveur est donné pour le dépannage',
+   modal && /UNSUPPORTED_PROVIDER/.test(modal.b), '');
+ok('et l’abonnement mort est retiré du navigateur', abonnementRetire, '');
+ok('l’état devient « serveur_non », pas « actif »', _pushEtat()==='serveur_non', _pushEtat());
+_centreEtat.appareils = 3;
+ok('même avec des appareils comptés, on n’annonce pas « actif »',
+   _pushEtat()==='serveur_non', _pushEtat());
+_centreEtat.appareils = 0; window._pushDernierRefus = null;
+globalThis._rpc = vraiRpc;
 
 // ── Verdict ──────────────────────────────────────────────────────────────
 console.log('\n═══ RECETTE — LE CENTRE DE NOTIFICATIONS ═══\n');
