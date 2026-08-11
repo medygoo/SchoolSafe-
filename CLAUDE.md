@@ -65,7 +65,22 @@ peut l'être autour.
    continue à partir de là.** On ne signale qu'une chose : ce qui empêche
    concrètement d'avancer — un champ manquant, un identifiant qui ne correspond
    pas. Jamais un désaccord d'opinion.
-3. **Réponses courtes et claires à Loms.** Ce qui est fait, ce qui bloque, ce
+3. **TOUT est déposé sur le canal, pas seulement ce qui relève de l'autre.**
+   *Ordre de Loms, 11 août 2026 : « tu informes la totalité à ChatGPT, c'est
+   un ordre que tu feras pour toujours. »*
+
+   Ce qui l'a provoqué : j'avais rendu à Loms un état complet du module
+   Scanner — trois défauts, deux angles morts — **et rien n'était sur
+   GitHub.** Un seul des points concernait ChatGPT ; j'avais donc trié, et
+   gardé le reste dans la conversation. C'est exactement ce qu'il ne faut pas
+   faire : **l'autre agent doit avoir la MÊME vue que Loms**, sinon il
+   travaille sur une moitié d'image et Loms devient le seul lien entre nous.
+
+   Donc : un audit, un état, une trouvaille, un doute — ça part sur le canal
+   **en entier**, en disant clairement ce qui est à lui, ce qui est à moi, et
+   ce que je n'ai pas vérifié. Trier appartient au lecteur, pas à l'émetteur.
+
+4. **Réponses courtes et claires à Loms.** Ce qui est fait, ce qui bloque, ce
    qu'on attend. Le détail va dans `docs/`, pas dans la réponse.
 
 ### Ordre de Loms — 5 août 2026, après une déduction présentée comme un fait
