@@ -17,6 +17,7 @@
 - Le Parent ne déclare jamais lui-même avoir payé.
 - Direction 1 organise le cours et les conditions financières.
 - Direction 2 reste pédagogique et ne reçoit **aucune donnée financière**.
+- Direction 1 garde l'autorité finale : elle peut renverser une décision pédagogique de Direction 2 tant qu'aucune condition financière, paiement ou séance n'a commencé. Direction 2 ne peut pas renverser une décision déjà prise.
 - Caisse encaisse, mais ne reçoit jamais la part enseignant.
 - Part par défaut : **60 % enseignant / 40 % école**.
 - Cette part est figée au moment où Direction 1 fixe les conditions financières.
@@ -38,6 +39,7 @@
 8. Le montant acquis enseignant reste une **créance calculée du rattrapage**, pas un paiement de salaire. Le transfert vers `salaries/direct_primes` reste au lot Personnel/Salaires afin d'éviter un double paiement.
 9. Les lectures passent par `get_rattrapage_center()` et non par un SELECT identique pour tous les rôles.
 10. Le cycle pédagogique dispose de RPC dédiées ; le frontend n'a plus besoin de patcher directement `rattrapages`.
+11. Le registre prépare des FK vers Élève/Enseignant/Classe et une heure de séance strictement `00:00–23:59`.
 
 ## 3. RPC du contrat final
 
@@ -53,7 +55,7 @@
 
 ### Cycle du dossier
 
-- `validate_rattrapage(p_rattrapage_id, p_decision, p_note)` — Direction 1 ou Direction 2 ; `approved|refused`.
+- `validate_rattrapage(p_rattrapage_id, p_decision, p_note)` — Direction 1 ou Direction 2 ; `approved|refused`. Direction 1 peut reprendre la décision de D2 avant verrou financier.
 - `assign_rattrapage_teacher(p_rattrapage_id, p_teacher_id)` — Direction 1.
 - `schedule_rattrapage_session(p_rattrapage_id, p_session_date, p_session_time, p_session_place)` — Direction 1, après paiement complet.
 - `mark_rattrapage_done(p_rattrapage_id, p_note)` — Direction 1 ou enseignant affecté, après paiement + planification.
@@ -95,13 +97,23 @@ Quand ce contrat sera validé puis réellement déployé/testé :
 6. La Caisse utilise le même reçu/contrepassation P0-1 que les autres frais, avec allocation explicite vers l'obligation rattrapage.
 7. Après paiement ou contrepassation : recharger le centre depuis le serveur avant d'afficher succès/état.
 8. La paie enseignant doit lire plus tard le montant acquis serveur (`teacher_share_amount`) plutôt que recalculer `amount * DB.settings.rattrapage_share_teacher` dans le navigateur.
+9. Afficher explicitement les refus `DIRECTION1_OVERRIDE_REQUIRED` et `RATTRAPAGE_DECISION_FINANCIALLY_LOCKED` au lieu de remplacer localement l'état.
 
 ## 5. Notifications
 
 La détection insère dans `public.notifs` avec `dedupe_key`. Les triggers actuels `notifs_stamp_metadata` et `notifs_queue_push` restent responsables du centre in-app et de la mise en file Push. Aucun e-mail/WhatsApp n'est ajouté.
 
-## 6. Déploiement
+## 6. Ordre des drafts pour une base de test
 
-Les SQL restent sous `supabase/drafts/` et finissent par `ROLLBACK`.
+1. `p0_9_rattrapages_core_clean_DRAFT.sql`
+2. `p0_9_rattrapages_finance_clean_DRAFT.sql`
+3. `p0_9_rattrapages_lifecycle_reads_clean_DRAFT.sql`
+4. `p0_9_rattrapages_integrity_clean_DRAFT.sql`
+5. `p0_9_rattrapages_direction1_authority_DRAFT.sql`
+6. `p0_9_rattrapages_clean_verify.sql` en lecture seule après une future version de test avec COMMIT.
+
+Chaque draft SQL actuel finit par `ROLLBACK`; ils servent à revue/assemblage, pas à une installation séquentielle directe en production.
+
+## 7. Déploiement
 
 Le timer mensuel `systemd` sera créé **uniquement lors de la phase VPS**, après fin du frontend SchoolSafe, tests complets et accord explicite de Loms. Il appellera la fonction interne avec service role ; il ne dépendra d'aucun navigateur.
