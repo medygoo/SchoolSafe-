@@ -1656,6 +1656,56 @@ pour la dernière fois ?** ».
 Les vingt-trois sont passés à vingt-sept. Aucun des quatre ne bloque — ils
 informent — mais ils informent désormais quelqu'un.
 
+### Une fonctionnalité peut être entièrement écrite et n'exister nulle part
+
+Le 12 août, Loms demande ce qui est fait côté présence du personnel. La réponse
+avait l'air rassurante : l'enseignant déclarait son absence, la Direction était
+notifiée, un onglet listait tout, un tableau de bord comptait les jours.
+
+Rien de tout cela ne fonctionnait.
+
+La RLS de `teacher_absences` n'ouvre la table qu'à `private.is_direction()` —
+c'est-à-dire à **Direction 1 seule**. Chaque déclaration d'enseignant était donc
+refusée par le serveur, pendant que l'écran affichait « ✅ Absence signalée — la
+Direction a été notifiée ». La notification, elle, partait vraiment : autre
+table, autre politique. **Tout paraissait normal.** L'absence, elle, n'existait
+nulle part et disparaissait au rechargement suivant.
+
+> **Un accusé de réception ne prouve que l'envoi du reçu.** Ici la notification
+> arrivait, donc personne ne doutait de l'enregistrement — alors que les deux
+> écritures n'avaient rien en commun, ni table, ni droit, ni destin.
+
+Deux autres pièces, dans le même état :
+
+- `status` (défaut `'pending'`) et `approved_by` existaient depuis toujours et
+  n'étaient **ni écrits ni lus**. Chaque absence restait « en attente » pour
+  l'éternité, et l'écran Direction n'avait aucun bouton. Une décision que
+  personne ne peut prendre n'est pas une décision en attente : **c'est une
+  décision qui n'existe pas.**
+- `teacher_absences` n'était pas déclarée dans le ROLE_LOAD de Direction 2, dont
+  le tableau de bord comptait pourtant les absences de la semaine. Le compte
+  valait **structurellement zéro** — et zéro absence ressemble à une école au
+  complet.
+
+La leçon d'inspection : devant une fonctionnalité qui « existe », la question
+utile n'est pas *où est le code ?* mais **quel droit a l'écriture, et qui l'a
+vue arriver ?** Un écran, une table et une notification peuvent tous les trois
+être présents sans qu'une seule ligne soit jamais enregistrée.
+
+### Ne retiens pas sur ce que tu n'as pas encore décidé
+
+La retenue de salaire proposée par le registre ne porte **que** sur les jours
+explicitement refusés par la Direction. Un jour « en attente » n'est pas un jour
+injustifié : c'est un jour sur lequel personne ne s'est prononcé. Retenir dessus
+serait juger avant d'avoir décidé — exactement la faute de l'aperçu de connexion
+qui condamnait une adresse en cours de frappe, mais celle-ci coûte de l'argent
+à quelqu'un.
+
+Et rien ne s'applique tout seul : le montant est **proposé**, affiché avec son
+calcul en clair (`salaire ÷ jours ouvrables × jours non justifiés`), et il faut
+un geste pour l'inscrire. Un montant qu'on ne peut pas refaire de tête est un
+montant qu'on ne peut pas défendre devant l'intéressé.
+
 ### « Lent » peut vouloir dire « il attend »
 
 Le 12 août, Loms : *« l'écran de connexion est lent, en retard »*. On avait
