@@ -146,7 +146,9 @@ lignes.forEach((l, i) => {
 // Une signature, c'est l'un des trois assistants partagés, ou une ligne à
 // signer écrite sur place.
 const A_SIGNATURE = /_officialFooter\(|_pdfSignatureBlock\(|sig-grid|sig-box|sig-line|Signature (de|du|des|parent|Direction|Infirmier)|Visa de |Lu et approuvé|cachet et signature|Cachet &amp; Signature|Cachet et signature/i;
-const A_EMBLEME   = /_logoDoc|_logoImg|SCHOOL_LOGO/;
+// `_enteteOfficiel()` appelle `_logoDoc(52)` : un document qui l'emploie porte
+// l'emblème, même s'il ne nomme pas l'assistant directement.
+const A_EMBLEME   = /_logoDoc|_logoImg|SCHOOL_LOGO|_enteteOfficiel\(/;
 
 // Loms, 4 août 2026 : « la signature doit être, mais bien définir quel profil
 // et le nom de la personne qui a créé ce reçu ».

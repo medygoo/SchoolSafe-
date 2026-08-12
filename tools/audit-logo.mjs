@@ -81,14 +81,17 @@ for (const s of sorties) {
   const d = debutFonction(s.ligne - 1);
   const fn = nomFonction(lignes[d]);
   if (ASSISTANTS.has(fn)) continue;
-  const aLogo = /_logoDoc|_logoImg|SCHOOL_LOGO|logo_url/.test(lignes.slice(d, s.ligne).join('\n'));
+  // `_enteteOfficiel()` PORTE l'emblème — il appelle `_logoDoc(52)` lui-même.
+  // Un assistant partagé échappe aux reprises : il a fallu l'apprendre à cet
+  // outil, sinon il déclare « sans emblème » trois documents qui en ont un.
+  const aLogo = /_logoDoc|_logoImg|SCHOOL_LOGO|logo_url|_enteteOfficiel\(/.test(lignes.slice(d, s.ligne).join('\n'));
   if (!aLogo) { sans++; console.log(`   ✗ ${fn.padEnd(30)} ${s.doc}   (ligne ${s.ligne})`); }
 }
 
 const total = sorties.filter(s => !ASSISTANTS.has(nomFonction(lignes[debutFonction(s.ligne - 1)]))).length;
 
 console.log(sans
-  ? `\n✗ ${sans} document(s) sur ${total} sans emblème — ajouter \`\${_logoDoc(56)}\` à l'en-tête`
+  ? `\n✗ ${sans} document(s) sur ${total} sans emblème — ajouter \`\${_enteteOfficiel()}\` ou \`\${_logoDoc(56)}\` à l'en-tête`
   : `\n✓ Les ${total} documents officiels portent l'emblème de l'école`);
 
 // ══════════════════════════════════════════════════════════════════════════

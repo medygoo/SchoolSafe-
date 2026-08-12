@@ -1370,6 +1370,138 @@ Le défaut ne se déclenchait **que** quand le cache était non vide — donc
 uniquement en `--preuve`. Un harnais qui ne casse que dans un sens est un
 harnais qu'on croit bon.
 
+### La fraîcheur et l'attente sont deux problèmes, pas un curseur
+
+**11 août 2026.** Loms : *« l'application prend du temps à l'ouverture ».*
+Mesuré, et trois stratégies s'étaient déjà succédé au même endroit — chacune
+corrigeant la précédente **en cassant autre chose** :
+
+| | |
+|---|---|
+| **1. Stale-While-Revalidate** | le cache d'abord, mise à jour silencieuse. À chaque publication, l'école voyait **l'ancienne interface au premier chargement**. Loms disait que ses corrections n'étaient pas en ligne — c'était le téléphone qui lui resservait la veille |
+| **2. Network-First** | la fraîcheur revient, et l'application reste **blanche** tant que le réseau n'a pas rendu 2,4 Mo |
+| **3. Network-First borné à 4 s** | l'écran blanc est borné, mais **les 4 secondes s'écoulent en entier à chaque ouverture** sur un réseau de Kinshasa — pendant qu'une version utilisable dormait dans le cache |
+
+Le tort commun aux trois : traiter la fraîcheur et l'attente comme **un seul
+curseur**, alors que ce sont deux problèmes qui se règlent séparément.
+
+> **L'attente se règle en servant le cache IMMÉDIATEMENT.** La fraîcheur ne se
+> règle pas en faisant attendre quelqu'un : elle se règle en allant chercher la
+> nouvelle version DERRIÈRE, et **en le disant** quand elle est là.
+
+Le défaut du n° 1 n'était donc pas de servir le cache — c'était de **se taire**.
+Une mise à jour silencieuse qui arrive au démarrage suivant est un échec
+silencieux, celui-là même que tous nos audits traquent. L'écran propose
+désormais « Nouvelle version — Recharger », et **ne recharge jamais tout seul** :
+quelqu'un peut être en train de scanner au portail.
+
+Trois autres causes mesurées le même jour :
+
+1. **Six bibliothèques extérieures chargées sans `defer`.** L'analyse du
+   document s'arrêtait à chaque balise, le temps d'un aller-retour CDN, **avant
+   que la première ligne de SchoolSafe soit lue**. Toutes vérifiaient déjà leur
+   propre présence (`typeof html2pdf`, `window.QRCode`…) : `defer` ne change
+   rien à ce qui marche et retire l'attente.
+2. **JSZip téléchargée à chaque démarrage — zéro appel dans tout le fichier.**
+   La bonne question n'est pas « est-elle chargée ? » mais « quelqu'un
+   l'appelle-t-il ? ».
+3. **Un commentaire annonçait un splash « auto après 1.5s » qu'aucune minuterie
+   n'a jamais fait.** Un commentaire qui décrit un comportement absent envoie
+   chercher au mauvais endroit le jour où l'on cherche pourquoi c'est lent.
+
+`tools/audit-demarrage.mjs` tient les 13 points et **déclare ce qu'il ne sait
+pas voir** : le poids réel des CDN, et le temps d'ouverture sur un vrai
+téléphone. Seule une mesure sur l'appareil de l'école tranchera.
+
+### Un ministère est un réglage, jamais une constante
+
+**Même jour, sur les documents.** Un document scolaire congolais se lit de haut
+en bas comme une **chaîne de responsabilité** — l'administration qui le reçoit
+la remonte pour savoir à qui s'adresser. Ce fichier la décrit depuis le début.
+
+Mesuré : sur les **47 producteurs de documents, ZÉRO** ne portait « RÉPUBLIQUE »,
+« Province éducationnelle », « Sous-division » ou le code SERNIE. Trois
+seulement nommaient un ministère — **et c'était le mauvais**, écrit en dur :
+`Ministère de l'EPSP`, `Ministère de l'ESU`. L'EPSP a été remplacé par le
+Ministère de l'Éducation Nationale et Nouvelle Citoyenneté.
+
+> **Une liste ENAFEP transmise au ministère en nommant un ministère disparu se
+> fait refuser au guichet — et personne dans l'école ne peut savoir pourquoi.**
+
+Ce fichier disait déjà *« il doit être un réglage et non une constante — il
+changera encore »*. La leçon était écrite et n'avait pas été exécutée : **une
+règle qu'on lit et qu'on n'applique pas ne protège de rien.**
+
+Quatre réglages sont donc apparus — ministère, province éducationnelle,
+sous-division, code école — et `_enteteOfficiel()` les porte, une fois, pour
+tous. Deux conséquences à retenir :
+
+1. **`sc.sub` était LU quinze fois et écrit nulle part** : le champ mort exact
+   que nos audits cherchent. Il a maintenant sa porte d'entrée.
+2. **Deux mentions du « Ministère de l'ESU » restaient dans du TEXTE D'ÉCRAN.**
+   Je ne connais pas le nom qui le remplace : j'ai retiré le faux **sans le
+   remplacer par un autre faux**. Ne rien afficher vaut mieux qu'afficher faux.
+
+Et la faute symétrique, évitée volontairement : **on n'impose pas la chaîne
+ministérielle aux 44 autres documents.** Un reçu de cantine ne s'adresse à
+aucune administration. C'est un choix, et l'outil l'écrit dans sa sortie.
+
+**Un assistant partagé échappe aux reprises — y compris à celles des audits.**
+En déplaçant l'emblème DANS `_enteteOfficiel()`, `audit-logo` et
+`audit-signature` ont déclaré « sans emblème » trois documents qui en portaient
+un. Il a fallu leur apprendre le nom du nouvel assistant. Les deux savent
+toujours dire non — vérifié par leur `--preuve`.
+
+### Dix feuilles de style pour une seule caisse
+
+**11 août 2026.** Loms : *« que tous les documents qui proviennent de cette
+partie prennent le même design — harmoniser. »* La référence est le reçu dessiné
+par ChatGPT : carte blanche arrondie, bandeau gris bleuté portant l'emblème,
+badge de titre en capitales espacées, cartouche de montant, cachet vert.
+
+Il y avait **dix feuilles écrites à la main**, une par document. Le journal, la
+balance, le grand livre, le bilan, l'état financier et les deux fiches de paie
+avaient chacun leur en-tête, leurs couleurs de tableau, leur taille de titre.
+
+> **Deux papiers sortis de la même caisse le même jour ne se ressemblaient pas
+> — et une famille qui reçoit deux documents d'aspect différent doute des deux.**
+
+C'est la leçon des neuf copies du classement, appliquée au dessin : quand dix
+endroits répondent à la même question, ils **appellent le même code**. Une
+feuille recopiée diverge exactement comme une formule recopiée — sauf que la
+divergence se voit sur le papier, chez la famille.
+
+`_CSS_DOC` couvre l'**union des classes que ces documents employaient déjà** :
+leur balisage n'a pas eu à être réécrit, seule leur feuille change. C'est ce qui
+rend une reprise sûre sur dix documents d'un coup. `_COMPTA_CSS` en dérive au
+lieu d'en écrire une autre, et n'ajoute que ce qui est propre au SYSCOHADA.
+
+Deux détails qui ne se voient qu'à l'impression, et qui sont dans la feuille
+commune : `thead{display:table-header-group}` — sans quoi une colonne de comptes
+devient illisible dès la deuxième page — et la barre d'action qui **ne s'imprime
+jamais**, parce qu'elle n'appartient pas au document.
+
+### `accept="image/*"` ouvre un commentaire CSS
+
+**Trouvé le même jour, et c'est un piège d'outil.** Nos audits retirent les
+commentaires avant de chercher — sinon la note qui documente un retrait fait
+échouer le contrôle qui le vérifie. Le nettoyeur retirait `/* … */` **où qu'il
+se trouve**.
+
+Or `accept="image/*"` est un attribut HTML parfaitement normal. Son `/*` ouvre
+un faux commentaire que le premier `*/` venu referme. Mesuré : **351 Ko avalés
+d'un coup**, dont la seule ligne qui emploie `jsQR` — et l'outil a déclaré
+« bibliothèque téléchargée sans être appelée » sur une bibliothèque
+parfaitement utilisée.
+
+> **Un nettoyeur qui ne comprend pas le contexte n'omet pas : il INVENTE.**
+> C'est la faute la plus coûteuse d'un outil, parce qu'elle envoie corriger du
+> code qui n'a rien.
+
+Le `/*` doit être **en début de ligne** — c'est ainsi que les vrais commentaires
+s'écrivent ici. Le défaut dormait dans le nettoyeur depuis le début : il a fallu
+qu'un `*/` apparaisse plus loin dans le fichier pour qu'il se réveille.
+
 ---
 
 ## Les outils
@@ -1399,6 +1531,8 @@ npm run audit        # tout d'un coup
 | `recette-contact.mjs` | corriger un téléphone ou une adresse, exécuté (`--preuve`) |
 | `recette-scanner-physique.mjs` | scanner physique ≠ accès QR Caisse, et **un refus n'est pas un silence** (`--preuve`) |
 | `recette-scanner-fermeture.mjs` | le cache d'accès, la vérité serveur des personnes autorisées, la promesse faite au parent (`--preuve`) |
+| `audit-demarrage.mjs` | ce qui retarde l'ouverture — scripts bloquants, cache, **et ce qu'il ne sait pas voir** (`--preuve`) |
+| `audit-entete.mjs` | la chaîne de responsabilité des documents · **un ministère est un réglage** · le dessin unique de Finance et RH (`--preuve`) |
 
 **Dans un nouveau dépôt, commencer par les lancer.** Leur sortie *est* la liste
 des manques — au lieu d'en discuter.

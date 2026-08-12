@@ -109,6 +109,7 @@ globalThis._hmacSign = async (_secret, message) => {
 // « transaction ». C'est ce que le navigateur doit se contenter de refléter.
 const appels = [];
 let SRV = 'ok';
+let FORME = 'documentee';
 let seq = 0;
 const srvCards = [];
 const SIG = 'a'.repeat(64);
@@ -167,6 +168,11 @@ globalThis._rpc = async (nom, p) => {
     if (c.status === 'revoquee')   return { ok:false, code:'CARD_REVOQUEE' };
     if (c.year !== DB.settings.year) return { ok:false, code:'CARD_WRONG_YEAR' };
     const s = DB.students.find(x => x.id === c.sid) || {};
+    // FORME variable — c'est le sujet du §5 bis : le navigateur ne doit
+    // dépendre d'AUCUN nom de champ particulier.
+    if (FORME === 'imbriquee')  return { ok:true, data:{ card:{ no:c.card_no }, student:{ matricule:s.mat, nom_complet:s.name } } };
+    if (FORME === 'inattendue') return { ok:true, data:{ student_mat:s.mat, libelle:s.name } };
+    if (FORME === 'muette')     return { ok:true, data:{ card_no:c.card_no } };
     return { ok:true, data:{ mat:s.mat, sid:c.sid, student_name:s.name, card_no:c.card_no } };
   }
   return { ok:false, code:'PGRST202' };
@@ -273,6 +279,29 @@ DB.students[0].archived = true;
 const vArch = await _resoudreCarteQR(c2.qr_payload);
 ok('un élève archivé est refusé', !vArch.ok && /ARCHIV/.test(vArch.titre||''), vArch.titre);
 DB.students[0].archived = false;
+
+// ═══ 5 bis · LE NOM DU CHAMP NE DOIT PAS DÉCIDER DE L'ACCÈS ══════════════
+// ChatGPT a donné l'ENTRÉE de verify_student_card_qr, pas la FORME de sa
+// réponse. Si le navigateur lit `d.mat` en dur et que le serveur nomme son
+// champ autrement, **le portail refuse des cartes parfaitement valables** et
+// personne ne comprend pourquoi. On ne devine donc pas un nom : on reconnaît
+// une VALEUR.
+for (const [forme, libelle] of [['documentee','la forme documentée'],
+                                ['imbriquee','une réponse IMBRIQUÉE (student.matricule)'],
+                                ['inattendue','des noms de champs INATTENDUS (student_mat)']]) {
+  FORME = forme;
+  const v = await _resoudreCarteQR(c2.qr_payload);
+  ok(`la carte ouvre le portail avec ${libelle}`,
+     v.ok && v.mat === 'LS-0001', v.titre || v.mat);
+}
+// Et le cas honnête : le serveur ne rend PAS l'élève du tout.
+FORME = 'muette';
+const vMuet = await _resoudreCarteQR(c2.qr_payload);
+ok('si le serveur ne rend AUCUN élève, on refuse en le disant — sans deviner',
+   !vMuet.ok && /reconnu/i.test(vMuet.detail||''), vMuet.detail);
+ok('et le gardien est renvoyé vers un contrôle manuel, pas vers un mur',
+   /contrôle manuel/i.test(vMuet.detail||''), vMuet.detail);
+FORME = 'documentee';
 
 // ═══ 6 · LE GARDIEN N'A PAS LE REGISTRE — ET ÇA MARCHE QUAND MÊME ════════
 // C'était le défaut : il lisait `DB.student_cards`, que la RLS ne lui donne

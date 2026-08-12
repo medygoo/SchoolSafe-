@@ -32,8 +32,51 @@ window._GUARDIAN_VID = null;
 </script>
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito+Sans:opsz,wght@6..12,700;6..12,800;6..12,900&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});}</script>
+<!-- `defer` : le script se télécharge en parallèle et s'exécute avant
+     DOMContentLoaded, donc AVANT tout ce qui l'appelle. Sans lui, l'analyse
+     du document s'arrête ici — sur un réseau de Kinshasa, l'écran reste
+     blanc le temps d'un aller-retour vers un CDN, avant même que la première
+     ligne de SchoolSafe soit lue. `supabase.createClient` n'est appelé que
+     dans une fonction, jamais à la lecture. -->
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(function(){});
+
+  // ── LA MOITIÉ QUI MANQUAIT ────────────────────────────────────────────────
+  // Le service worker sert le cache tout de suite — l'application s'ouvre sans
+  // attendre le réseau. Il va chercher la nouvelle version derrière, et quand
+  // elle diffère, il le DIT ici.
+  //
+  // C'est ce qui manquait au Stale-While-Revalidate d'avant : il mettait à
+  // jour en silence, donc l'école voyait l'ancienne interface au premier
+  // chargement et Loms nous disait que ses corrections n'étaient pas en ligne.
+  // Une mise à jour muette est un échec silencieux.
+  //
+  // On ne recharge JAMAIS tout seul : quelqu'un peut être en train de scanner
+  // au portail ou de saisir un paiement. On propose, il choisit.
+  navigator.serviceWorker.addEventListener('message', function(e){
+    if(!e.data || e.data.type !== 'SS_MAJ_DISPONIBLE') return;
+    if(document.getElementById('ss-maj')) return;
+    var b=document.createElement('div');
+    b.id='ss-maj';
+    b.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;'
+      +'background:#17203a;color:#fff;border-radius:14px;padding:13px 15px;'
+      +'box-shadow:0 8px 28px rgba(0,0,0,.32);display:flex;align-items:center;'
+      +'gap:12px;font-size:13.5px;line-height:1.45;max-width:520px;margin:0 auto';
+    b.innerHTML='<span style="font-size:19px;flex-shrink:0">✨</span>'
+      +'<span style="flex:1;min-width:0">Une nouvelle version de SchoolSafe est prête.</span>'
+      +'<button id="ss-maj-non" style="flex-shrink:0;min-height:36px;padding:7px 11px;border-radius:9px;'
+      +'border:1px solid rgba(255,255,255,.28);background:transparent;color:rgba(255,255,255,.75);'
+      +'font-size:12.5px;cursor:pointer">Plus tard</button>'
+      +'<button id="ss-maj-oui" style="flex-shrink:0;min-height:36px;padding:7px 13px;border-radius:9px;'
+      +'border:none;background:#2f7bd6;color:#fff;font-weight:700;font-size:12.5px;cursor:pointer">Recharger</button>';
+    document.body.appendChild(b);
+    document.getElementById('ss-maj-oui').onclick=function(){ location.reload(); };
+    document.getElementById('ss-maj-non').onclick=function(){ b.remove(); };
+  });
+}
+</script>
 <script>
 // Capture le prompt d'installation PWA dès que possible (Android/Desktop
 // Chrome/Edge — iOS Safari ne déclenche jamais cet événement, "Sur l'écran
@@ -1359,11 +1402,24 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!-- ── LES BIBLIOTHÈQUES EXTÉRIEURES — PLUS AUCUNE NE BLOQUE L'AFFICHAGE ──
+     Elles étaient chargées SANS `defer`, donc l'analyse du document
+     s'interrompait à chaque balise, le temps d'un aller-retour vers un CDN.
+     Quatre arrêts avant que la première ligne de SchoolSafe soit lue.
+
+     Les quatre sont appelées uniquement dans des fonctions, et chacune vérifie
+     déjà sa propre présence (`window.QRCode`, `typeof jsQR`, `typeof
+     html2pdf`, `typeof html2canvas`). `defer` ne change donc rien à ce qui
+     marche, et retire l'attente.
+
+     JSZip a été RETIRÉE : zéro appel dans tout le fichier. Elle se
+     téléchargeait à chaque démarrage pour personne. Retirée aussi du
+     pré-cache du service worker — un fichier mis en cache pour rien reste un
+     fichier téléchargé pour rien. -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 /* ═══════════════════════════════════════════
    SCHOOLSAFE v3.0 — CORE ENGINE
@@ -3589,6 +3645,178 @@ window._logoDoc = (px) => {
   return src
     ? `<img src="${src}" alt="" style="width:${px||56}px;height:${px||56}px;border-radius:50%;object-fit:cover;border:2px solid #c09018;flex:none">`
     : '';
+};
+
+// ── LE DESSIN DES DOCUMENTS DE FINANCE ET DE RH — UNE SEULE FEUILLE ───────
+//
+// Loms, 11 août 2026 : *« que tous les documents qui proviennent de cette
+// partie prennent le même design — harmoniser. »* La référence est le reçu
+// dessiné par ChatGPT : une carte blanche à coins arrondis, un bandeau gris
+// bleuté qui porte l'emblème et l'école, un badge de titre en capitales
+// espacées, des lignes libellé/valeur, un cartouche de montant, un cachet
+// vert, un pied discret.
+//
+// Ce qu'il y avait avant : **dix feuilles de style écrites à la main**, une
+// par document. Le journal, la balance, le grand livre, le bilan, l'état
+// financier et les deux fiches de paie avaient chacun leur en-tête, leurs
+// couleurs de tableau, leur taille de titre. Deux documents de la même caisse,
+// imprimés le même jour, ne se ressemblaient pas — et une famille qui reçoit
+// deux papiers d'aspect différent doute des deux.
+//
+// C'est la même leçon que les neuf copies du classement, appliquée au dessin :
+// **quand dix endroits répondent à la même question, ils doivent appeler le
+// même code, pas le recopier.** Une feuille recopiée diverge, exactement comme
+// une formule recopiée — sauf que la divergence se voit sur le papier, chez la
+// famille.
+//
+// Elle couvre l'UNION des classes que ces documents emploient déjà : leur
+// balisage n'a pas eu à être réécrit, seule leur feuille change. C'est ce qui
+// rend la reprise sûre sur dix documents d'un coup.
+window._CSS_DOC = `
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;color:#1a2228;background:#f0f4f8;padding:20px;font-size:12.5px;line-height:1.5}
+.page{background:#fff;width:100%;max-width:700px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.15)}
+
+/* Le bandeau du reçu : emblème + école, sur le gris bleuté de l'école. */
+.hdr,.header,.doc-hdr{background:#556777;padding:18px 22px;display:flex;align-items:center;gap:15px;color:#fff}
+.hdr h1,.header h1,.doc-hdr h1,.sn h1,.school-name h1,.si h1,.doc-hdr-title{font-size:14.5px;font-weight:800;line-height:1.25;color:#fff}
+.hdr p,.header p,.sn p,.school-name p,.si .s{font-size:10px;opacity:.82;margin-top:3px;color:#fff}
+.logo,.doc-hdr-logo{width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid #fff;flex-shrink:0}
+.hl{display:flex;align-items:center;gap:12px;min-width:0}
+.hr{text-align:right;font-size:10px;opacity:.85;margin-left:auto;flex:none}
+
+/* Le badge de titre — capitales espacées, sur fond très clair. */
+.badge{text-align:center;padding:13px 20px;background:#f8faff;border-bottom:2px dashed #dadee2}
+.badge .num,.num,.periode,.sous-titre{font-size:11px;color:#6b7280;letter-spacing:1px;text-transform:uppercase}
+.badge .title,.badge .ttl,.title,.ttl{font-size:18px;font-weight:800;color:#556777;margin-top:4px;text-transform:uppercase;letter-spacing:2px}
+.dtitle{text-align:center;padding:13px 20px;background:#f8faff;border-bottom:2px dashed #dadee2}
+.dtitle h2{font-size:16px;font-weight:800;color:#556777;text-transform:uppercase;letter-spacing:1.5px}
+
+.body,.sec{padding:18px 22px}
+.sec{border-bottom:1px solid #f0f1f2}
+.sec h2,.premium-section-title,.month-hdr,.h-acct,.h-pay{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#556777;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:flex-start;padding:9px 0;border-bottom:1px solid #f0f1f2}
+.row:last-child{border-bottom:none}
+.lbl{font-size:12px;color:#6b7280;font-weight:500;flex-shrink:0;margin-right:10px}
+.val{font-size:13px;font-weight:700;color:#1a1a1a;text-align:right}
+
+/* Le cartouche de montant et le cachet — les deux signes du reçu. */
+.amount-box{background:#556777;color:#fff;border-radius:10px;padding:16px 20px;text-align:center;margin:14px 0}
+.amount-box .av,.av{font-size:27px;font-weight:900;letter-spacing:.5px}
+.amount-box .aw,.aw{font-size:11px;opacity:.82;margin-top:6px;font-style:italic}
+.stamp{display:flex;align-items:center;gap:10px;background:#d8f3e6;border-radius:8px;padding:10px 14px;margin-top:12px}
+.stamp .ic,.stamp .icon,.ic,.icon{font-size:23px}
+.stamp .tx,.stamp .txt,.tx,.txt{font-size:11px;color:#065f46;font-weight:600}
+.motif-box,.res-box,.emp,.emp-box{background:#f8faff;border:1px solid #dadee2;border-radius:9px;padding:11px 14px;margin:11px 0;font-size:12.5px}
+.res-pos{color:#065f46;font-weight:800}
+
+/* Tableaux — même famille : en-tête gris bleuté, lignes alternées très pâles. */
+table,.tbl{width:100%;border-collapse:collapse;margin:11px 0;font-size:11.5px}
+th{background:#556777;color:#fff;padding:7px 6px;text-align:left;font-size:10.5px;font-weight:700}
+td{padding:6px;border-bottom:1px solid #eaecf0;vertical-align:middle}
+tr:nth-child(even) td{background:#f8faff}
+.tot td,.total-row td,.sub-tot td,.grand-tot td{font-weight:800;background:#f0f4f8;border-top:2px solid #556777}
+.debit-row td{background:#fff7f7}.credit-row td{background:#f4fbf7}
+.plus{color:#065f46;font-weight:700}.minus{color:#991b1b;font-weight:700}
+
+/* Les tuiles de chiffres — mêmes proportions partout. */
+.kpi,.grid,.hbento{display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+.kpi-cell,.stat,.htile{padding:13px 8px;text-align:center;border-right:1px solid #eaecf0;border-bottom:1px solid #eaecf0}
+.kpi-cell:last-child,.stat:last-child{border-right:none}
+.kv,.stat-n,.hbig,.stat .v{font-size:19px;font-weight:900;color:#556777}
+.kl,.stat-l,.hsub,.stat .l{font-size:9.5px;color:#6b7280;margin-top:4px}
+
+.footer,.foot{background:#f8faff;border-top:1px solid #e5e7eb;padding:12px 22px;font-size:10px;color:#9ca3af;text-align:center}
+.sig-line,.sig{height:46px;border-bottom:1px solid #aaa;margin-bottom:6px}
+.pill,.status,.premium-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:#f0f1f2;color:#556777}
+
+/* La barre d'action ne s'imprime jamais : elle n'appartient pas au document. */
+.print-bar,.dl-bar{background:#556777;color:#fff;padding:13px 20px;text-align:center}
+.dl-bar h3{font-size:14px;font-weight:800}
+.dl-bar p{font-size:11.5px;opacity:.85;margin-top:3px}
+.pbtn,.dl-btn,.print-bar button{display:inline-block;margin:10px auto 0;padding:10px 26px;background:#fff;color:#556777;border:none;border-radius:8px;font-size:13.5px;cursor:pointer;font-weight:800}
+
+@media print{
+  .pbtn,.dl-btn,.print-bar,.dl-bar{display:none}
+  body{background:#fff;padding:0}
+  .page{box-shadow:none;max-width:100%;border-radius:0}
+  tr,.row,.sec,.stamp,.amount-box{break-inside:avoid}
+  thead{display:table-header-group}     /* l'en-tête se répète en haut de chaque page */
+  @page{margin:12mm}
+}`;
+
+// ── L'EN-TÊTE OFFICIEL — LA CHAÎNE DE RESPONSABILITÉ ──────────────────────
+//
+// Un document scolaire congolais se lit de haut en bas comme une chaîne de
+// responsabilité : une administration qui le reçoit la REMONTE pour savoir à
+// qui s'adresser.
+//
+//              RÉPUBLIQUE DÉMOCRATIQUE DU CONGO
+//     MINISTÈRE DE L'ÉDUCATION NATIONALE ET NOUVELLE CITOYENNETÉ
+//        Province éducationnelle de …  ·  Sous-division de …
+//
+// **Aucun document ne la portait.** Mesuré le 11 août 2026 : sur les 47
+// producteurs de documents, zéro contenait « RÉPUBLIQUE », « Province
+// éducationnelle », « Sous-division » ou le code SERNIE. Trois seulement
+// nommaient un ministère — **et c'était le mauvais**, écrit en dur :
+// « Ministère de l'EPSP » et « Ministère de l'ESU ». L'EPSP a été remplacé par
+// le Ministère de l'Éducation Nationale et Nouvelle Citoyenneté.
+//
+// D'où deux décisions, et la seconde est la vraie leçon :
+//
+//   · l'en-tête s'écrit UNE fois et s'appelle — comme `_officialFooter`, qui
+//     avait échappé à toutes les reprises précisément parce qu'il était
+//     partagé et que personne ne le cherchait ;
+//   · **le ministère est un RÉGLAGE, jamais une constante.** Il a déjà changé
+//     de nom, il changera encore, et une constante oblige à republier
+//     l'application entière pour un changement qui ne la concerne pas.
+//
+// Et la règle qui gouverne l'affichage : **une ligne dont la valeur manque ne
+// s'imprime pas.** Un numéro d'agrément inventé sur un document officiel
+// serait pire que son absence.
+window._enteteOfficiel = (numero) => {
+  const sc = window._schoolInfo ? window._schoolInfo() : (DB.settings?.school || {});
+  const ligne = (t, style) => t ? `<div style="${style}">${esc(t)}</div>` : '';
+
+  // Le pays vient des réglages : SchoolSafe n'est pas un logiciel congolais,
+  // c'est un logiciel livré à une école congolaise. La différence compte le
+  // jour où il sert ailleurs.
+  const pays = (sc.country || '').toUpperCase();
+
+  const territoire = [
+    sc.province ? 'Province éducationnelle de ' + sc.province : '',
+    sc.sub ? 'Sous-division de ' + sc.sub : '',
+  ].filter(Boolean).join('  ·  ');
+
+  const refs = [
+    sc.code_ecole ? 'Code école : ' + sc.code_ecole : '',
+    sc.dgep ? 'Agrément : ' + sc.dgep : '',
+  ].filter(Boolean).join('   ·   ');
+
+  const tutelle = `<div style="text-align:center;line-height:1.5;margin-bottom:10px">
+    ${ligne(pays, 'font-size:11.5px;font-weight:800;letter-spacing:.04em;color:#1a2228')}
+    ${ligne(sc.ministere, 'font-size:10.5px;font-weight:700;color:#5e6c78;text-transform:uppercase;letter-spacing:.02em')}
+    ${ligne(territoire, 'font-size:10px;color:#5e6c78')}
+  </div>`;
+
+  // Rien à imprimer : on ne pose pas un bloc vide qui déplacerait la mise en
+  // page sans rien dire. L'école n'a peut-être pas encore saisi ses références.
+  const vide = !pays && !sc.ministere && !territoire;
+
+  return `${vide ? '' : tutelle}
+  <div style="display:flex;align-items:flex-start;gap:12px;border-bottom:1.5px solid #c09018;padding-bottom:9px;margin-bottom:12px">
+    ${window._logoDoc ? _logoDoc(52) : ''}
+    <div style="flex:1;min-width:0;line-height:1.45">
+      <div style="font-size:14px;font-weight:900;color:#1a2228;letter-spacing:.01em">${esc(sc.name || '')}</div>
+      ${ligne(sc.name_en, 'font-size:11px;font-style:italic;color:#5e6c78')}
+      ${ligne(sc.address, 'font-size:10.5px;color:#5e6c78')}
+      ${ligne(refs, 'font-size:10px;color:#5e6c78;margin-top:2px')}
+    </div>
+    <div style="text-align:right;font-size:10.5px;color:#5e6c78;line-height:1.6;flex:none">
+      ${numero ? `<div style="font-weight:800;color:#1a2228">N° ${esc(numero)}</div>` : ''}
+      <div>${esc((sc.address || '').split(',').pop().trim() || 'Kinshasa')}, le ${esc(new Date(today() + 'T00:00:00').toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'}))}</div>
+    </div>
+  </div>`;
 };
 
 // Le libellé officiel d'un rôle — celui qui paraît sous une signature, pas
@@ -18539,16 +18767,51 @@ window._resoudreCarteQR = async (payload) => {
   }
 
   const d = r.data || {};
-  const nom = d.student_name || d.name || null;
 
-  // L'identité que l'entrée réclame ensuite. Aucun repli sur le registre
-  // local : le gardien n'en a pas, et s'en servir ramènerait le défaut.
+  // ── ON NE DEVINE PAS UN NOM DE CHAMP : ON RECONNAÎT UNE VALEUR ──────────
+  //
+  // ChatGPT a donné l'ENTRÉE de `verify_student_card_qr` (`p_payload`) et un
+  // code de refus, pas la FORME de sa réponse. Lire `d.mat` puis `d.sid` en
+  // espérant tomber juste, c'était parier : **si le serveur nomme son champ
+  // autrement, le portail refuse des cartes parfaitement valables** — et le
+  // gardien n'a aucun moyen de comprendre pourquoi.
+  //
+  // Le remède ne consiste pas à allonger la liste des noms possibles ; elle
+  // sera toujours trop courte. Il consiste à changer de question :
+  //
+  //   au lieu de « quel champ porte le matricule ? »
+  //   on demande  « laquelle de ces valeurs EST un matricule connu ? »
+  //
+  // On parcourt donc les valeurs de la réponse et on cherche celle qui
+  // correspond à un élève. Le nom du champ n'a plus d'importance : `mat`,
+  // `matricule`, `student_mat`, `student.mat` — tous marchent, et un nom
+  // inattendu ne casse rien.
+  //
+  // C'est possible ici parce que le gardien A la liste des élèves : son
+  // `ROLE_LOAD` la charge par `get_scanner_students`. C'est justement ce qu'il
+  // n'a pas pour `student_cards`, et c'est pourquoi le contrôle de la carte,
+  // lui, doit rester au serveur.
+  const _valeurs = (o, prof) => {
+    if (!o || typeof o !== 'object' || prof > 3) return [];
+    return Object.values(o).flatMap(v =>
+      v && typeof v === 'object' ? _valeurs(v, prof + 1) : (typeof v === 'string' ? [v] : []));
+  };
+  const vals = _valeurs(d, 0);
+
   const s = (DB.students || []).find(x =>
-    (d.mat && x.mat === d.mat) || (d.sid && x.id === d.sid) || (d.student_id && x.id === d.student_id));
-  const mat = d.mat || (s ? s.mat : null);
+    (x.mat && vals.includes(x.mat)) || (x.id && vals.includes(x.id)));
+
+  // À défaut d'élève connu, on retient une valeur qui a la FORME d'un
+  // matricule (STU-0001, LS-0001…). Le serveur vient d'authentifier la carte ;
+  // `record_entry_scan` tranchera de toute façon.
+  const mat = (s && s.mat)
+    || vals.find(v => /^[A-Z]{2,4}-\d{3,6}$/.test(v))
+    || null;
+
+  const nom = d.student_name || d.name || (s ? s.name : null);
 
   if (!mat) return {ok:false, nom, titre:'CONTRÔLE INCOMPLET',
-    detail:'Le serveur a validé la carte mais n’a pas rendu l’élève — signalé à la Direction'};
+    detail:'Le serveur a validé la carte mais l’élève n’a pas pu être reconnu — contrôle manuel, et prévenez la Direction'};
 
   // L'élève peut être absent du dossier local sans que la carte soit en cause :
   // c'est le serveur qui vient de l'authentifier. On continue avec SON
@@ -21693,7 +21956,7 @@ window.printVersementRecu = (vid) => {
   const _dvLbls={'$':'dollars américains','CDF':'francs congolais','FCFA':'francs CFA','€':'euros','£':'livres sterling','XAF':'francs CFA'};
   const _dvName=_dvLbls[sc.devise||'$']||(sc.devise||'dollars');
   const amtWords=(numToWords(v.montant)||'').charAt(0).toUpperCase()+(numToWords(v.montant)||'').slice(1)+' '+_dvName;
-  const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;display:flex;justify-content:center;padding:20px;min-height:100vh}.page{background:#fff;width:100%;max-width:500px;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.15)}.hdr{background:#556777;padding:20px 24px;display:flex;align-items:center;gap:16px}.logo{width:70px;height:70px;border-radius:50%;object-fit:cover;border:3px solid #fff;flex-shrink:0}.sn{color:#fff}.sn h1{font-size:14px;font-weight:800}.sn p{font-size:10px;opacity:.8;margin-top:2px}.badge{text-align:center;padding:12px 20px;background:#f8faff;border-bottom:2px dashed #dadee2}.badge .num{font-size:11px;color:#6b7280;letter-spacing:1px;text-transform:uppercase}.badge .ttl{font-size:18px;font-weight:800;color:#556777;margin-top:4px;text-transform:uppercase;letter-spacing:2px}.body{padding:20px 24px}.row{display:flex;justify-content:space-between;align-items:flex-start;padding:9px 0;border-bottom:1px solid #f0f1f2}.row:last-child{border-bottom:none}.lbl{font-size:12px;color:#6b7280;font-weight:500;flex-shrink:0;margin-right:10px}.val{font-size:13px;font-weight:700;color:#1a1a1a;text-align:right}.motif-box{background:#f8faff;border:1px solid #dadee2;border-radius:8px;padding:10px 14px;margin:10px 0;font-size:13px;color:#1a2228;font-style:italic}.amount-box{background:#556777;color:#fff;border-radius:10px;padding:16px 20px;text-align:center;margin:14px 0}.amount-box .av{font-size:28px;font-weight:900}.amount-box .aw{font-size:11px;opacity:.8;margin-top:6px;font-style:italic}.stamp{display:flex;align-items:center;gap:10px;background:#d8f3e6;border-radius:8px;padding:10px 14px;margin-top:12px}.stamp .ic{font-size:24px}.stamp .tx{font-size:11px;color:#065f46;font-weight:600}.footer{background:#f8faff;border-top:1px solid #e5e7eb;padding:12px 24px;font-size:10px;color:#9ca3af;text-align:center}.pbtn{display:block;margin:14px auto;padding:10px 30px;background:#556777;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600}@media print{.pbtn{display:none}body{background:#fff;padding:0}.page{box-shadow:none;max-width:100%;border-radius:0}@page{margin:8mm}}`;
+  const CSS = window._CSS_DOC;
   const logo=(window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC)?`<img src="${window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC}" class="logo" alt="">`:`<div class="logo" style="background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:28px">🏫</div>`;
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reçu ${esc(v.recu_no)}</title><style>${CSS}</style></head><body><div class="page">
 <div class="hdr">${logo}<div class="sn"><h1>${esc(school)}</h1>${sc.address?`<p>${esc(sc.address)}</p>`:''} ${(sc.phone||sc.email)?`<p style="font-size:9px;opacity:.75">${[sc.phone?'Tél: '+esc(sc.phone):'',sc.email?esc(sc.email):''].filter(Boolean).join(' · ')}</p>`:''}</div></div>
@@ -21762,7 +22025,7 @@ window.viewReceipt = (nid) => {
   const _dvLbls2={'$':'dollars américains','CDF':'francs congolais','FCFA':'francs CFA','€':'euros','£':'livres sterling','XAF':'francs CFA'};
   const _dvName2=_dvLbls2[sc.devise||'$']||(sc.devise||'dollars');
   const amtWords=(numToWords(r.amount)||'').charAt(0).toUpperCase()+(numToWords(r.amount)||'').slice(1)+' '+_dvName2;
-  const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;display:flex;justify-content:center;align-items:flex-start;padding:20px;min-height:100vh}.page{background:#fff;width:100%;max-width:500px;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.15)}.hdr{background:#556777;padding:20px 24px;display:flex;align-items:center;gap:16px}.logo{width:70px;height:70px;border-radius:50%;object-fit:cover;border:3px solid #fff;flex-shrink:0}.school-name{color:#fff}.school-name h1{font-size:14px;font-weight:800;line-height:1.2}.school-name p{font-size:10px;opacity:.8;margin-top:3px}.badge{margin-top:16px;text-align:center;padding:12px 20px;background:#f8faff;border-bottom:2px dashed #dadee2}.badge .num{font-size:11px;color:#6b7280;letter-spacing:1px;text-transform:uppercase}.badge .title{font-size:18px;font-weight:800;color:#556777;margin-top:4px;text-transform:uppercase;letter-spacing:2px}.body{padding:20px 24px}.row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f1f2}.row:last-child{border-bottom:none}.lbl{font-size:12px;color:#6b7280;font-weight:500}.val{font-size:13px;font-weight:700;color:#1a1a1a;text-align:right}.amount-box{background:#556777;color:#fff;border-radius:10px;padding:16px 20px;text-align:center;margin:16px 0}.amount-box .av{font-size:28px;font-weight:900;letter-spacing:1px}.amount-box .aw{font-size:11px;opacity:.8;margin-top:6px;font-style:italic}.stamp{display:flex;align-items:center;gap:10px;background:#d8f3e6;border-radius:8px;padding:10px 14px;margin-top:14px}.stamp .icon{font-size:24px}.stamp .txt{font-size:11px;color:#065f46;font-weight:600}.footer{background:#f8faff;border-top:1px solid #e5e7eb;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#9ca3af}.pbtn{display:block;margin:16px auto;padding:11px 32px;background:#556777;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600}@media print{.pbtn{display:none}body{background:#fff;padding:0}.page{box-shadow:none;max-width:100%;border-radius:0}@page{margin:10mm}}`;
+  const CSS = window._CSS_DOC;
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bordereau ${esc(r.num)}</title><style>${CSS}</style></head><body><div class="page"><div class="hdr">${(window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC)?`<img src="${window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC}" class="logo" alt="">`:`<div class="logo" style="background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px">🏫</div>`}<div class="school-name"><h1>${school}</h1>${sc.address||sc.sub?`<p>${esc(sc.address||sc.sub)}</p>`:''}<p>${sc.phone?`📞 ${esc(sc.phone)}`:''}</p></div></div><div class="badge"><div class="num">Bordereau officiel de paiement · N° ${esc(r.num)}</div><div class="title">🧾 Reçu de paiement</div></div><div class="body"><div class="row"><span class="lbl">👶 Élève</span><span class="val">${esc(r.student)}</span></div><div class="row"><span class="lbl">Matricule</span><span class="val" style="font-family:monospace">${esc(r.mat||'—')}</span></div><div class="row"><span class="lbl">🎓 Classe</span><span class="val">${esc(r.classe||'—')}</span></div><div class="row"><span class="lbl">📋 Type de paiement</span><span class="val">${esc(r.type_label)}${r.trimestre?' · '+esc(r.trimestre):''}</span></div><div class="row"><span class="lbl">📅 Date</span><span class="val">${printDate}</span></div><div class="row"><span class="lbl">⏰ Heure</span><span class="val">${r.time}</span></div><div class="row"><span class="lbl">💼 Reçu par</span><span class="val" style="color:#556777">${esc(r.by)}</span></div>${r.note?`<div class="row"><span class="lbl">📝 Note</span><span class="val">${esc(r.note)}</span></div>`:''}<div class="amount-box"><div class="av">${_cur()}${r.amount}</div><div class="aw">${amtWords}</div></div><div class="stamp"><span class="icon">✅</span><div class="txt">Paiement reçu et enregistré<br>${school} — Année ${DB.settings.year||'2025-2026'}</div></div><div style="padding:0 24px 16px">${_officialFooter((DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',{nom:r.by,role:'Caisse',le:r.date||''})}</div></div></body></html>`;
   dlPDF(html,`Recu-${(r.num||'').replace(/[^a-z0-9]/gi,'_')||today()}.pdf`);
 };
@@ -22246,7 +22509,7 @@ window.exportEtatFinancierPDF = () => {
     const t=vers.filter(v=>v.fee_type_id===ft.id).reduce((s,v)=>s+(Number(v.montant)||0),0);
     byCat[cat].total+=t; byCat[cat].count+=vers.filter(v=>v.fee_type_id===ft.id).length;
   });
-  const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;padding:20px}.page{background:#fff;max-width:600px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.15)}.hdr{background:#556777;padding:20px 24px;color:#fff}.hdr h1{font-size:16px;font-weight:800}.hdr p{font-size:11px;opacity:.7;margin-top:4px}.kpi{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0}.kpi-cell{padding:14px;text-align:center;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb}.kpi-cell:last-child{border-right:none}.kv{font-size:20px;font-weight:900}.kl{font-size:10px;color:#6b7280;margin-top:4px}.sec{padding:16px 20px;border-bottom:1px solid #f3f4f6}.sec h2{font-size:12px;font-weight:700;text-transform:uppercase;color:#374151;margin-bottom:10px}.row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f9fafb;font-size:12px}.lbl{color:#6b7280}.val{font-weight:700}.footer{padding:14px 20px;text-align:center;font-size:10px;color:#9ca3af}@media print{.pbtn{display:none}body{padding:0;background:#fff}.page{box-shadow:none;max-width:100%;border-radius:0}@page{margin:10mm}}`;
+  const CSS = window._CSS_DOC;
   const printDate=new Date().toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>État Financier — ${school}</title><style>${CSS}</style></head><body><div class="page">
     <div class="hdr">${(window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC)?`<img src="${window.SCHOOL_LOGO||window.SCHOOL_LOGO_DOC}" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.5);float:right">`:''}<h1>État Financier — ${esc(school)}</h1><p>Généré le ${printDate} · Année ${DB.settings.year||''}</p></div>
@@ -23182,37 +23445,20 @@ function _pdfSignatureBlock(devise) {
     Document établi conformément aux dispositions du Système Comptable OHADA (SYSCOHADA) — Acte uniforme révisé du 26 janvier 2017
   </div>`;
 }
-const _COMPTA_CSS = `
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;padding:14px;background:#fff}
-.doc-hdr{display:flex;align-items:flex-start;gap:14px;border-bottom:3px solid #243a6b;padding-bottom:12px;margin-bottom:12px}
-.doc-hdr-logo{width:54px;height:54px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid #243a6b}
-.doc-hdr-title{flex:1}
-.doc-hdr-title h1{font-size:16px;font-weight:800;color:#243a6b;text-transform:uppercase;letter-spacing:.5px}
-.doc-hdr-title .sous-titre{font-size:11px;color:#374151;margin-top:2px}
-.doc-hdr-title .periode{font-size:10px;color:#6b7280;margin-top:1px}
-.syscohada{font-size:9px;color:#9ca3af;text-align:right;white-space:nowrap}
-table{width:100%;border-collapse:collapse}
-th{background:#243a6b;color:#fff;padding:6px 8px;font-size:10px;font-weight:700;text-align:left}
-th.num{text-align:right}
-td{padding:5px 8px;border-bottom:1px solid #e5e7eb;font-size:10px;vertical-align:top}
-td.num{text-align:right;font-variant-numeric:tabular-nums}
-tr:nth-child(even){background:#f8fafc}
-tr.month-hdr td{background:#e0e7ef;font-weight:700;font-size:10px;text-align:center;padding:5px;color:#243a6b;letter-spacing:.3px}
-tr.sub-tot td{background:#f0f4f8;font-weight:700;border-top:1px solid #cbd5e1}
-tr.grand-tot td{background:#243a6b;color:#fff;font-weight:800;padding:7px 8px}
-tr.grand-tot td.num{text-align:right}
-tr.debit-row td{background:#f0fdf4}
-tr.credit-row td{background:#eff6ff;font-style:italic}
-.bal-ok{background:#d1fae5;border:1px solid #6ee7b7;padding:8px 12px;margin-top:10px;font-weight:700;color:#065f46;text-align:center;border-radius:6px}
-.bal-err{background:#fee2e2;border:1px solid #fca5a5;padding:8px 12px;margin-top:10px;font-weight:700;color:#991b1b;text-align:center;border-radius:6px}
-.sect-title{font-size:12px;font-weight:800;padding:10px 0 4px;border-bottom:2px solid;margin-bottom:4px}
-.produit{color:#065f46;border-color:#1f9d6b}
-.charge{color:#991b1b;border-color:#dc2626}
-.res-box{padding:14px;margin:12px 0;text-align:center;border-radius:8px;color:#fff}
-.res-pos{background:#1f9d6b}
-.res-neg{background:#dc2626}
-@media print{body{padding:4mm}@page{margin:8mm;size:A4}}
+// Les quatre exports comptables partageaient DÉJÀ une feuille — mais ce
+// n'était pas celle des reçus. Deux familles de documents sortaient de la même
+// caisse avec deux dessins : bleu marine et Arial 11 px ici, gris bleuté et
+// carte arrondie là. Elle dérive donc de la feuille commune, et n'ajoute que
+// ce qui est propre à la comptabilité SYSCOHADA — la colonne des numéros de
+// compte, les totaux débit/crédit, et le repère d'équilibre.
+const _COMPTA_CSS = window._CSS_DOC + `
+/* ── Propre à la comptabilité SYSCOHADA ── */
+.page{max-width:840px}
+table{font-size:11px}
+td.num,.acct{font-family:'Courier New',monospace;font-variant-numeric:tabular-nums}
+.syscohada{font-size:10px;color:#6b7280;text-align:center;padding:6px 0;font-style:italic}
+.equilibre{font-weight:900;color:#065f46}
+.desequilibre{font-weight:900;color:#991b1b}
 `;
 
 // ── Export Journal Général PDF (format SYSCOHADA-RDC) ──
@@ -24638,23 +24884,7 @@ window.downloadConvocationPDF = (cid) => {
   const badgeColor=ct.color;
   const badgeLabel=ct.icon+' '+ct.label;
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${badgeLabel} — ${s?esc(s.name):''}</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:30px}
-    .hdr{display:flex;align-items:center;gap:16px;border-bottom:3px solid #556777;padding-bottom:12px;margin-bottom:20px}
-    .logo{width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #556777}
-    .school-info h1{font-size:16px;font-weight:900;color:#556777}
-    .school-info p{font-size:11px;color:#5e6c78;margin-top:2px}
-    .badge{margin-left:auto;background:#556777;color:#fff;padding:6px 18px;border-radius:20px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px}
-    .ref{font-size:11px;color:#5e6c78;text-align:right;margin-top:4px}
-    h2{font-size:14px;font-weight:800;color:#556777;margin:20px 0 8px;text-transform:uppercase;letter-spacing:.5px}
-    .info-table{width:100%;border-collapse:collapse;margin-bottom:16px}
-    .info-table td{padding:6px 10px;font-size:12px;border:1px solid #dadee2}
-    .info-table td:first-child{font-weight:700;background:#f0f1f2;width:35%}
-    .body-text{font-size:13px;line-height:1.8;margin-bottom:16px;text-align:justify}
-    .reason-box{background:#fef9c3;border:1.5px solid #fde047;border-radius:8px;padding:12px 16px;margin:14px 0;font-size:13px;font-weight:600;color:#78350f}
-    .rdv-box{background:#dbeafe;border:1.5px solid #dadee2;border-radius:8px;padding:12px 16px;margin:14px 0;font-size:13px;font-weight:700;color:#657786}
-    @media print{body{padding:15px}}
-  </style></head><body>
+  <style>${window._CSS_DOC}</style></head><body>
   <div class="hdr">
     ${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:''}
     <div class="school-info">
@@ -25577,7 +25807,7 @@ window.printPVDeliberation = () => {
   },0);
   const totalElevs=DB.students.length;
   const tauxGlobal=totalElevs?Math.round(totalAdmis/totalElevs*100):0;
-  const CSS=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;color:#1a1a1a;background:#fff;font-size:12px}.print-bar{background:#556777;color:#fff;padding:10px 20px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px;margin:-20px -20px 20px;flex-wrap:wrap}.print-bar button{background:#fff;color:#556777;border:none;padding:6px 16px;border-radius:7px;font-size:13px;font-weight:800;cursor:pointer}.hdr{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #556777;margin-bottom:14px}.hl{display:flex;align-items:center;gap:12px}.logo{width:54px;height:54px;border-radius:50%;border:2px solid #556777;object-fit:cover}.si h1{font-size:15px;font-weight:800;color:#556777}.si .s{font-size:10px;color:#555;margin-top:2px}.hr{text-align:right;font-size:10px;color:#777}.pv-title{text-align:center;border:2px solid #556777;border-radius:8px;padding:12px;margin-bottom:16px}.pv-title h2{font-size:15px;font-weight:800;color:#556777;text-transform:uppercase;letter-spacing:1px}.pv-title .sub{font-size:11px;color:#555;margin-top:4px}.summary-row{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}.sum-box{flex:1;min-width:100px;padding:8px;border:1.5px solid #556777;border-radius:8px;text-align:center}.sum-num{font-size:20px;font-weight:800;color:#556777}.sum-lbl{font-size:10px;color:#555;margin-top:2px}.cl-hdr{font-weight:800;font-size:13px;color:#556777;background:#e8f0fe;padding:6px 10px;border-left:4px solid #556777;border-radius:0 4px 4px 0;margin:16px 0 6px}.cl-stats{font-size:11px;font-weight:400;color:#555;margin-left:8px}table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11.5px}th{background:#556777;color:#fff;padding:6px 5px;text-align:left;font-size:10.5px}td{padding:5px;border-bottom:1px solid #e5e7eb;vertical-align:middle}.fail{background:#fff5f5}.total-row td{font-weight:700;background:#fff7ee;border-top:2px solid #556777}.pass{color:#1f9d6b}.fail-txt{color:#dc2626}.sig-section{margin-top:28px;border-top:2px solid #556777;padding-top:16px}.sig-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-bottom:20px}.sig-box{text-align:center}.sig-line{height:50px;border-bottom:1px solid #aaa;margin-bottom:6px}.sig-lbl{font-size:10px;color:#555}.footer{margin-top:16px;padding-top:8px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10px;color:#999}@media print{.print-bar{display:none}@page{margin:10mm;size:A4 portrait}}`;
+  const CSS = window._CSS_DOC;
   const hdr=`<div class="hdr"><div class="hl">${logoSrc?`<img src="${logoSrc}" class="logo" alt="">`:'<div style="width:54px;height:54px;background:#556777;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px">🏫</div>'}<div class="si"><h1>${esc(school)}</h1><div class="s">${esc(schoolSub)}</div>${dgep?`<div class="s">N° DGEP : ${esc(dgep)}</div>`:''}</div></div><div class="hr"><div>${esc(school)} · ${printDate}</div></div></div>`;
   const body=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>PV Délibération ${yr}</title><style>${CSS}</style></head><body>
   ${hdr}
@@ -26665,6 +26895,39 @@ R.settings = () => {
     <div class="form-group"><label class="form-label">🌍 Pays</label>
       <input class="form-input" id="cfg_school_country" value="${esc(sc.country||'')}" placeholder="Ex: République Démocratique du Congo">
     </div>
+
+    <!-- ══ LA CHAÎNE DE RESPONSABILITÉ ══
+         Un document scolaire congolais se lit de haut en bas comme une chaîne
+         de responsabilité : une administration qui le reçoit la REMONTE pour
+         savoir à qui s'adresser. Trois documents la portaient, en dur, et
+         nommaient un ministère QUI N'EXISTE PLUS — « EPSP », « ESU ». C'est
+         pour ça que ce sont des RÉGLAGES : le ministère a déjà changé de nom,
+         il changera encore, et une constante oblige à republier l'application
+         pour un changement qui ne la concerne pas.
+         Une valeur laissée vide ne s'imprime pas : ne rien afficher vaut
+         mieux qu'afficher faux sur un document officiel. -->
+    <div style="background:var(--bg);border-radius:12px;padding:12px 14px;margin:6px 0 12px">
+      <div style="font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px">En-tête des documents officiels</div>
+      <p style="font-size:11.5px;color:var(--text-secondary);margin:0 0 10px;line-height:1.55">
+        Ces quatre lignes s’impriment en haut des documents destinés à l’extérieur.
+        <b>Une ligne laissée vide ne s’imprime pas</b> — mieux vaut l’absence qu’un renseignement faux.</p>
+      <div class="form-group"><label class="form-label">🏛️ Ministère de tutelle</label>
+        <input class="form-input" id="cfg_school_ministere" value="${esc(sc.ministere||'')}" placeholder="Ex: Ministère de l’Éducation Nationale et Nouvelle Citoyenneté">
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">🗺️ Province éducationnelle</label>
+          <input class="form-input" id="cfg_school_province" value="${esc(sc.province||'')}" placeholder="Ex: Kinshasa-Est">
+        </div>
+        <div class="form-group"><label class="form-label">📍 Sous-division</label>
+          <input class="form-input" id="cfg_school_sub" value="${esc(sc.sub||'')}" placeholder="Ex: Barumbu">
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">🔢 Code école (SERNIE)</label>
+        <input class="form-input" id="cfg_school_code" value="${esc(sc.code_ecole||'')}" placeholder="Ex: 1401234567">
+        <p style="font-size:11px;color:var(--text-muted);margin:4px 0 0;line-height:1.5">
+          C’est ce numéro qu’une administration vérifie — pas un matricule interne.</p>
+      </div>
+    </div>
     <div class="form-group"><label class="form-label">💬 Devise / Motto</label>
       <input class="form-input" id="cfg_school_motto" value="${esc(sc.motto||'')}" placeholder="Ex: Apprendre, Réussir, Grandir">
     </div>
@@ -26915,6 +27178,13 @@ window.saveSettingsSchool = async () => {
   DB.settings.school.email=($('cfg_school_email')?.value||'').trim()||null;
   DB.settings.school.dgep=($('cfg_school_dgep')?.value||'').trim()||null;
   DB.settings.school.country=($('cfg_school_country')?.value||'').trim()||null;
+  // La chaîne de responsabilité. `sub` était LUE quinze fois et écrite nulle
+  // part : le champ mort exact que nos audits cherchent. Il a maintenant sa
+  // porte d'entrée.
+  DB.settings.school.ministere =($('cfg_school_ministere')?.value||'').trim()||null;
+  DB.settings.school.province  =($('cfg_school_province')?.value||'').trim()||null;
+  DB.settings.school.sub       =($('cfg_school_sub')?.value||'').trim()||null;
+  DB.settings.school.code_ecole=($('cfg_school_code')?.value||'').trim()||null;
   DB.settings.school.motto=($('cfg_school_motto')?.value||'').trim()||null;
   DB.settings.school.website=($('cfg_school_website')?.value||'').trim()||null;
   DB.settings.school.devise=$('cfg_school_devise')?.value||'$';
@@ -31101,12 +31371,11 @@ window.printTenafepList = () => {
       <div class="mobile-tip">📱 Sur téléphone Android / iPhone : appuyez sur le bouton → puis sélectionnez <strong>Enregistrer en PDF</strong></div>
     </div>
     <div class="doc-header">
-      <div style="font-size:11px;color:#5e6c78;margin-bottom:4px">REPUBLIQUE DEMOCRATIQUE DU CONGO · Ministère de l'EPSP</div>
-      ${_logoDoc(56)?`<div style="margin-bottom:10px">${_logoDoc(56)}</div>`:''}
+      <!-- La ligne « Ministère de l'EPSP » était écrite ICI, en dur. L'EPSP
+           n'existe plus. Une liste transmise au ministère qui nomme un
+           ministère disparu se fait refuser au guichet. -->
+      ${_enteteOfficiel()}
       <h1>🎓 LISTE OFFICIELLE ENAFEP — ${yr}</h1>
-      <p style="font-size:15px;font-weight:700;color:#1a2228">${sc.name||'SchoolSafe'}</p>
-      <p>${sc.address||sc.sub||''}</p>
-      ${sc.dgep?`<p>N° SECOPE/DGEP : ${sc.dgep}</p>`:''}
       <p style="margin-top:6px;font-size:12px;color:#5e6c78">Généré le ${new Date().toLocaleDateString('fr-FR')} · Total candidats : <strong>${allCM2.length}</strong></p>
     </div>
     <div class="stats">
@@ -31150,7 +31419,7 @@ R.exetat = () => {
     <div class="premium-section-title">🎓 EXETAT — ${year}</div>
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">Examen d'État — Diplôme de fin des Humanités (Baccalauréat congolais).</div>
     <div style="background:#e0f4fd;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0f5e85">
-      📋 Les résultats officiels de l'EXETAT sont publiés par le Ministère de l'ESU. Consultez le site officiel ou le tableau d'affichage de l'école pour les résultats définitifs.
+      📋 Les résultats officiels de l'EXETAT sont publiés par le ministère compétent. Consultez le site officiel ou le tableau d'affichage de l'école pour les résultats définitifs.
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
       <div style="background:#e0f4fd;border-radius:12px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:800;color:#0f7ea8">${allFin.length}</div><div style="font-size:10px;color:#6b7280">Candidats</div></div>
@@ -31188,7 +31457,7 @@ window.openExetatRecord = (sid) => {
   const rec=(DB.exetat||[]).find(t=>t.sid===sid)||{};
   openM(`🎓 EXETAT — ${esc(s.name)}`,`
   <div style="background:#e0f4fd;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0f5e85">
-    📋 Résultats EXETAT publiés par le Ministère de l'ESU — rapprochez-vous du délégué ou du tableau d'affichage officiel.
+    📋 Résultats EXETAT publiés par le ministère compétent — rapprochez-vous du délégué ou du tableau d'affichage officiel.
   </div>
   <div class="form-group"><label class="form-label">N° candidat EXETAT <span style="font-size:10px;color:var(--text-muted)">attribué par le jury</span></label>
     <input class="form-input" id="ext_code" value="${esc(rec.exetat_code||'')}" placeholder="Ex: 123456789" style="font-family:monospace;letter-spacing:1px">
@@ -31276,12 +31545,8 @@ window.printExetatList = () => {
       <div class="mobile-tip">📱 Sur téléphone Android / iPhone : appuyez sur le bouton → puis sélectionnez <strong>Enregistrer en PDF</strong></div>
     </div>
     <div class="doc-header">
-      <div style="font-size:11px;color:#5e6c78;margin-bottom:4px">REPUBLIQUE DEMOCRATIQUE DU CONGO · Ministère de l'ESU</div>
-      ${_logoDoc(56)?`<div style="margin-bottom:10px">${_logoDoc(56)}</div>`:''}
+      ${_enteteOfficiel()}
       <h1>🎓 LISTE OFFICIELLE EXETAT — ${yr}</h1>
-      <p style="font-size:15px;font-weight:700;color:#1a2228">${sc.name||'SchoolSafe'}</p>
-      <p>${sc.address||sc.sub||''}</p>
-      ${sc.dgep?`<p>N° SECOPE/DGEP : ${sc.dgep}</p>`:''}
       <p style="margin-top:6px;font-size:12px;color:#5e6c78">Généré le ${new Date().toLocaleDateString('fr-FR')} · Total finalistes : <strong>${allFin.length}</strong></p>
     </div>
     <div class="stats">
@@ -32884,7 +33149,7 @@ window.printPersonnelFichePaie = (salId) => {
   const [yr2,mo]=(sal.month||'?-?').split('-');
   const monthLabel=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][parseInt(mo)-1]||sal.month;
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fiche Paie — ${sal.person_name}</title>
-  <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;background:#fff;margin:0;padding:16px}.hdr{display:flex;justify-content:space-between;border-bottom:3px solid #556777;padding-bottom:10px;margin-bottom:14px}.emp{background:#f0f1f2;border-radius:10px;padding:12px 16px;margin-bottom:14px}.tbl{width:100%;border-collapse:collapse}.tbl td{padding:9px 12px;border-bottom:1px solid #dadee2}.tbl .tot{background:#556777;color:#fff;font-weight:800;font-size:15px}.sig{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:36px}.sig-line{border-top:2px solid #1a2228;padding-top:6px;font-size:11px;text-align:center}.foot{font-size:10px;color:#8896a2;text-align:center;margin-top:12px;border-top:1px solid #dadee2;padding-top:8px}@media print{@page{margin:8mm}body{padding:0}}</style>
+  <style>${window._CSS_DOC}</style>
   </head><body>
   <div class="hdr"><div style="display:flex;gap:11px;align-items:flex-start;min-width:0">${_logoDoc(46)}<div style="min-width:0"><strong style="font-size:15px;color:#556777">${esc(sc.name||'SchoolSafe')}</strong><br><span style="font-size:11px;color:#5e6c78">${esc(sc.address||'')}${sc.dgep?' · N° DGEP: '+esc(sc.dgep):''}</span></div></div>
   <div style="text-align:right"><span style="background:#556777;color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700">FICHE DE PAIE</span><br><span style="font-size:13px;font-weight:600;color:#1a2228">${monthLabel} ${yr2}</span></div></div>
@@ -32917,7 +33182,7 @@ window.printFichePaie = (teacherId, month) => {
   const monthLabel=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][parseInt(mo)-1]+' '+yr2;
   const sc=DB.settings.school||{};
   const _ficheHtml=`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fiche de paie — ${esc(u.name)} — ${monthLabel}</title>
-  <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#1a2228;background:#f0f1f2;margin:0}.page{max-width:680px;margin:0 auto;padding:20px}.dl-bar{background:linear-gradient(135deg,#1f9d6b,#047857);color:#fff;border-radius:14px;padding:18px 22px;text-align:center;margin-bottom:20px}.dl-bar h3{margin:0 0 6px;font-size:16px}.dl-bar p{margin:0 0 12px;font-size:12px;opacity:.85}.dl-btn{background:#fff;color:#1f9d6b;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #556777;padding-bottom:12px;margin-bottom:16px}.badge{background:#556777;color:#fff;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700}.emp-box{background:#f0f1f2;border-radius:10px;padding:12px 16px;margin-bottom:16px}.tbl{width:100%;border-collapse:collapse;margin:0;border-radius:10px;overflow:hidden}.tbl td{padding:10px 14px;border-bottom:1px solid #dadee2;font-size:14px}.tbl .plus{color:#1f9d6b;font-weight:700}.tbl .minus{color:#dc2626;font-weight:700}.tbl .rat{color:#657786;font-weight:700}.total-row td{background:#556777;color:#fff;font-weight:700;padding:14px 16px;font-size:16px}.status{text-align:center;font-size:12px;color:#5e6c78;background:#f0f1f2;padding:8px;border-radius:8px;margin:14px 0}.sig{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:36px;text-align:center}.sig-line{border-top:2px solid #1a2228;padding-top:8px;font-size:12px}.conf{font-size:11px;color:#5e6c78;text-align:center;margin-top:16px;padding-top:10px;border-top:1px solid #dadee2}@media print{.dl-bar{display:none!important}.page{padding:0;max-width:100%}body{background:#fff}}</style>
+  <style>${window._CSS_DOC}</style>
   </head><body><div class="page">
   <div class="dl-bar">
     <h3>📄 Fiche de paie prête</h3>
@@ -32965,7 +33230,7 @@ R.rapport_secope = () => {
   return `
   <div class="premium-section" style="border-left:4px solid #243a6b">
     <div class="premium-section-title">📄 Rapport SECOPE / MEPSP</div>
-    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Rapport statistique officiel pour le Ministère de l'EPSP — ${DB.settings.year||'2025-2026'}.</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Rapport statistique officiel pour le ministère de tutelle — ${DB.settings.year||'2025-2026'}. Le ministère se règle dans Paramètres → École.</div>
     <button class="btn btn-primary" style="width:100%" onclick="printRapportSecope()">💾 Télécharger le rapport officiel (PDF)</button>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
@@ -32991,15 +33256,10 @@ window.printRapportSecope = () => {
   const _secopeHtml=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rapport SECOPE ${yr}</title>
   <style>body{font-family:Arial,sans-serif;margin:20px;color:#1a2228}h1,h2{color:#556777}table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}th{background:#556777;color:#fff;padding:8px 10px;text-align:left}td{padding:7px 10px;border-bottom:1px solid #dadee2}.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:14px 0}.stat{background:#f0f1f2;border:1px solid #dadee2;border-radius:8px;padding:12px;text-align:center}.stat-n{font-size:24px;font-weight:800;color:#556777}.stat-l{font-size:11px;color:#5e6c78}.sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:40px;text-align:center}.sig-line{border-top:2px solid #1a2228;padding-top:8px;font-size:11px}@media print{body{margin:8px}}</style>
   </head><body>
-  <div style="text-align:center;border-bottom:3px solid #556777;padding-bottom:16px;margin-bottom:20px">
-    ${_logoDoc(56)?`<div style="margin-bottom:10px">${_logoDoc(56)}</div>`:''}
-    <div style="font-size:12px;color:#5e6c78">REPUBLIQUE DEMOCRATIQUE DU CONGO</div>
-    ${sc.country?`<div style="font-size:12px;color:#5e6c78">${sc.country}</div>`:''}
-    <h1 style="margin:8px 0">RAPPORT STATISTIQUE ANNUEL</h1>
-    <h2 style="margin:4px 0;color:#657786">${sc.name||'SchoolSafe'}</h2>
-    <div style="font-size:13px">${sc.address||sc.sub||''}</div>
-    ${sc.dgep?`<div style="font-size:12px;color:#5e6c78">N° DGEP/SECOPE : ${sc.dgep}</div>`:''}
-    <div style="font-size:13px;font-weight:700;margin-top:6px">Année scolaire : ${yr}</div>
+  <div style="margin-bottom:20px">
+    ${_enteteOfficiel()}
+    <h1 style="margin:8px 0;text-align:center">RAPPORT STATISTIQUE ANNUEL</h1>
+    <div style="font-size:13px;font-weight:700;text-align:center">Année scolaire : ${yr}</div>
   </div>
   <div class="grid">
     <div class="stat"><div class="stat-n">${studs.length}</div><div class="stat-l">Élèves inscrits</div></div>
@@ -33066,7 +33326,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if(np) np.addEventListener('keydown', e=>{ if(e.key==='Enter' && cp) cp.focus(); });
   if(cp) cp.addEventListener('keydown', e=>{ if(e.key==='Enter') window._completePasswordSetup(); });
 
-  // Splash — tap immédiat ou auto après 1.5s
+  // Splash — il attend un appui. Il n'y a AUCUNE minuterie : le commentaire
+  // annonçait « auto après 1.5s » et rien ne l'a jamais fait. Un commentaire
+  // qui décrit un comportement absent envoie chercher au mauvais endroit le
+  // jour où quelqu'un se demande pourquoi l'ouverture paraît lente.
   const splash=$('SPLASH');
   window._splashGone = false;
   const goLogin=async()=>{ 
