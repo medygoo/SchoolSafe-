@@ -32,15 +32,17 @@ jobs:
 
       - name: Frontend checks
         run: |
+          set -euxo pipefail
           node --check dist/messages-frontend-v2.js
-          grep -Fq '<script src="messages-frontend-v2.js?v=20260812" defer></script>' dist/index.html
-          grep -Fq "parent_to_dir" dist/messages-frontend-v2.js
-          grep -Fq "openForwardParentMessage" dist/messages-frontend-v2.js
-          grep -Fq "sendForwardParentMessage" dist/messages-frontend-v2.js
-          grep -Fq "openRelayTeacherMessage" dist/messages-frontend-v2.js
-          grep -Fq "sendRelayTeacherMessage" dist/messages-frontend-v2.js
-          grep -Fq "openArchivedMessages" dist/messages-frontend-v2.js
-          grep -Fq "teacher_broadcast" dist/messages-frontend-v2.js
+          grep -F '<script src="messages-frontend-v2.js?v=20260812" defer></script>' dist/index.html >/dev/null
+          grep -F "parent_to_dir" dist/messages-frontend-v2.js >/dev/null
+          grep -F "openForwardParentMessage" dist/messages-frontend-v2.js >/dev/null
+          grep -F "sendForwardParentMessage" dist/messages-frontend-v2.js >/dev/null
+          grep -F "openRelayTeacherMessage" dist/messages-frontend-v2.js >/dev/null
+          grep -F "sendRelayTeacherMessage" dist/messages-frontend-v2.js >/dev/null
+          grep -F "openArchivedMessages" dist/messages-frontend-v2.js >/dev/null
+          grep -F "return original.openComposeMsg()" dist/messages-frontend-v2.js >/dev/null
+          grep -F "return original.sendMsg(mode)" dist/messages-frontend-v2.js >/dev/null
           test "$(grep -Fc '<script src=\"messages-frontend-v2.js?v=20260812\" defer></script>' dist/index.html)" -eq 1
 
       - name: Commit branch integration
