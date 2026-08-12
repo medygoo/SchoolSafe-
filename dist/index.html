@@ -30548,7 +30548,17 @@ window._carteRoundRect = (c, x, y, w, h, r) => {
 };
 
 // Rend un Blob PNG de la carte, remplie avec les VRAIES informations.
+// ⚠️ ELLE NE JETTE JAMAIS. La carte est un CONFORT ; le code est la seule
+// chose qui compte. `toBlob` lève une `SecurityError` sur un canvas contaminé,
+// `getContext` rend `null` quand la mémoire manque sur un téléphone d'entrée
+// de gamme, et une police absente peut faire échouer `measureText`. Chacun de
+// ces incidents faisait tomber TOUT l'envoi — voir `_envoyerLienWhatsApp`.
 window._dessinerCarteAcces = async (ids, code) => {
+  try { return await window._dessinerCarteAccesImpl(ids, code); }
+  catch (e) { console.warn('[carte accès]', e && e.message); return null; }
+};
+
+window._dessinerCarteAccesImpl = async (ids, code) => {
   const L = 1120, H = 1400;
   const cv = document.createElement('canvas');
   cv.width = L; cv.height = H;
@@ -30678,8 +30688,13 @@ window.ouvrirCarteAcces = async (uid, code, expiresAt, action) => {
   if (!u) { toast('Compte introuvable — rechargez', 'error'); return; }
   const ids = window._identifiantsDe(u);
   const msg = window._messageAccesWhatsApp(ids, code, expiresAt);
-  const blob = await window._dessinerCarteAcces(ids, code);
-  const url = blob ? URL.createObjectURL(blob) : null;
+  // Même ceinture ici : `URL.createObjectURL` peut échouer, et une carte
+  // manquante ne doit jamais coûter un code.
+  let blob = null, url = null;
+  try {
+    blob = await window._dessinerCarteAcces(ids, code);
+    url = blob ? URL.createObjectURL(blob) : null;
+  } catch (e) { console.warn('[carte accès]', e && e.message); }
   window._carteEnCours = { uid, blob, url, msg, tel: ids.tel, nom: u.name };
 
   // Ce qui manque se dit ici, à la Direction, et JAMAIS dans le message du
@@ -30690,8 +30705,9 @@ window.ouvrirCarteAcces = async (uid, code, expiresAt, action) => {
 
   openM(`📇 Accès de ${esc(u.name)}`, `
   ${url ? `<img src="${url}" alt="Carte de première connexion" style="width:100%;border-radius:14px;display:block;margin-bottom:12px">`
-        : `<div style="padding:14px;background:#fef3c7;color:#92400e;border-radius:10px;margin-bottom:12px;font-size:13px">
-             La carte n’a pas pu être dessinée sur cet appareil. Le message ci-dessous, lui, est prêt.</div>`}
+        : `<div style="padding:14px;background:#fef3c7;color:#92400e;border-radius:10px;margin-bottom:12px;font-size:13px;line-height:1.55">
+             La carte n’a pas pu être dessinée sur cet appareil. Le message ci-dessous, lui, est prêt.<br>
+             <strong>Notez le code avant de fermer : il ne sera plus jamais réaffiché.</strong></div>`}
   <div style="font-size:12.5px;line-height:1.6;background:var(--bg);border-radius:10px;padding:10px 13px;margin-bottom:10px">
     <strong>WhatsApp ne peut pas joindre l’image tout seul.</strong> Partagez d’abord la carte,
     puis ouvrez WhatsApp pour le texte — ou envoyez seulement le texte, il suffit pour se connecter.
@@ -30816,10 +30832,61 @@ window._envoyerLienWhatsApp = async (uid, confirmerRemplacement) => {
     // Le serveur vient d'invalider l'accès temporaire précédent : le compte
     // doit de nouveau créer son mot de passe. C'est ce que dit `must_change_password`.
     u.must_change_password = true;
-    await window.ouvrirCarteAcces(uid, code, r.data.expires_at, action);
+    // ═══════════════════════════════════════════════════════════════════
+    //  LE CODE NE SE PERD PLUS — Loms, 12 août 2026 : « ça ne fonctionne pas »
+    // ═══════════════════════════════════════════════════════════════════
+    //
+    //  À cet instant, LE SERVEUR A DÉJÀ AGI : le code est posé comme mot de
+    //  passe Auth, l'accès précédent est invalidé, et le délai d'une minute
+    //  court. Le code n'est rendu QU'UNE FOIS et n'est enregistré nulle part.
+    //
+    //  Or toute la chaîne d'affichage — dessin du canvas, `toBlob`,
+    //  `createObjectURL`, la modale — était appelée SANS aucun `catch`. Un
+    //  seul incident et l'écran ne montrait RIEN, alors que le compte venait
+    //  de basculer. La Direction rappuyait : `TOO_SOON`. La personne, elle,
+    //  ne pouvait plus entrer avec son ancien accès, et n'avait pas le
+    //  nouveau. C'est exactement « l'invitation WhatsApp ne fonctionne pas ».
+    //
+    //  Le code passe donc AVANT tout le reste, et rien de ce qui l'affiche ne
+    //  peut plus le faire disparaître.
+    try {
+      await window.ouvrirCarteAcces(uid, code, r.data.expires_at, action);
+    } catch (e) {
+      console.warn('[accès WhatsApp] affichage', e && e.message);
+      window._carteDeSecours(u, ids0(u), code, r.data.expires_at);
+    }
     toast(`Accès ${action==='reset'?'réinitialisé':'ouvert'} pour ${u.name} — le code expire dans ${mins} min`, 'success');
     render();
+  } catch (e) {
+    // Dernier filet : si quoi que ce soit d'autre a lâché APRÈS que le serveur
+    // a rendu le code, on le montre quand même. Un code perdu ne se rattrape
+    // pas — il faut attendre une minute et recommencer, en ayant coupé l'accès
+    // de quelqu'un entre-temps.
+    console.warn('[accès WhatsApp]', e && e.message);
+    toast('L’écran a rencontré un incident — le code est ci-dessous, notez-le', 'warning');
   } finally { _fin(); }
+};
+
+// Les identifiants, sans jamais jeter : le filet ne doit pas tomber lui aussi.
+const ids0 = (u) => { try { return window._identifiantsDe(u); } catch (_) { return { tel:null, abrev:null, login:null }; } };
+
+// ── LE FILET : le code, en clair, sans carte et sans fioritures ───────────
+// Il ne s'ouvre que quand l'affichage normal a échoué. Il ne dessine rien, ne
+// charge aucune image, n'appelle aucun canvas — pour ne pas échouer à son tour.
+window._carteDeSecours = (u, ids, code, expiresAt) => {
+  const msg = window._messageAccesWhatsApp(ids, code, expiresAt);
+  const lien = window.waLink(ids.tel, msg);
+  openM(`📇 Code d’accès de ${esc(u.name)}`, `
+  <div style="background:#fef3c7;color:#92400e;border-radius:10px;padding:11px 13px;margin-bottom:11px;font-size:12.5px;line-height:1.55">
+    La carte n’a pas pu être dessinée sur cet appareil. <strong>Le code ci-dessous est valable</strong> —
+    il vient d’être posé sur le compte et ne sera plus jamais réaffiché.</div>
+  <div style="text-align:center;background:var(--bg);border-radius:12px;padding:14px;margin-bottom:11px">
+    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">Code temporaire</div>
+    <div style="font-family:monospace;font-size:27px;font-weight:900;letter-spacing:2px;margin-top:5px">${esc(code)}</div>
+  </div>
+  <pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.55;background:var(--bg);border-radius:10px;padding:11px 13px;margin:0">${esc(msg)}</pre>`,
+  `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`
+  + (lien ? `<button class="btn btn-primary" onclick="window.open(${JSON.stringify(lien)},'_blank','noopener')">💬 Ouvrir WhatsApp</button>` : ''));
 };
 
 window.resetParentPin = async (uid) => {

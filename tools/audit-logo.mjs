@@ -189,7 +189,12 @@ const debutsDocuments = new Set(sorties.map(x => debutFonction(x.ligne - 1)));
   // PIÈCE qu'on remet à quelqu'un. L'emblème y est à sa place ; ce que la
   // frontière interdit, c'est qu'il reparaisse dans la barre latérale ou
   // l'écran de connexion.
-  const OK_DOC = new Set(['_logoDoc', 'ssBuildBadge', 'ssBuildCarte', '_dessinerCarteAcces']);
+  // `_dessinerCarteAccesImpl` est le vrai dessin de la carte d'accès ; le nom
+// sans suffixe n'est plus qu'une enveloppe qui l'entoure d'un `catch`. Le
+// renommage a fait sortir un DOCUMENT de cette liste, et l'outil l'a vu — c'est
+// exactement ce qu'on lui demande. Les deux y sont désormais.
+const OK_DOC = new Set(['_logoDoc', 'ssBuildBadge', 'ssBuildCarte',
+                        '_dessinerCarteAcces', '_dessinerCarteAccesImpl']);
   let hors = 0;
   lignes.forEach((l, i) => {
     if (!/SCHOOL_LOGO_DOC/.test(l)) return;
