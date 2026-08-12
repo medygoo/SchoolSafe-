@@ -11320,7 +11320,19 @@ window._simpleList = (role, icon, gradient) => {
             ${window._boutonAcces(u)}
             <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
             ${(u.email||'').trim()?`<button class="btn btn-outline btn-sm" onclick="resetUserPin('${u.id}')" title="Envoyer l'invitation ou le lien par courriel">🔑 Accès</button>`:''}
-            <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
+            <!-- « Suppr. » a disparu, et ce n'est pas un oubli : un compte ne se
+                 supprime pas, il se SUSPEND ou son accès se RETIRE. Le jour où
+                 quelqu'un demande « qui avait accès en octobre ? », c'est cette
+                 ligne-là qu'on relit. La rangée passe à la ligne depuis #99,
+                 mesurée à 390 px, au lieu d'écraser des boutons ou d'en
+                 pousser un hors du cadre.
+                 (Aucun accent grave ici : nous sommes DANS un littéral de
+                 gabarit, et un accent grave y ferme la chaîne — la faute du
+                 11 août, qui empêchait l'application de démarrer.) -->
+            ${(u.status==='suspended'
+                ? `<button class="btn btn-sm" style="min-height:36px;background:#dcfce7;border:1.5px solid #6ee7b7;color:#15603f;font-weight:700" onclick="reactiverCompte('${u.id}')">Réactiver</button>`
+                : `<button class="btn btn-sm" style="min-height:36px;background:#fef3c7;border:1.5px solid #fcd34d;color:#92400e;font-weight:700" onclick="suspendreCompte('${u.id}')">Suspendre</button>`)}
+            ${S.user.role==='direction'&&u.status!=='removed'?`<button class="btn btn-danger btn-sm" onclick="retirerAccesCompte('${u.id}')">Retirer l’accès</button>`:''}
           </span>
         </div>
       </div>
@@ -12007,47 +12019,99 @@ window.renvoyerInvitation = async (uid) => {
   } finally { if (typeof _fin === 'function') _fin(); }
 };
 
-window.deleteUser = (uid) => {
-  const u=DB.users.find(x=>x.id===uid); if(!u) return;
-  if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
-  if(S.user.role==='direction2' && !window._d2PeutToucher(u.role)){toast('Direction 1 et Caisse ne se suppriment que depuis Direction 1','error');return;}
-  const linked=DB.students.filter(s=>s.pid===uid);
-  showC(`Supprimer ${u.name} ?`,linked.length?`⚠️ ${linked.length} élève(s) lié(s) — le lien parent sera retiré.`:'Cette action est irréversible.',()=>{
-    linked.forEach(s=>{s.pid=null;});
-    if(linked.length){const _sids=linked.map(s=>s.id).join(',');pushSync('students','patch',{pid:null},'id=in.('+_sids+')');}
-    const _clsFr=DB.classes.filter(c=>c.teacher_id===uid);
-    const _clsEn=DB.classes.filter(c=>c.teacher_id_en===uid);
-    // Le titulaire était oublié : la classe gardait une référence vers un
-    // compte disparu, et son en-tête affichait un titulaire introuvable.
-    const _clsTit=DB.classes.filter(c=>c.titulaire_id===uid);
-    _clsFr.forEach(c=>{c.teacher_id=null;});
-    _clsEn.forEach(c=>{c.teacher_id_en=null;});
-    _clsTit.forEach(c=>{c.titulaire_id=null;});
-    if(_clsFr.length) pushSync('classes','patch',{teacher_id:null},'id=in.('+_clsFr.map(c=>c.id).join(',')+')');
-    if(_clsEn.length) pushSync('classes','patch',{teacher_id_en:null},'id=in.('+_clsEn.map(c=>c.id).join(',')+')');
-    if(_clsTit.length) pushSync('classes','patch',{titulaire_id:null},'id=in.('+_clsTit.map(c=>c.id).join(',')+')');
+// ════════════════════════════════════════════════════════════════════════════
+//  LE CYCLE DE VIE D'UN COMPTE — P0-13, servi par ChatGPT
+// ════════════════════════════════════════════════════════════════════════════
+//
+//  CE QUE FAISAIT L'APPLICATION, ET CE QUE ÇA COÛTAIT
+//
+//  `deleteUser` faisait `pushSync('users','delete')` — une SUPPRESSION SÈCHE
+//  de la ligne. Trois conséquences, et la troisième est la pire :
+//
+//   1. **L'historique disparaissait avec la personne.** Salaires versés,
+//      encaissements, lignes d'audit, notifications envoyées : tout référence
+//      ce compte. Le jour où une administration demande « qui a encaissé
+//      en octobre ? », le nom n'existe plus.
+//   2. **L'accès n'était PAS retiré.** Supprimer la ligne applicative ne
+//      touche pas l'identité d'authentification. La personne « supprimée »
+//      pouvait encore se connecter — l'écran disait « supprimé », le serveur
+//      la laissait entrer.
+//   3. Rien ne protégeait le DERNIER compte de Direction. Le supprimer
+//      fermait l'école à tout le monde, définitivement.
+//
+//  ── CE QUE LE SERVEUR SERT, ET QUE PERSONNE N'APPELAIT ────────────────────
+//
+//      suspend_school_account(app_user_id, reason)      motif ≥ 5 caractères
+//      reactivate_school_account(app_user_id)
+//      Edge Function `remove-school-account`(app_user_id, reason)
+//
+//  ⚠️ CORRIGÉ LE 12 AOÛT 2026 — ChatGPT, PR #85. Ce commentaire décrivait un
+//  retrait en TROIS appels depuis le navigateur : préparer, retirer, confirmer.
+//  Son audit du vrai Supabase a tranché : `prepare_school_account_removal` et
+//  `confirm_school_account_removal` sont **service_role UNIQUEMENT**, et
+//  l'Edge Function exécute déjà les trois étapes elle-même.
+//
+//  Les appeler depuis ici, c'était la panne du 5 août recommencée — une
+//  fonction fermée au navigateur, appelée quand même, refusée en silence. Un
+//  seul appel désormais, et le serveur tient les trois temps dans sa propre
+//  transaction : l'identité ne peut plus être retirée sans que la confirmation
+//  suive.
+//
+//  **Une leçon périmée est plus dangereuse qu'une leçon absente** — celle-ci
+//  a été réécrite plutôt qu'effacée, pour reconnaître un vieux code qui la
+//  suivrait encore.
+//
+//  **La ligne n'est jamais supprimée.** Son statut change, et l'historique
+//  reste entier.
 
-    // Le nettoyage des notifications et des appareils appartient au SERVEUR,
-    // et il y est resté sans qu'on le sache. Deux écritures ont été retirées
-    // le 10 août 2026 :
-    //
-    //  · `pushSync('notifs','delete')` — le contrat P0-30 dit qu'une
-    //    notification n'est JAMAIS supprimée. Elle est la preuve que l'école
-    //    a prévenu, et cette preuve survit au compte qui la recevait ;
-    //  · `pushSync('push_subscriptions','delete')` — la table est en refus
-    //    total depuis `p0_32a_explicit_device_registry_deny_policy`. Cette
-    //    ligne ne pouvait pas aboutir, et rien ne le disait.
-    //
-    // On retire seulement le miroir local, pour que l'écran cesse d'afficher
-    // les notifications d'un compte parti.
-    DB.notifs=(DB.notifs||[]).filter(x=>x.uid!==uid);
+window._COMPTE_REFUS = {
+  FORBIDDEN:                   'Votre profil ne permet pas cette opération.',
+  FORBIDDEN_TARGET_ROLE:       'Direction 2 ne touche pas ce profil-là. Passez par Direction 1.',
+  ACTOR_NOT_FOUND:             'Votre compte n’est pas reconnu par le serveur.',
+  TARGET_NOT_FOUND:            'Ce compte n’existe plus.',
+  REASON_REQUIRED:             'Le motif est obligatoire, et d’au moins cinq caractères.',
+  INVALID_REASON:              'Le motif doit faire entre 5 et 500 caractères.',
+  VALIDATION_ERROR:            'Le serveur refuse une des valeurs envoyées.',
+  CANNOT_SUSPEND_CURRENT_ACCOUNT:'Vous ne pouvez pas suspendre votre propre compte.',
+  CANNOT_REMOVE_CURRENT_ACCOUNT: 'Vous ne pouvez pas retirer votre propre accès.',
+  LAST_DIRECTION_ACCOUNT:      'C’est le DERNIER compte de Direction actif. Le retirer fermerait l’école à tout le monde. Créez d’abord une autre Direction.',
+  AUTH_IDENTITY_STILL_PRESENT: 'L’accès de connexion n’a pas encore été retiré du serveur. Recommencez dans un instant.',
+  AUTH_IDENTITY_MISMATCH:      'L’identité retirée ne correspond pas à ce compte. Prévenez ChatGPT — ne recommencez pas.',
+  AUTH_REQUIRED:               'Vous n’êtes pas connecté au serveur.',
+  RPC_REFUSED:                 'Le serveur a refusé sans préciser.',
+  PGRST202:                    'Cette opération n’est pas encore servie par ce serveur.',
+};
+window._compteRefus = (c) => _COMPTE_REFUS[c] || ('Refus du serveur : ' + (c || 'inconnu'));
 
-    DB.users=DB.users.filter(x=>x.id!==uid);
-    pushSync('users','delete',{},'id=eq.'+uid);
-    logAudit('user_delete', `${u.name} — ${u.role}`, uid);
-    toast(`🗑️ ${u.name} supprimé`,'info');
-    saveToCrypt(); render();
-  });
+// Ce qu'un compte devient, dit dans la langue de l'école.
+window._COMPTE_ETATS = {
+  active:    {l:'Actif',            c:'#1f9d6b', bg:'#f0fdf4', b:'#6ee7b7'},
+  suspended: {l:'Suspendu',         c:'#d98a2b', bg:'#fffbeb', b:'#fcd34d'},
+  removed:   {l:'Accès retiré',     c:'#6b7280', bg:'#f8fafc', b:'#e2e8f0'},
+  inactive:  {l:'Inactif',          c:'#6b7280', bg:'#f8fafc', b:'#e2e8f0'},
+};
+window._compteEtat = (u) => _COMPTE_ETATS[u && u.status] || _COMPTE_ETATS.active;
+
+// ── SUSPENDRE ─────────────────────────────────────────────────────────────
+// Réversible, et c'est ce qui la distingue du retrait : un enseignant en
+// congé, un compte prêté, un doute. On suspend, on réactive.
+window.suspendreCompte = (uid) => {
+  const u = (DB.users||[]).find(x => x.id === uid); if (!u) return;
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Accès non autorisé', 'error'); return;
+  }
+  openM(`Suspendre le compte de ${u.name}`, `
+<div style="padding:2px">
+  <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:13px;color:#92400e;line-height:1.55">
+    <b>${esc(u.name)} ne pourra plus se connecter</b>, dès la validation.<br>
+    Son travail reste entier — bulletins, encaissements, historique. La
+    suspension <b>se défait</b> quand vous le décidez.</div>
+  <label class="form-label">Motif <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="cptMotif" maxlength="500" placeholder="Ex. congé sans solde jusqu’en janvier">
+  <p style="font-size:11.5px;color:var(--text-muted);margin:8px 0 0">Au moins cinq caractères — c’est ce que le serveur exige, et c’est ce qui reste au registre.</p>
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-danger" onclick="confirmerSuspension(${JSON.stringify(uid)})">Suspendre</button>`);
 };
 
 R.teachers = () => _simpleList('enseignant','●','linear-gradient(90deg,#2fbf8f,#1f9d6b)');
@@ -12172,6 +12236,136 @@ R.parents = () => {
     }).join('')}
   </div>`}`);
 };
+
+window.confirmerSuspension = async (uid) => {
+  const motif = (document.getElementById('cptMotif')?.value || '').trim();
+  if (motif.length < 5) { markFieldError('cptMotif', 'Au moins cinq caractères.'); return; }
+  const r = await _rpc('suspend_school_account', { p_app_user_id: uid, p_reason: motif });
+  if (!r.ok) { toast(_compteRefus(r.code), 'error'); return; }
+  const u = (DB.users||[]).find(x => x.id === uid);
+  if (u && r.data.user) Object.assign(u, r.data.user);
+  saveToCrypt(); closeModal();
+  logAudit('account_suspend', `${u ? u.name : uid} — ${motif}`, uid);
+  toast(`${u ? u.name : 'Compte'} suspendu`, 'success');
+  render();
+};
+
+window.reactiverCompte = (uid) => {
+  const u = (DB.users||[]).find(x => x.id === uid); if (!u) return;
+  if (!S.user || !['direction','direction2'].includes(S.user.role)) {
+    toast('Accès non autorisé', 'error'); return;
+  }
+  showC(`Réactiver ${u.name} ?`,
+    'Le compte pourra de nouveau se connecter, avec les mêmes droits qu’avant.',
+    async () => {
+      const r = await _rpc('reactivate_school_account', { p_app_user_id: uid });
+      if (!r.ok) { toast(_compteRefus(r.code), 'error'); return; }
+      if (r.data.user) Object.assign(u, r.data.user);
+      saveToCrypt();
+      logAudit('account_reactivate', u.name, uid);
+      toast(`${u.name} peut de nouveau se connecter`, 'success');
+      render();
+    });
+};
+
+// ── RETIRER L'ACCÈS — TROIS TEMPS, ET AUCUNE SUPPRESSION ──────────────────
+window.retirerAccesCompte = (uid) => {
+  const u = (DB.users||[]).find(x => x.id === uid); if (!u) return;
+  // Le serveur réserve le retrait à Direction 1 (`v_actor_role<>'direction'`).
+  if (!S.user || S.user.role !== 'direction') {
+    toast('Seule la Direction 1 retire un accès', 'error'); return;
+  }
+  const eleves = (DB.students||[]).filter(s => s.pid === uid);
+  const classes = (DB.classes||[]).filter(c =>
+    c.teacher_id === uid || c.teacher_id_en === uid || c.titulaire_id === uid);
+  openM(`Retirer l’accès de ${u.name}`, `
+<div style="padding:2px">
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:11px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#991b1b;line-height:1.6">
+    <b>${esc(u.name)} ne pourra plus jamais se connecter avec cet accès.</b><br>
+    Son identité de connexion est retirée du serveur.</div>
+  <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#15603f;line-height:1.6">
+    <b>Rien n’est supprimé.</b> Son nom reste sur les reçus qu’elle a établis,
+    sur les bulletins qu’elle a signés, dans le journal de l’école. C’est ce
+    qui permet de répondre, dans dix ans, à « qui a fait cela ? ».</div>
+  ${eleves.length||classes.length?`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#92400e;line-height:1.55">
+    <b>À reprendre après :</b>
+    ${eleves.length?`<br>· ${eleves.length} élève${eleves.length>1?'s ont':' a'} ce compte pour parent principal`:''}
+    ${classes.length?`<br>· ${classes.length} classe${classes.length>1?'s lui sont attribuées':' lui est attribuée'}`:''}
+    </div>`:''}
+  <label class="form-label">Motif <span style="color:#dc2626">obligatoire</span></label>
+  <input class="form-input" id="cptMotif" maxlength="500" placeholder="Ex. a quitté l’école le 30 juin">
+</div>`,
+    `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+     <button class="btn btn-danger" onclick="confirmerRetraitAcces(${JSON.stringify(uid)})">Retirer l’accès</button>`);
+};
+
+window.confirmerRetraitAcces = async (uid) => {
+  if (!S.user || S.user.role !== 'direction') return;
+  const motif = (document.getElementById('cptMotif')?.value || '').trim();
+  if (motif.length < 5) { markFieldError('cptMotif', 'Au moins cinq caractères.'); return; }
+  const u = (DB.users||[]).find(x => x.id === uid); if (!u) return;
+
+  // L'identité Auth de celui qui agit, telle que le serveur l'attend.
+  const monAuth = S.user.auth_user_id
+    || ((DB.users||[]).find(x => x.id === S.user.id) || {}).auth_user_id || null;
+  if (!monAuth) {
+    toast('Votre identité de connexion n’est pas connue de l’application — reconnectez-vous', 'error');
+    return;
+  }
+  // ═══════════════════════════════════════════════════════════════════════
+  //  UN SEUL APPEL — ChatGPT, PR #85, 11 août 2026
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  //  Cet écran faisait TROIS appels : `prepare_school_account_removal`, puis
+  //  l'Edge Function, puis `confirm_school_account_removal`. ChatGPT a audité
+  //  le vrai Supabase et tranché :
+  //
+  //    « `prepare_school_account_removal` et `confirm_school_account_removal`
+  //      sont service_role UNIQUEMENT ; l'Edge Function `remove-school-account`
+  //      exécute déjà elle-même préparation → suppression Auth → confirmation. »
+  //
+  //  Les deux appels de bout étaient donc **refusés en silence** depuis le
+  //  navigateur. C'est exactement la panne du 5 août, à l'identique :
+  //  `prepare_account_invitation` était fermée, je l'appelais quand même, et
+  //  chaque invitation était refusée sans un mot pendant des jours.
+  //
+  //  > **Un contrôle serveur qui refuse n'est pas un obstacle à contourner.**
+  //  > Obéir au contrat aurait évité la panne ; le contourner l'a créée.
+  //
+  //  Un seul appel, donc, et c'est le serveur qui tient les trois étapes dans
+  //  sa propre transaction — ce qui règle aussi le pire cas de l'ancien
+  //  parcours : l'identité retirée sans que la confirmation passe.
+  const e = await _edgeFn('remove-school-account', { app_user_id: uid, reason: motif });
+  if (!e.ok) {
+    openM('L’accès n’a pas pu être retiré', `
+<div style="padding:4px 2px">
+  <p style="margin:0 0 10px"><b>${esc(u.name)}</b></p>
+  <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:11px;padding:12px 14px;color:#991b1b;font-size:14px;line-height:1.55">
+    ${esc(_compteRefus(e.code))}</div>
+  <p style="font-size:12.5px;color:var(--text-secondary);margin:10px 0 0;line-height:1.6">
+    <b>Rien n’a été retiré</b> : le serveur tient les trois étapes ensemble,
+    donc cette personne peut encore se connecter exactement comme avant.
+    <b>Suspendez son compte</b> en attendant, pour fermer l’accès tout de
+    suite.</p>
+  <p style="font-size:11.5px;color:var(--text-muted);margin:8px 0 0">Code serveur : <span style="font-family:monospace">${esc(e.code||'—')}</span></p>
+</div>`,
+      `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>
+       <button class="btn btn-danger" onclick="closeModal();suspendreCompte(${JSON.stringify(uid)})">Suspendre maintenant</button>`);
+    return;
+  }
+
+  // On REFLÈTE ce que l'Edge Function a conclu. Elle a déjà préparé, retiré
+  // l'identité Auth et confirmé : il n'y a plus rien à décider ici.
+  const d = (e.data && e.data.user) || e.data || {};
+  u.status = d.status || 'removed';
+  u.auth_user_id = null;
+  u.access_removed_at = d.access_removed_at || null;
+  saveToCrypt(); closeModal();
+  logAudit('account_access_removed', `${u.name} — ${motif}`, uid);
+  toast(`${u.name} ne peut plus se connecter — son historique est conservé`, 'success');
+  render();
+};
+
 window._parQ = '';
 
 // ── CLASSES CRUD ──
@@ -29577,7 +29771,10 @@ R.accounts = () => {
             ${u.phone?waBtn(u.phone,u.name):''}
             ${window._boutonAcces(u)}
             <button class="btn btn-outline btn-sm" onclick="openUserForm('${role}','${u.id}')">Modifier</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}')">Suppr.</button>
+            ${(u.status==='suspended'
+              ? `<button class="btn btn-sm" style="background:#dcfce7;border:1.5px solid #6ee7b7;color:#15603f;font-weight:700" onclick="reactiverCompte('${u.id}')">Réactiver</button>`
+              : `<button class="btn btn-sm" style="background:#fef3c7;border:1.5px solid #fcd34d;color:#92400e;font-weight:700" onclick="suspendreCompte('${u.id}')">Suspendre</button>`)}
+            ${S.user.role==='direction'&&u.status!=='removed'?`<button class="btn btn-danger btn-sm" onclick="retirerAccesCompte('${u.id}')">Retirer l’accès</button>`:''}
           </div>
         </div>`).join('')}
       </div>`}
@@ -30361,6 +30558,19 @@ window._peutOuvrirAcces = (acteurRole, cibleRole) => {
 //  endroit le jour où quelqu'un n'arrive pas à entrer.
 window._etatAccesCompte = (u) => {
   if (!u) return { cle:'inconnu', texte:'—', bg:'#f3f4f6', fg:'#6b7280' };
+  // ── L'ÉTAT DU COMPTE PASSE AVANT SON CANAL D'ACCÈS ────────────────────
+  // Un compte suspendu ou dont l'accès a été retiré ne se connecte plus,
+  // quel que soit son canal. Afficher « code envoyé » sur un compte suspendu
+  // enverrait la Direction renvoyer un code à quelqu'un qu'elle vient
+  // elle-même de fermer — c'est la leçon de la pastille qui ment sur un état.
+  if (u.status === 'suspended')
+    return { cle:'suspendu', texte:'Suspendu',
+             titre:'Ce compte ne peut plus se connecter — la suspension se défait',
+             bg:'#fffbeb', fg:'#92400e' };
+  if (u.status === 'removed' || (u.access_removed_at && !u.auth_user_id))
+    return { cle:'acces_retire', texte:'Accès retiré',
+             titre:'L’identité de connexion a été retirée. L’historique de la personne est conservé.',
+             bg:'#f8fafc', fg:'#6b7280' };
   // Contrat P0-22 du 6 août 2026 : chaque compte porte les DEUX coordonnées,
   // et les deux ouvrent le même compte. Une fiche à moitié remplie n'est donc
   // plus « un choix de canal » : c'est un dossier incomplet, et il se voit.
@@ -30416,6 +30626,9 @@ window._boutonAcces = (u) => {
   const e = window._etatAccesCompte(u);
   // Sans aucune coordonnée, aucune voie n'aboutit : le serveur refuserait.
   if (e.cle === 'sans_contact') return '';
+  // Sur un compte suspendu ou retiré, envoyer un code n'ouvrirait rien : le
+  // serveur refuse la connexion avant même de regarder le code.
+  if (e.cle === 'suspendu' || e.cle === 'acces_retire') return '';
   // Le code WhatsApp demande un numéro. Sans numéro, ce bouton-là ne peut pas
   // aboutir — et un bouton qui ne peut pas réussir est un mensonge poli.
   // L'invitation par courriel reste, elle, accessible par « 🔑 Accès ».
