@@ -55,6 +55,7 @@ const OUTILS = [
   ['ecritures',   'audit-writes.mjs',          'les écritures dont l’échec est invisible'],
   ['schema',      'audit-schema.mjs',          'code ↔ SQL, et ce qu’il ne peut pas vérifier'],
   ['porteeparent','audit-portee-parent.mjs',   'ce dont le parent a réellement besoin'],
+  ['compte',      'recette-cycle-compte.mjs',  'le cycle de vie d’un compte'],
 ];
 
 const detail = process.argv.includes('--detail');
