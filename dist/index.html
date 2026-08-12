@@ -2365,6 +2365,7 @@ window.NAV = {
       {id:'tresorerie',i:'🏦',l:'Trésorerie'},
       {id:'comptabilite',i:'📒',l:'Comptabilité Générale'},
       {id:'paie',i:'💼',l:'Paie du Personnel'},
+      {id:'registre_presence',i:'📋',l:'Registre de présence'},
       {s:'Pédagogie'},
       {id:'palmares',i:'🏆',l:'Palmarès'},
       {id:'attendance',i:'✏️',l:'Présences'},
@@ -2464,6 +2465,7 @@ window.NAV = {
       {id:'notifications',i:'🔔',l:'Alertes'},
       {s:'Mon compte'},
       {id:'ma_paie',i:'💼',l:'Ma paie'},
+      {id:'mes_absences',i:'🏖️',l:'Mes absences'},
       {id:'profil_gardien',i:'👤',l:'Mon profil'},
     ],
     bn:[
@@ -2556,12 +2558,14 @@ window.NAV = {
       {id:'evaluations_ens',i:'⭐',l:'Évaluations Profs'},
       {id:'statistiques',i:'📊',l:'Statistiques'},
       {id:'teacher_activity',i:'👁️',l:'Activité Profs'},
+      {id:'registre_presence',i:'📋',l:'Registre de présence'},
       {s:'Système'},
       {id:'audit_log',i:'🔍',l:"Journal d'audit"},
       {id:'year_mgmt',i:'📆',l:'Année Scolaire'},
       {id:'export',i:'⬇️',l:'Export Données'},
       {id:'settings',i:'⚙️',l:'Paramètres'},
       {s:'Mon compte'},
+      {id:'mes_absences',i:'🏖️',l:'Mes absences'},
       {id:'profil_direction2',i:'👤',l:'Mon profil'},
       {s:'Urgences'},
       {id:'lockdown',i:'🔴',l:'LOCKDOWN'},
@@ -2592,6 +2596,7 @@ window.NAV = {
       {s:'Infos'},
       {id:'notifications',i:'🔔',l:'Notifications'},
       {id:'ma_paie',i:'💼',l:'Ma paie'},
+      {id:'mes_absences',i:'🏖️',l:'Mes absences'},
       {s:'Mon compte'},
       {id:'profil_caisse',i:'👤',l:'Mon profil'},
     ],
@@ -3006,7 +3011,14 @@ window.ROLE_LOAD = {
                        _T('student_exit_events','select=id,sid,status,prepared_at,expires_at,prepared_by_name,gate_label,gate_scanned_at,escort_name_snapshot,validated_at&order=prepared_at.desc&limit=200')],
       // Direction 2 n'administre PAS la paie — décision de Loms, 5 août
       // 2026 — mais il est payé comme les autres et voit la sienne.
-      personnel:      [_T('salaries', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')'),
+      // `teacher_absences` MANQUAIT ICI. Le tableau de bord de Direction 2
+      // comptait les absences enseignants du jour et de la semaine — sur une
+      // table jamais chargée pour ce rôle. Le compte valait structurellement
+      // zéro, et zéro absence ressemble à une école au complet.
+      // (Le serveur ne l'ouvre encore qu'à Direction 1 : l'écran le DIT
+      //  désormais au lieu de montrer un registre vide. Contrat P0-110.)
+      personnel:      ['teacher_absences',
+                       _T('salaries', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')'),
                        _T('advances', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')')],
       communication:  ['messages','events'],
       // Direction 2 ne voit JAMAIS le montant ni la devise d'un document, même
@@ -3028,7 +3040,8 @@ window.ROLE_LOAD = {
       finance:        ['fee_types','payments','versements','journal_entries','daily_expenses','daily_records','daily_reports'],
       administration: [_T('administrative_document_types','select=*&is_financial=eq.true'),
                        _T('administrative_documents','select=*')],
-      personnel:      ['salaries','advances','direct_primes'],
+      personnel:      ['salaries','advances','direct_primes',
+                       _T('teacher_absences', () => 'select=*&uid=eq.'+encodeURIComponent(S.user?.id||''))],
       activites:      ['cantine','cantine_menus','cantine_presence'],
     },
   },
@@ -3114,7 +3127,10 @@ window.ROLE_LOAD = {
     // le voir — il n'était même pas notifié.
     modules: {
       personnel: [_T('salaries', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')'),
-                  _T('advances', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')')],
+                  _T('advances', () => 'select=*&or=(user_id.eq.'+encodeURIComponent(S.user?.id||'')+',teacher_id.eq.'+encodeURIComponent(S.user?.id||'')+')'),
+                  // Le gardien se déclare comme tout le monde depuis le
+                  // 12 août : il lui faut relire ce qu'il a déclaré.
+                  _T('teacher_absences', () => 'select=*&uid=eq.'+encodeURIComponent(S.user?.id||''))],
     },
   },
 };
@@ -3135,6 +3151,7 @@ window.PAGE_MODULE = {
   etat_financier:'finance', tresorerie:'finance', comptabilite:'finance', fee_types:'finance',
   recus_parent:'finance',
   paie:'personnel', mes_primes:'personnel', mes_absences:'personnel', teacher_activity:'personnel',
+  registre_presence:'personnel',
   ma_paie:'personnel',
   cantine:'activites', cantine_parent:'activites', activites:'activites', activites_parent:'activites',
   documents_admin:'administration', audit_log:'administration', statistiques:'administration',
@@ -4151,7 +4168,7 @@ window.PT = {
   profil_gardien:'Mon profil', profil_caisse:'Mon profil',
   profil_direction:'Mon profil', profil_direction2:'Mon profil',
   accounts:'Comptes Accès',
-  mes_primes:'Mes primes', mes_absences:'Mes absences',
+  mes_primes:'Mes primes', mes_absences:'Mes absences', registre_presence:'Registre de présence',
   profil_enseignant:'Mon profil', profil_parent:'Mon profil',
   scan_history:'Entrées / Sorties', convocations:'Convocations', sanctions:'Sanctions disciplinaires',
   statistiques:'Statistiques',
@@ -28224,6 +28241,372 @@ R.mes_primes = () => {
 };
 
 // ── MES ABSENCES (ENSEIGNANT) ──
+// ═══════════════════════════════════════════════════════════════════════════
+//  LE REGISTRE DE PRÉSENCE DU PERSONNEL — Loms, 12 août 2026
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  Décisions de Loms : la feuille du jour est tenue par la Direction ET chacun
+//  peut se déclarer ; elle couvre TOUT le personnel, pas seulement les
+//  enseignants ; et les absences alimentent la fiche de paie sous forme d'une
+//  retenue PROPOSÉE que la Direction accepte, corrige ou annule.
+//
+//  ── CE QUI EXISTAIT AVANT, ET POURQUOI ÇA NE MARCHAIT PAS ────────────────
+//
+//  Une seule chose existait : l'enseignant déclarait sa propre absence. Trois
+//  défauts la rendaient inopérante, et aucun ne se voyait :
+//
+//   1. La RLS de `teacher_absences` n'ouvre la table qu'à `is_direction()`,
+//      c'est-à-dire à Direction 1 SEULE. L'enseignant qui déclarait recevait
+//      « ✅ Absence signalée » alors que le serveur refusait l'écriture. Au
+//      rechargement suivant, sa déclaration n'existait plus.
+//   2. `teacher_absences` n'était pas déclarée dans le ROLE_LOAD de
+//      Direction 2. Son tableau de bord comptait les absences enseignants de
+//      la semaine — et ce compte valait structurellement zéro.
+//   3. Les colonnes `status` et `approved_by` existent depuis toujours, avec
+//      `status` par défaut à `'pending'`. Le navigateur ne les écrivait ni ne
+//      les lisait JAMAIS : chaque absence restait « en attente » pour
+//      l'éternité, et l'écran Direction n'avait aucun bouton pour trancher.
+//      Une décision que personne ne prend n'est pas une décision en attente,
+//      c'est une décision qui n'existe pas.
+//
+//  ── CE QUI DÉPEND ENCORE DU SERVEUR ──────────────────────────────────────
+//
+//  La base appartient à ChatGPT et je n'invente aucun chemin serveur. Le
+//  contrat complet est déposé dans `coordination/P0-110_PRESENCE_PERSONNEL.md`.
+//  Tant qu'il n'est pas servi :
+//    · Direction 1 tient le registre et approuve — ça fonctionne aujourd'hui ;
+//    · les autres profils voient l'écran et se heurtent à un refus SERVEUR,
+//      qui est ANNONCÉ comme tel et jamais maquillé en succès ;
+//    · « retard » et la preuve que la feuille a bien été faite demandent des
+//      colonnes qui n'existent pas — elles sont dans le contrat, pas ici.
+
+// Le personnel du registre est exactement celui de la paie : la retenue doit
+// pouvoir retomber sur une fiche, sinon la présence ne sert à rien.
+window._personnelRegistre = () => window._personnelPaye();
+
+window._ROLE_REGISTRE = {
+  direction:'Direction 1', direction2:'Direction 2', direction3:'Caisse',
+  enseignant:'Enseignant', gardien:'Gardien',
+};
+
+// Une absence, pour une personne, un jour donné.
+window._absenceDuJour = (uid, date) =>
+  (DB.teacher_absences||[]).find(a => a.uid === uid && a.date === date) || null;
+
+// Toutes les absences d'une personne sur un mois `AAAA-MM`.
+window._absencesDuMois = (uid, mois) =>
+  (DB.teacher_absences||[]).filter(a => a.uid === uid && (a.date||'').startsWith(mois));
+
+// ── LE STATUT D'UNE ABSENCE ──────────────────────────────────────────────
+// `status` vient du serveur avec `'pending'` par défaut. Une ligne écrite
+// avant que ce code existe n'a peut-être rien du tout : on la lit alors comme
+// « en attente », ce qu'elle est réellement — et non comme approuvée, ce qui
+// ferait disparaître une retenue sans que personne ne l'ait décidé.
+window._statutAbsence = (a) => {
+  const s = a && a.status;
+  return (s === 'approved' || s === 'refused') ? s : 'pending';
+};
+window._LIBELLE_STATUT = {
+  pending:  { t:'En attente',  bg:'#fef9c3', c:'#78350f' },
+  approved: { t:'Justifiée',   bg:'#d8f3e6', c:'#065f46' },
+  refused:  { t:'Non justifiée', bg:'#fee2e2', c:'#991b1b' },
+};
+
+// ── LA RETENUE PROPOSÉE ──────────────────────────────────────────────────
+//
+// Elle ne porte QUE sur les absences explicitement REFUSÉES par la Direction.
+//
+// Une absence « en attente » n'est pas une absence injustifiée : c'est une
+// absence sur laquelle personne ne s'est encore prononcé. Retenir dessus,
+// ce serait juger avant d'avoir décidé — la même faute que l'aperçu de
+// connexion qui condamnait une adresse en cours de frappe. Les jours en
+// attente sont donc COMPTÉS et MONTRÉS, jamais retenus.
+//
+// Le nombre de jours ouvrables se règle : 26 est l'usage courant en RDC, mais
+// c'est un usage, pas une loi, et une école qui travaille autrement doit
+// pouvoir le dire sans qu'on touche au code.
+window._joursOuvrablesMois = () => Number(DB.settings?.jours_ouvrables_mois) || 26;
+
+window._bilanAbsences = (uid, mois) => {
+  const abs = window._absencesDuMois(uid, mois);
+  const par = { pending:0, approved:0, refused:0 };
+  abs.forEach(a => { par[window._statutAbsence(a)]++; });
+  return { total:abs.length, ...par, lignes:abs };
+};
+
+window._retenueProposee = (uid, mois, base) => {
+  const b = Number(base) || 0;
+  const { refused } = window._bilanAbsences(uid, mois);
+  if (!b || !refused) return 0;
+  const parJour = b / window._joursOuvrablesMois();
+  return Math.round(parJour * refused * 100) / 100;
+};
+
+// ── CE QUE LA FICHE DE PAIE DIT DES ABSENCES ─────────────────────────────
+//
+// Loms : « retenue proposée, Direction décide ». Le mot qui compte est
+// PROPOSÉE. Rien ne s'applique tout seul : le bloc affiche le décompte, montre
+// le calcul en clair, et il faut un geste pour que le montant descende dans la
+// case. Une retenue sur un salaire n'est pas une opération qu'un logiciel a le
+// droit de faire dans le dos de celui qui signe.
+//
+// Le calcul est écrit à l'écran — salaire ÷ jours ouvrables × jours non
+// justifiés — parce qu'un montant qu'on ne peut pas refaire de tête est un
+// montant qu'on ne peut pas défendre devant l'intéressé.
+window._blocAbsencesPaie = (uid, mois, base, champId) => {
+  const b = window._bilanAbsences(uid, mois);
+  if (!b.total) return '';
+  const jo = window._joursOuvrablesMois();
+  const prop = window._retenueProposee(uid, mois, base);
+  const lignes = [];
+  if (b.approved) lignes.push(`<span style="color:#065f46">✅ ${b.approved} justifié(s) — aucune retenue</span>`);
+  if (b.refused)  lignes.push(`<span style="color:#991b1b">⚠️ ${b.refused} non justifié(s)</span>`);
+  if (b.pending)  lignes.push(`<span style="color:#78350f">⏳ ${b.pending} en attente — non compris dans la retenue</span>`);
+  return `<div style="background:#fdeccd;border-radius:10px;padding:11px 13px;margin-bottom:10px;font-size:12.5px;line-height:1.6">
+    <div style="font-weight:700;color:#92400e;margin-bottom:4px">🏠 Absences du mois — ${b.total} jour(s)</div>
+    <div>${lignes.join(' · ')}</div>
+    ${b.refused && base ? `
+      <div style="margin-top:7px;padding-top:7px;border-top:1px solid rgba(146,64,14,.25);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="flex:1;min-width:170px;color:#92400e">Retenue proposée :
+          <strong>${_cur()}${prop}</strong>
+          <span style="font-size:11px;opacity:.85">(${_cur()}${base} ÷ ${jo} j × ${b.refused})</span>
+        </span>
+        <button type="button" class="btn btn-outline btn-sm" style="flex-shrink:0"
+                onclick="window._appliquerRetenue('${champId}',${prop})">Appliquer</button>
+      </div>`
+      : (b.refused ? `<div style="margin-top:6px;color:#92400e;font-size:11.5px">Saisissez le salaire de base pour voir la retenue proposée.</div>` : '')}
+  </div>`;
+};
+
+window._appliquerRetenue = (champId, montant) => {
+  const el = $(champId); if (!el) return;
+  el.value = montant;
+  // Le formulaire du personnel non enseignant recalcule son net en direct :
+  // sans cet appel, la case changerait et le NET afficherait encore l'ancien.
+  if (typeof window.psalCalcNet === 'function' && champId === 'psal_deduct') window.psalCalcNet();
+  toast('Retenue reportée — vous pouvez encore la corriger avant d’enregistrer','info');
+};
+
+// ── APPROUVER OU REFUSER ─────────────────────────────────────────────────
+// La décision que personne ne pouvait prendre. Direction 1 seule : c'est elle
+// que la RLS autorise, et c'est elle qui signe la paie.
+window._trancherAbsence = async (id, decision) => {
+  if (_denyRole('direction')) return;
+  if (!['approved','refused'].includes(decision)) return;
+  const a = (DB.teacher_absences||[]).find(x => x.id === id);
+  if (!a) return;
+  const avant = { status:a.status, approved_by:a.approved_by };
+  a.status = decision;
+  a.approved_by = S.user.id;
+  const ok = await pushSync('teacher_absences','patch',
+    { status:decision, approved_by:S.user.id }, 'id=eq.'+id);
+  if (!ok && window.DB_ONLINE) {
+    // Le serveur a refusé : on ne garde pas à l'écran une décision qu'il n'a
+    // pas prise. Un écran qui affiche « Justifiée » alors que la base dit
+    // « en attente » fera calculer une paie sur une décision imaginaire.
+    a.status = avant.status; a.approved_by = avant.approved_by;
+    const e = window._lastWriteError;
+    toast('Décision refusée par le serveur' + (e ? ' — ' + _writeErrorLabel(e) : ''), 'error');
+    render(); return;
+  }
+  const u = gu(a.uid);
+  logAudit('absence_decision', `${u?u.name:a.uid} — ${a.date} — ${decision==='approved'?'justifiée':'non justifiée'}`, id);
+  if (a.uid) {
+    const n = { id:_uid('n_'), uid:a.uid,
+      msg:`${decision==='approved'?'✅':'⚠️'} Votre absence du ${a.date} a été ${decision==='approved'?'justifiée':'déclarée NON justifiée'} par la Direction`,
+      time:nowTime(), date:today(), read:false, type:decision==='approved'?'info':'alert' };
+    (DB.notifs=DB.notifs||[]).unshift(n); pushSync('notifs','post',n);
+  }
+  toast(decision==='approved' ? '✅ Absence justifiée' : '⚠️ Absence déclarée non justifiée',
+        decision==='approved' ? 'success' : 'warning');
+  saveToCrypt(); render();
+};
+
+// ── DÉCLARER POUR QUELQU'UN D'AUTRE ──────────────────────────────────────
+// L'absent est précisément celui qui n'ouvrira pas l'application ce jour-là.
+// Sans ce bouton, le registre ne peut consigner que les absences de ceux qui
+// sont assez présents pour les saisir eux-mêmes.
+window.declarerAbsencePour = (uid) => {
+  if (_denyRole('direction')) return;
+  const u = gu(uid); if (!u) return;
+  const d = window._registreDate || today();
+  if (window._absenceDuJour(uid, d)) { toast('Absence déjà consignée pour ce jour','info'); return; }
+  openM(`🏠 Consigner l'absence — ${esc(u.name)}`, `
+  <div style="background:#fdeccd;border-radius:10px;padding:10px 14px;font-size:13px;color:#92400e;margin-bottom:14px">
+    Vous consignez cette absence au registre au nom de la Direction. La personne en sera notifiée.
+  </div>
+  <div class="form-group"><label class="form-label">Date</label>
+    <input class="form-input" id="regDate" type="date" value="${d}">
+  </div>
+  <div class="form-group"><label class="form-label">Motif *</label>
+    <input class="form-input" id="regMotif" placeholder="Ex: Maladie, urgence familiale, non signalé...">
+  </div>
+  <div class="form-group"><label class="form-label">Durée</label>
+    <select class="form-input" id="regDuree">
+      <option value="1 jour">1 jour</option><option value="2 jours">2 jours</option>
+      <option value="3 jours">3 jours</option><option value="Indéterminée">Indéterminée</option>
+    </select>
+  </div>
+  <div class="form-group"><label class="form-label">Décision</label>
+    <select class="form-input" id="regStatut">
+      <option value="pending">⏳ À trancher plus tard</option>
+      <option value="approved">✅ Justifiée — aucune retenue</option>
+      <option value="refused">⚠️ Non justifiée — retenue proposée sur la paie</option>
+    </select>
+  </div>`,
+  `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+   <button class="btn btn-primary" onclick="enregistrerAbsencePour('${uid}')">📋 Consigner</button>`);
+};
+
+window.enregistrerAbsencePour = async (uid) => {
+  if (_denyRole('direction')) return;
+  const u = gu(uid); if (!u) return;
+  const motif = ($('regMotif')?.value||'').trim();
+  if (!motif) { toast('Indiquez le motif','error'); return; }
+  const date = $('regDate')?.value || today();
+  const duree = $('regDuree')?.value || '1 jour';
+  const statut = ['pending','approved','refused'].includes($('regStatut')?.value) ? $('regStatut').value : 'pending';
+  const cl = (DB.classes||[]).find(c => c.teacher_id===uid || c.teacher_id_en===uid);
+  const entry = { id:'ta'+Date.now(), uid, name:u.name, date, motif, duree, time:nowTime(),
+                  cid:cl?cl.id:null, status:statut,
+                  approved_by: statut==='pending' ? null : S.user.id };
+  if (!DB.teacher_absences) DB.teacher_absences = [];
+  DB.teacher_absences.push(entry);
+  const ok = await pushSync('teacher_absences','post',entry);
+  if (!ok && window.DB_ONLINE) {
+    DB.teacher_absences = DB.teacher_absences.filter(x => x.id !== entry.id);
+    const e = window._lastWriteError;
+    closeModal();
+    toast('Refusé par le serveur' + (e ? ' — ' + _writeErrorLabel(e) : '') + ' — rien n’a été consigné', 'error');
+    render(); return;
+  }
+  const n = { id:_uid('n_'), uid,
+    msg:`🏠 La Direction a consigné votre absence du ${date} — ${motif}`,
+    time:nowTime(), date:today(), read:false, type:'info' };
+  (DB.notifs=DB.notifs||[]).unshift(n); pushSync('notifs','post',n);
+  logAudit('absence_consignee', `${u.name} — ${date} — ${motif}`, entry.id);
+  closeModal();
+  toast('📋 Absence consignée au registre', 'success');
+  saveToCrypt(); render();
+};
+
+// ── LE REGISTRE DU JOUR ──────────────────────────────────────────────────
+R.registre_presence = () => {
+  const refus = window._requireRole('direction','direction2');
+  if (refus) return refus;
+  const d = window._registreDate || today();
+  const mois = d.slice(0,7);
+  const gens = window._personnelRegistre();
+  const lignes = gens.map(u => ({ u, a: window._absenceDuJour(u.id, d) }));
+  const absents = lignes.filter(x => x.a);
+  const enAttente = (DB.teacher_absences||[]).filter(a => window._statutAbsence(a)==='pending').length;
+  const estDir1 = S.user?.role === 'direction';
+
+  // Le serveur n'ouvre `teacher_absences` qu'à Direction 1. Direction 2 verra
+  // donc un registre vide — et un registre vide ressemble à une école au
+  // complet. On le DIT, plutôt que de laisser croire.
+  const lectureRefusee = window._readState && window._readState.teacher_absences === 'forbidden';
+  const avis = lectureRefusee ? `
+    <div style="background:#fee2e2;border-radius:12px;padding:12px 15px;font-size:12.5px;color:#991b1b;margin-bottom:14px;line-height:1.5">
+      <strong>⚠️ Le serveur n’ouvre pas encore le registre à ce profil.</strong><br>
+      Ce que vous voyez ci-dessous est incomplet — ce n’est pas une école au complet.
+      L’ouverture aux autres profils est demandée à l’équipe base de données
+      (contrat P0-110). En attendant, Direction 1 tient le registre.
+    </div>` : '';
+
+  return avis + `
+  <div class="ww-toolbar">
+    <span style="font-size:16px;font-weight:700">📋 Registre de présence — personnel</span>
+    <input type="date" class="form-input" style="max-width:170px" value="${d}"
+           onchange="window._registreDate=this.value;render()">
+    <button class="btn btn-outline btn-sm" onclick="printRegistrePresence('${mois}')">🖨️ Imprimer le mois</button>
+  </div>
+  <div class="hbento" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+    <div class="htile" style="background:linear-gradient(135deg,#1f9d6b,#62d3a6);color:#fff;padding:13px 8px"><div style="font-size:19px">👥</div><div class="hbig" style="font-size:23px">${gens.length}</div><div class="hsub">personnel</div></div>
+    <div class="htile" style="background:linear-gradient(135deg,#2f7bd6,#5b9be8);color:#fff;padding:13px 8px"><div style="font-size:19px">✅</div><div class="hbig" style="font-size:23px">${gens.length-absents.length}</div><div class="hsub">présents</div></div>
+    <div class="htile" style="background:linear-gradient(135deg,#dc2626,#f2716b);color:#fff;padding:13px 8px"><div style="font-size:19px">🏠</div><div class="hbig" style="font-size:23px">${absents.length}</div><div class="hsub">absents</div></div>
+    <div class="htile h-pay" style="padding:13px 8px"><div style="font-size:19px">⏳</div><div class="hbig" style="font-size:23px">${enAttente}</div><div class="hsub">à trancher</div></div>
+  </div>
+  <div class="ww-section">
+    ${lignes.map(({u,a},i) => {
+      const st = a ? window._statutAbsence(a) : null;
+      const lib = st ? window._LIBELLE_STATUT[st] : null;
+      const bilan = window._bilanAbsences(u.id, mois);
+      return `<div class="ww-item" style="animation-delay:${i*.03}s;flex-wrap:wrap;gap:8px">
+        <div class="ww-item-icon" style="background:${a?'#fee2e2':'#d8f3e6'}">${a?'🏠':'✅'}</div>
+        <div class="ww-item-content" style="min-width:150px">
+          <div class="ww-item-title">${esc(u.name)}</div>
+          <div class="ww-item-sub">${esc(window._ROLE_REGISTRE[_roleUI(u.role)]||u.role||'—')}${a?' · '+esc(a.motif||'—'):''}</div>
+          ${bilan.total?`<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Ce mois : ${bilan.total} jour(s) — ${bilan.approved} justifié(s) · ${bilan.refused} non justifié(s) · ${bilan.pending} en attente</div>`:''}
+        </div>
+        ${lib?`<span class="pill" style="background:${lib.bg};color:${lib.c};flex-shrink:0">${lib.t}</span>`
+             :`<span class="pill" style="background:#d8f3e6;color:#065f46;flex-shrink:0">Présent</span>`}
+        ${estDir1 ? (a
+          ? (st==='pending'
+              ? `<button class="btn btn-outline btn-sm" style="color:#1f9d6b;border-color:#1f9d6b;flex-shrink:0" onclick="_trancherAbsence('${a.id}','approved')">✅ Justifier</button>
+                 <button class="btn btn-outline btn-sm" style="color:#dc2626;border-color:#dc2626;flex-shrink:0" onclick="_trancherAbsence('${a.id}','refused')">⚠️ Non justifiée</button>`
+              : `<button class="btn btn-outline btn-sm" style="flex-shrink:0" onclick="_trancherAbsence('${a.id}','${st==='approved'?'refused':'approved'}')">↺ Changer</button>`)
+          : `<button class="btn btn-outline btn-sm" style="flex-shrink:0" onclick="declarerAbsencePour('${u.id}')">🏠 Marquer absent</button>`) : ''}
+      </div>`;
+    }).join('')}
+  </div>`;
+};
+
+// ── LE REGISTRE IMPRIMÉ ──────────────────────────────────────────────────
+// Document RH : il prend la charte du reçu de ChatGPT comme tous les documents
+// de Finance et RH, et il porte la chaîne de responsabilité officielle — c'est
+// une pièce que le SECOPE peut demander.
+window.printRegistrePresence = (mois) => {
+  if (_denyRole('direction','direction2')) return;
+  const m = mois || today().slice(0,7);
+  const [yr2, mo] = m.split('-');
+  const moisLabel = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][parseInt(mo)-1]+' '+yr2;
+  const gens = window._personnelRegistre();
+  const jo = window._joursOuvrablesMois();
+  const rows = gens.map(u => ({ u, b: window._bilanAbsences(u.id, m) }));
+  const totJ = rows.reduce((s,r)=>s+r.b.total,0);
+  const totR = rows.reduce((s,r)=>s+r.b.refused,0);
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Registre de présence du personnel — ${moisLabel}</title>
+  <style>${window._CSS_DOC}</style></head><body><div class="page">
+  <div class="dl-bar">
+    <h3>📋 Registre de présence prêt</h3>
+    <p>Cliquez pour enregistrer en PDF ou imprimer</p>
+    <button class="dl-btn" onclick="window.print()">💾 Télécharger / Imprimer PDF</button>
+  </div>
+  ${_enteteOfficiel()}
+  <div style="text-align:center;margin:10px 0 4px"><span class="badge">REGISTRE DE PRÉSENCE DU PERSONNEL</span></div>
+  <div style="text-align:center;font-size:13px;color:#5e6c78;font-weight:600;margin-bottom:12px">${moisLabel} · Année ${DB.settings.year||'2025-2026'}</div>
+  <table class="tbl">
+    <thead><tr><th>#</th><th>Nom</th><th>Fonction</th><th style="text-align:center">Jours d'absence</th><th style="text-align:center">Justifiés</th><th style="text-align:center">Non justifiés</th><th style="text-align:center">En attente</th></tr></thead>
+    <tbody>
+    ${rows.map((r,i)=>`<tr>
+      <td>${i+1}</td>
+      <td><strong>${esc(r.u.name)}</strong></td>
+      <td>${esc(window._ROLE_REGISTRE[_roleUI(r.u.role)]||r.u.role||'—')}</td>
+      <td style="text-align:center">${r.b.total||'—'}</td>
+      <td style="text-align:center">${r.b.approved||'—'}</td>
+      <td style="text-align:center">${r.b.refused?`<strong>${r.b.refused}</strong>`:'—'}</td>
+      <td style="text-align:center">${r.b.pending||'—'}</td>
+    </tr>`).join('')}
+    </tbody>
+    <tfoot><tr class="total-row"><td colspan="3">TOTAL — ${gens.length} agent(s)</td><td style="text-align:center">${totJ}</td><td style="text-align:center">${rows.reduce((s,r)=>s+r.b.approved,0)}</td><td style="text-align:center">${totR}</td><td style="text-align:center">${rows.reduce((s,r)=>s+r.b.pending,0)}</td></tr></tfoot>
+  </table>
+  <div style="background:#fdeccd;border-radius:8px;padding:10px 14px;font-size:11.5px;margin:12px 0;line-height:1.55">
+    <strong>Lecture du registre :</strong> seuls les jours portés « non justifiés » donnent lieu à une retenue,
+    calculée sur ${jo} jours ouvrables par mois. Les jours « en attente » n'ont pas encore été tranchés par
+    la Direction et n'entraînent aucune retenue.
+  </div>
+  ${_officialFooter(
+      (DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',
+      { nom:S.user?.name||'', role:window._roleOfficiel(S.user?.role)||'Direction', le:today() },
+      null)}
+  <div class="conf">🔒 Document confidentiel · Généré le ${today()}</div>
+  </div></body></html>`;
+  dlPDF(html, `Registre-Presence-Personnel-${m}.pdf`);
+};
+
 R.mes_absences = () => {
   const u=S.user;
   if(!DB.teacher_absences) DB.teacher_absences=[];
@@ -31376,16 +31759,43 @@ window.declareTeacherAbsence = () => {
 };
 
 window.saveTeacherAbsence = async () => {
-  if(!S.user||S.user.role!=='enseignant'){toast('Accès non autorisé','error');return;}
+  // TOUT LE PERSONNEL SE DÉCLARE — Loms, 12 août 2026. Le gardien, la Caisse
+  // et Direction 2 tombent malades comme les enseignants ; ils n'avaient
+  // aucun moyen de le dire.
+  if(_denyRole('enseignant','gardien','direction2','direction3','direction')) return;
   const motif=(document.getElementById('absMotif')?.value||'').trim();
   if(!motif){toast('Indiquez le motif','error');return;}
   const date=document.getElementById('absDate')?.value||today();
   const duree=document.getElementById('absDuree')?.value||'1 jour';
   const cl=DB.classes.find(c=>c.teacher_id===S.user.id||c.teacher_id_en===S.user.id);
-  const entry={id:'ta'+Date.now(),uid:S.user.id,name:S.user.name,date,motif,duree,time:nowTime(),cid:cl?cl.id:null};
+  // `status:'pending'` est écrit EXPLICITEMENT. Le serveur le mettrait par
+  // défaut, mais une ligne qui dit elle-même ce qu'elle attend se relit sans
+  // avoir à connaître le schéma — et le jour où la valeur par défaut change,
+  // rien ne bascule en silence.
+  const entry={id:'ta'+Date.now(),uid:S.user.id,name:S.user.name,date,motif,duree,time:nowTime(),
+               cid:cl?cl.id:null,status:'pending',approved_by:null};
   if(!DB.teacher_absences) DB.teacher_absences=[];
   DB.teacher_absences.push(entry);
-  pushSync('teacher_absences','post',entry);
+
+  // ── « ✅ ABSENCE SIGNALÉE » SUR UNE ÉCRITURE REFUSÉE ────────────────────
+  //
+  // Cette ligne ne partait pas. La RLS de `teacher_absences` n'ouvre la table
+  // qu'à Direction 1 : le serveur refusait chaque déclaration d'enseignant, et
+  // l'écran annonçait quand même le succès. La Direction recevait bien la
+  // notification — donc tout paraissait normal — mais l'absence elle-même
+  // n'existait nulle part, et disparaissait au rechargement suivant.
+  //
+  // Un enregistrement annoncé et jamais fait est pire qu'un enregistrement
+  // refusé : on ne le redit pas, et on croit l'école prévenue.
+  const ok = await pushSync('teacher_absences','post',entry);
+  if(!ok && window.DB_ONLINE){
+    DB.teacher_absences=DB.teacher_absences.filter(x=>x.id!==entry.id);
+    const e=window._lastWriteError;
+    closeModal();
+    toast('Le serveur a refusé la déclaration'+(e?' — '+_writeErrorLabel(e):'')
+          +'. Prévenez la Direction directement.','error');
+    render(); return;
+  }
   DB.users.filter(u=>u.role==='direction'||u.role==='direction2').forEach(u=>{
     const n={id:'n'+Date.now()+Math.random().toString(36).slice(2,4),uid:u.id,
       msg:`🏠 ${S.user.name} absent(e) le ${date} (${duree}) — ${motif}${cl?' · Classe: '+cl.name:''}`,
@@ -31394,7 +31804,9 @@ window.saveTeacherAbsence = async () => {
   });
   logAudit('teacher_absence',`${S.user.name} — ${motif} — ${duree}`);
   closeModal();
-  toast(`✅ Absence signalée — la Direction a été notifiée`,'success');
+  toast(ok?`✅ Absence signalée — la Direction a été notifiée`
+          :`Absence retenue sur l'appareil — elle partira au retour du réseau`,
+        ok?'success':'warning');
   saveToCrypt(); render();
 };
 
@@ -33317,6 +33729,7 @@ window.openSalaireForm = (teacherId, month) => {
     <span style="color:#991b1b">💸 Avances accordées ce mois</span>
     <strong style="color:#dc2626">-${_cur()}${advTotal}</strong>
   </div>`:''}
+  ${window._blocAbsencesPaie(teacherId, month, sal.amount||0, 'sal_deductions')}
   <div class="form-group"><label class="form-label">Retenues supplémentaires (${_cur()}) <span style="font-size:11px;color:var(--text-muted)">(absences, etc.)</span></label>
     <input class="form-input" id="sal_deductions" type="number" min="0" step="1" value="${sal.deductions||0}">
   </div>

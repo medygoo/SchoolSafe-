@@ -83,6 +83,12 @@ const REGLE = {
   printTenafepList:            ['signe', 'liste ENAFEP — transmise au ministère'],
   printExetatList:             ['signe', 'liste EXETAT — transmise au ministère'],
   printRapportSecope:          ['signe', 'rapport SECOPE — transmis au ministère'],
+  // Le registre de présence du personnel se signe, et pour deux raisons qui
+  // suffiraient chacune : le SECOPE peut le demander — c'est l'organe qui
+  // contrôle la présence et la paie des enseignants en RDC — et il FONDE une
+  // retenue sur un salaire. Un document qui peut coûter de l'argent à
+  // quelqu'un doit porter le nom de celui qui en répond.
+  printRegistrePresence:       ['signe', 'registre de présence — fonde une retenue sur salaire, opposable au SECOPE'],
   printPersonnelFichePaie:     ['signe', 'fiche de paie remise à l’employé'],
   printFichePaie:              ['signe', 'fiche de paie remise à l’employé'],
   printFicheSante:             ['signe', 'fiche santé — remise à un soignant'],
