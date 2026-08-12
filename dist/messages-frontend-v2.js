@@ -105,3 +105,50 @@
   if ('requestIdleCallback' in window) requestIdleCallback(load, { timeout:1500 });
   else setTimeout(load, 0);
 })();
+
+// Fiche d'accès WhatsApp : ne jamais construire la fiche à partir d'une copie
+// locale qui n'a pas encore reçu `login_name`. La colonne existe côté serveur
+// et ROLE_LOAD la demande, mais juste après une création de compte la fiche
+// locale peut encore être antérieure à la génération/synchronisation de l'alias.
+// On ne fait AUCUN appel au démarrage : la relecture ciblée n'a lieu qu'au
+// moment d'ouvrir la fiche, et seulement si `login_name` manque localement.
+(function hardenWhatsAppCredentialsCard() {
+  'use strict';
+  if (window.__SS_WHATSAPP_CREDENTIALS_V2__) return;
+  window.__SS_WHATSAPP_CREDENTIALS_V2__ = true;
+
+  if (typeof window.ouvrirCarteAcces === 'function' && !window.ouvrirCarteAcces.__ssLoginNameRefresh) {
+    const originalOpenCard = window.ouvrirCarteAcces;
+    const wrappedOpenCard = async function(uid, ...args) {
+      try {
+        const store = (typeof DB !== 'undefined' && DB) ? DB : window.DB;
+        const u = (store?.users || []).find(x => x.id === uid);
+        if (u && !u.login_name) {
+          const getter = typeof _get === 'function' ? _get : window._get;
+          if (typeof getter === 'function') {
+            const q = 'select=id,initials,login_name,phone&id=eq.' + encodeURIComponent(uid) + '&limit=1';
+            const rows = await getter('users', q);
+            if (Array.isArray(rows) && rows[0]) Object.assign(u, rows[0]);
+          }
+        }
+      } catch (e) {
+        console.warn('[SchoolSafe] relecture login_name WhatsApp', e && e.message);
+      }
+      return originalOpenCard.apply(this, [uid, ...args]);
+    };
+    wrappedOpenCard.__ssLoginNameRefresh = true;
+    window.ouvrirCarteAcces = wrappedOpenCard;
+  }
+
+  // Pour la famille, ce code est bien le mot de passe temporaire Auth. Le
+  // message WhatsApp le nomme donc explicitement, sans changer sa valeur.
+  if (typeof window._messageAccesWhatsApp === 'function' && !window._messageAccesWhatsApp.__ssPasswordLabel) {
+    const originalMessage = window._messageAccesWhatsApp;
+    const wrappedMessage = function(ids, code, expiresAt) {
+      const message = String(originalMessage.call(this, ids, code, expiresAt));
+      return message.replace('Code temporaire : ' + code, 'Mot de passe temporaire : ' + code);
+    };
+    wrappedMessage.__ssPasswordLabel = true;
+    window._messageAccesWhatsApp = wrappedMessage;
+  }
+})();
