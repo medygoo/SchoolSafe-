@@ -25878,6 +25878,7 @@ R.export = () => {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <button class="btn btn-outline" style="justify-content:flex-start;gap:8px;font-size:12px;padding:10px 12px" onclick="exportCSV('students')">📊 Élèves CSV</button>
       <button class="btn btn-primary" style="justify-content:flex-start;gap:8px;font-size:12px;padding:10px 12px;background:#205fae" onclick="printReport('students')">🎓 Élèves PDF</button>
+      <button class="btn btn-primary" style="grid-column:span 2;justify-content:center;gap:8px;font-size:12px;padding:10px 12px;background:linear-gradient(135deg,#1f9d6b,#2fbf8f)" onclick="ouvrirListeTuteurs()">👨‍👩‍👧 Élèves et tuteurs — par classe ou toute l'école</button>
       <button class="btn btn-outline" style="justify-content:flex-start;gap:8px;font-size:12px;padding:10px 12px" onclick="exportCSV('grades')">📊 Notes CSV</button>
       <button class="btn btn-primary" style="justify-content:flex-start;gap:8px;font-size:12px;padding:10px 12px;background:#205fae" onclick="printReport('palmares')">🏆 Palmarès PDF</button>
       <button class="btn btn-primary" style="grid-column:span 2;justify-content:center;gap:8px;font-size:12px;padding:10px 12px;background:linear-gradient(135deg,#f59e0b,#d98a2b)" onclick="genererPalmaresAnnuel()">🏅 Palmarès annuel — toutes classes</button>
@@ -31900,15 +31901,188 @@ window.doManualPresent = async (sid) => {
   window._attJustMarked=sid; saveToCrypt(); render();
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  LA LISTE DES ÉLÈVES ET DE LEURS TUTEURS — Loms, 12 août 2026
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  « une liste avec les élèves et tous les tuteurs », par classe ET pour toute
+//  l'école.
+//
+//  Une liste existait déjà (`printReport('students')`) mais elle ne nommait
+//  qu'UNE personne par élève : le compte parent. Or l'école connaît beaucoup
+//  plus — le père, la mère, l'adresse, et les personnes autorisées à venir
+//  chercher l'enfant. Le jour où il faut joindre quelqu'un pour un enfant
+//  malade, « Parent : — » sur la ligne d'un élève qui a pourtant un père, une
+//  mère et trois personnes autorisées, c'est une information qui existe et
+//  qu'on n'a pas sous les yeux.
+//
+//  Cette liste dit TOUT ce que l'école sait de l'entourage d'un enfant, et le
+//  dit classe par classe — parce que c'est ainsi qu'on la consulte : un
+//  enseignant a besoin de sa classe, pas des six cents élèves.
+window._tuteursDe = (s) => {
+  const p = gu(s.pid);
+  const l = [];
+  if (s.nom_papa)  l.push({ q:'Père',  n:s.nom_papa,  t:'' });
+  if (s.nom_maman) l.push({ q:'Mère',  n:s.nom_maman, t:'' });
+  // Le compte parent porte le téléphone : c'est par lui que l'école appelle.
+  if (p) l.push({ q:'Compte parent', n:p.name, t:p.phone || '' });
+  (DB.aps||[]).filter(a => a.sid === s.id && a.active !== false)
+    .forEach(a => l.push({ q:a.relation || 'Personne autorisée', n:a.name, t:a.phone || '' }));
+  return l;
+};
+
+window.printListeTuteurs = (cid) => {
+  if (_denyRole('direction','direction2')) return;
+  const classes = (DB.classes||[]).filter(c => !cid || c.id === cid);
+  const groupes = classes
+    .map(cl => ({ cl, eleves:(DB.students||[]).filter(s => s.cid === cl.id && !s.archived)
+                                              .sort((a,b)=>(a.name||'').localeCompare(b.name||'','fr')) }))
+    .filter(g => g.eleves.length);
+  // Les élèves sans classe existent : un import qui n'a pas trouvé la classe,
+  // une inscription en cours. Les taire, c'est les perdre.
+  const orphelins = cid ? [] : (DB.students||[]).filter(s => !s.archived && !classes.some(c => c.id === s.cid))
+                                                .sort((a,b)=>(a.name||'').localeCompare(b.name||'','fr'));
+  if (orphelins.length) groupes.push({ cl:{ name:'Sans classe attribuée' }, eleves:orphelins });
+  if (!groupes.length) { toast('Aucun élève à lister','info'); return; }
+
+  const total = groupes.reduce((s,g)=>s+g.eleves.length,0);
+  const titre = cid ? (gc(cid)?.name || 'Classe') : 'Toute l’école';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Élèves et tuteurs — ${esc(titre)}</title>
+  <style>${window._CSS_DOC}
+  .page{max-width:900px}
+  table{font-size:11px}
+  .cls-band{background:#556777;color:#fff;padding:8px 13px;border-radius:6px;margin:16px 0 7px;font-weight:700;font-size:12.5px}
+  .tut{font-size:10.5px;line-height:1.5}
+  .tut b{font-weight:700}
+  .q{color:#5e6c78}
+  </style></head><body><div class="page">
+  <div class="dl-bar">
+    <h3>👨‍👩‍👧 Liste des élèves et de leurs tuteurs</h3>
+    <p>Cliquez pour enregistrer en PDF ou imprimer</p>
+    <button class="dl-btn" onclick="window.print()">💾 Télécharger / Imprimer PDF</button>
+  </div>
+  ${_enteteOfficiel()}
+  <div style="text-align:center;margin:10px 0 4px"><span class="badge">ÉLÈVES ET TUTEURS</span></div>
+  <div style="text-align:center;font-size:13px;color:#5e6c78;font-weight:600;margin-bottom:4px">${esc(titre)} · ${total} élève(s)</div>
+  <div style="text-align:center;font-size:11px;color:#5e6c78;margin-bottom:12px">Année ${DB.settings.year||'2025-2026'}</div>
+  ${groupes.map(({cl,eleves}) => `
+    <div class="cls-band">🏫 ${esc(cl.name)} — ${eleves.length} élève(s)</div>
+    <table class="tbl">
+      <thead><tr><th style="width:26px">#</th><th style="width:80px">Matricule</th><th>Élève</th><th style="width:74px">Naissance</th><th>Tuteurs et contacts</th></tr></thead>
+      <tbody>${eleves.map((s,i)=>{
+        const tut = window._tuteursDe(s);
+        return `<tr>
+          <td>${i+1}</td>
+          <td style="font-family:'Courier New',monospace">${esc(s.mat||'—')}</td>
+          <td><strong>${esc(s.name)}</strong>${s.adresse?`<div style="font-size:10px;color:#5e6c78">${esc(s.adresse)}</div>`:''}</td>
+          <td>${esc(s.dob||'—')}</td>
+          <td class="tut">${tut.length
+            ? tut.map(t=>`<span class="q">${esc(t.q)} :</span> <b>${esc(t.n)}</b>${t.t?` — ${esc(t.t)}`:''}`).join('<br>')
+            : '<span style="color:#991b1b">Aucun tuteur enregistré</span>'}</td>
+        </tr>`;}).join('')}</tbody>
+    </table>`).join('')}
+  <div style="background:#fdeccd;border-radius:8px;padding:10px 14px;font-size:11px;margin:12px 0;line-height:1.55">
+    <strong>Ce que cette liste contient :</strong> le père et la mère tels qu'ils sont inscrits à la fiche de
+    l'élève, le compte parent qui reçoit les notifications, et les personnes autorisées à venir chercher
+    l'enfant. Une mention « Aucun tuteur enregistré » signale une fiche à compléter — ce n'est pas un
+    enfant sans famille, c'est une information qui manque à l'école.
+  </div>
+  ${_officialFooter(
+      (DB.users||[]).find(x=>x.role==='direction')?.name||'Direction','Direction Générale',
+      { nom:S.user?.name||'', role:window._roleOfficiel(S.user?.role)||'Direction', le:today() },
+      null)}
+  <div class="conf">🔒 Document confidentiel · Généré le ${today()}</div>
+  </div></body></html>`;
+  dlPDF(html, `Eleves-Tuteurs-${(cid?titre:'Ecole').replace(/[^A-Za-z0-9]/g,'_')}.pdf`);
+};
+
+// La même chose en tableur, pour qui doit trier ou envoyer.
+window.exportTuteursCSV = (cid) => {
+  if (_denyRole('direction','direction2')) return;
+  const eleves = (DB.students||[]).filter(s => !s.archived && (!cid || s.cid === cid));
+  if (!eleves.length) { toast('Aucun élève à exporter','info'); return; }
+  const q = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+  const rows = [['Matricule','Élève','Classe','Naissance','Adresse','Père','Mère','Compte parent','Téléphone parent','Personnes autorisées']];
+  eleves.forEach(s => {
+    const c = gc(s.cid), p = gu(s.pid);
+    const ap = (DB.aps||[]).filter(a => a.sid === s.id && a.active !== false)
+      .map(a => a.name + (a.relation?' ('+a.relation+')':'') + (a.phone?' — '+a.phone:'')).join(' | ');
+    rows.push([s.mat, s.name, c?c.name:'', s.dob||'', s.adresse||'', s.nom_papa||'', s.nom_maman||'',
+               p?p.name:'', p?(p.phone||''):'', ap]);
+  });
+  const csv = rows.map(r => r.map(q).join(',')).join('\r\n');
+  const blob = new Blob(['﻿'+csv], { type:'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `eleves_tuteurs_${cid?(gc(cid)?.name||'classe').replace(/[^A-Za-z0-9]/g,'_'):'ecole'}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('📥 Liste téléchargée','success');
+};
+
+// Le choix « cette classe » ou « toute l'école », posé une seule fois.
+window.ouvrirListeTuteurs = () => {
+  if (_denyRole('direction','direction2')) return;
+  const opts = (DB.classes||[])
+    .filter(c => (DB.students||[]).some(s => s.cid === c.id && !s.archived))
+    .map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  openM('👨‍👩‍👧 Élèves et tuteurs', `
+  <div class="form-group">
+    <label class="form-label">Portée</label>
+    <select class="form-input" id="lt_cid">
+      <option value="">🏫 Toute l’école</option>
+      ${opts}
+    </select>
+  </div>
+  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:11px 13px;font-size:12px;line-height:1.55">
+    La liste nomme, pour chaque élève : le <strong>père</strong> et la <strong>mère</strong> de sa fiche,
+    le <strong>compte parent</strong> qui reçoit les notifications avec son téléphone, et les
+    <strong>personnes autorisées</strong> à venir le chercher.
+  </div>`,
+  `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+   <button class="btn btn-outline" onclick="exportTuteursCSV($('lt_cid').value||null)">📊 CSV</button>
+   <button class="btn btn-primary" onclick="printListeTuteurs($('lt_cid').value||null)">🖨️ PDF</button>`);
+};
+
 // ═══════════════════════════════════════════
 //  FEATURE #5 — IMPORT CSV ÉLÈVES
 // ═══════════════════════════════════════════
+// ── IMPORTER PAR CLASSE, OU POUR TOUTE L'ÉCOLE — Loms, 12 août 2026 ───────
+//
+// L'import n'existait qu'en une seule forme : un fichier pour toute l'école,
+// avec le nom de la classe dans chaque ligne. Or on reçoit presque toujours
+// une liste PAR CLASSE — c'est ainsi que les listes circulent dans une école.
+// Répéter « 5e Primaire A » sur quarante lignes est une corvée, et chaque
+// répétition est une occasion de faute de frappe.
+//
+// ET UN AVERTISSEMENT QUI MENTAIT. L'encadré promettait : « La classe et le
+// parent doivent exister ou seront créés ». Le code ne créait AUCUNE classe :
+// `classes.find(...)` puis `cid: cl?.id || null`. Un fichier dont la classe
+// était mal orthographiée importait donc les élèves SANS CLASSE, en silence,
+// en annonçant « ✅ 40 élève(s) importé(s) ». On les retrouvait des semaines
+// plus tard, hors de tout classement et de tout bulletin.
+//
+// Désormais : ou la classe existe, ou on la crée parce qu'on l'a demandé, ou
+// la ligne est REFUSÉE et comptée. Jamais un élève sans classe par accident.
 window.openImportCSV = () => {
+  if (_denyRole('direction','direction2')) return;
+  window._csvData = null; window._csvCreerClasses = false;
+  const opts = (DB.classes||[]).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   openM('📥 Import CSV — Élèves',`
-  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px">
-    <strong>Format CSV attendu (séparateur virgule ou point-virgule) :</strong><br>
-    <code style="font-size:11px">nom_complet ; date_naissance (YYYY-MM-DD) ; nom_classe ; nom_parent ; tel_parent</code><br>
-    <em style="color:#6b7280">La ligne d'en-tête est ignorée automatiquement. La classe et le parent doivent exister ou seront créés.</em>
+  <div class="form-group">
+    <label class="form-label">Où vont ces élèves ?</label>
+    <select class="form-input" id="csv_cid" onchange="window._csvRelire()">
+      <option value="">🏫 Toute l’école — la classe est écrite dans le fichier</option>
+      ${opts}
+    </select>
+  </div>
+  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;line-height:1.55">
+    <strong>Format attendu</strong> (séparateur virgule ou point-virgule) :<br>
+    <code style="font-size:11px">nom_complet ; date_naissance ; nom_classe ; nom_parent ; tel_parent ; père ; mère ; adresse</code><br>
+    <em style="color:#6b7280">La ligne d'en-tête est ignorée. Les quatre dernières colonnes sont facultatives.
+    Si vous choisissez une classe ci-dessus, la colonne <code>nom_classe</code> est ignorée — vous pouvez
+    l'omettre et laisser la colonne vide.</em>
   </div>
   <div class="form-group">
     <label class="form-label">Fichier CSV *</label>
@@ -31917,6 +32091,11 @@ window.openImportCSV = () => {
   <div id="csv_preview" style="max-height:300px;overflow-y:auto"></div>`,
   `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
    <button id="csv_confirm_btn" class="btn btn-primary" style="display:none" onclick="importCSVConfirm()">Importer</button>`);
+};
+
+// Changer de classe cible change ce que l'aperçu doit dire : on le refait.
+window._csvRelire = () => {
+  if (window._csvData) window._csvApercu(window._csvData);
 };
 window.parseAndPreviewCSV = (input) => {
   const file=input?.files[0]; if(!file){return;}
@@ -31927,26 +32106,92 @@ window.parseAndPreviewCSV = (input) => {
     const isHeader=rows[0]&&(rows[0][0].toLowerCase().includes('nom')||rows[0][0].toLowerCase().includes('name'));
     const data=isHeader?rows.slice(1):rows;
     window._csvData=data;
-    const preview=$('csv_preview'); if(!preview)return;
-    if(!data.length){preview.innerHTML='<div style="color:#ef5b5b;padding:10px">Aucune donnée détectée.</div>';return;}
-    preview.innerHTML=`<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#1f9d6b">${data.length} élève(s) détecté(s)</div>
-    <table style="width:100%;font-size:11px;border-collapse:collapse">
-      <thead><tr style="background:#f6ede0">${['Nom','Naissance','Classe','Parent','Tél'].map(h=>`<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #efe3d3">${h}</th>`).join('')}</tr></thead>
-      <tbody>${data.slice(0,20).map(r=>`<tr style="border-bottom:1px solid #f6ede0">${r.slice(0,5).map(c=>`<td style="padding:5px 8px">${esc(c||'—')}</td>`).join('')}</tr>`).join('')}
-      ${data.length>20?`<tr><td colspan="5" style="padding:5px 8px;color:#6f6557;font-style:italic">... et ${data.length-20} autres</td></tr>`:''}</tbody>
-    </table>`;
-    const btn=$('csv_confirm_btn'); if(btn)btn.style.display='';
+    window._csvApercu(data);
   };
   reader.readAsText(file,'UTF-8');
+};
+
+// ── L'APERÇU DIT CE QUI VA SE PASSER, Y COMPRIS CE QUI NE PASSERA PAS ─────
+// Un aperçu qui ne montre que les lignes lisibles laisse croire que tout
+// entrera. Ici, les classes inconnues sont NOMMÉES avant qu'on décide.
+window._csvApercu = (data) => {
+  const preview=$('csv_preview'); if(!preview)return;
+  const btn=$('csv_confirm_btn');
+  if(!data||!data.length){
+    preview.innerHTML='<div style="color:#ef5b5b;padding:10px">Aucune donnée détectée.</div>';
+    if(btn)btn.style.display='none'; return;
+  }
+  const cidCible=$('csv_cid')?.value||'';
+  const clsCible=cidCible?gc(cidCible):null;
+
+  // Quelles classes le fichier réclame-t-il, et lesquelles l'école connaît-elle ?
+  const inconnues=[];
+  if(!cidCible){
+    data.forEach(r=>{
+      const nom=(r[2]||'').trim();
+      if(!nom) { if(!inconnues.includes('(vide)')) inconnues.push('(vide)'); return; }
+      const existe=(DB.classes||[]).some(c=>(c.name||'').toLowerCase().trim()===nom.toLowerCase());
+      if(!existe && !inconnues.includes(nom)) inconnues.push(nom);
+    });
+  }
+  const bloqueVide = inconnues.includes('(vide)');
+  const aCreer = inconnues.filter(n=>n!=='(vide)');
+
+  preview.innerHTML=`
+  <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#1f9d6b">
+    ${data.length} élève(s) détecté(s)${clsCible?` — tous vers <span style="color:#205fae">${esc(clsCible.name)}</span>`:''}
+  </div>
+  ${bloqueVide?`<div style="background:#fee2e2;border-radius:9px;padding:9px 12px;font-size:11.5px;color:#991b1b;margin-bottom:8px;line-height:1.5">
+    <strong>Des lignes n'indiquent aucune classe.</strong> Elles seront refusées et comptées —
+    un élève sans classe sort de tout classement et de tout bulletin. Choisissez une classe
+    ci-dessus, ou complétez la colonne <code>nom_classe</code>.
+  </div>`:''}
+  ${aCreer.length?`<div style="background:#fdeccd;border-radius:9px;padding:9px 12px;font-size:11.5px;color:#92400e;margin-bottom:8px;line-height:1.5">
+    <strong>${aCreer.length} classe(s) inconnue(s) de l'école :</strong> ${aCreer.map(n=>esc(n)).join(' · ')}<br>
+    <label style="display:inline-flex;align-items:center;gap:7px;margin-top:6px;cursor:pointer">
+      <input type="checkbox" id="csv_creer" ${window._csvCreerClasses?'checked':''}
+             onchange="window._csvCreerClasses=this.checked;window._csvRelire()">
+      <span>Créer ces classes</span>
+    </label>
+    ${window._csvCreerClasses?'':'<div style="margin-top:5px">Sans cette case, les élèves de ces classes seront <strong>refusés</strong>, pas importés sans classe.</div>'}
+  </div>`:''}
+  <table style="width:100%;font-size:11px;border-collapse:collapse">
+    <thead><tr style="background:#f6ede0">${['Nom','Naissance','Classe','Parent','Tél'].map(h=>`<th style="padding:6px 8px;text-align:left;border-bottom:1px solid #efe3d3">${h}</th>`).join('')}</tr></thead>
+    <tbody>${data.slice(0,20).map(r=>{
+      const cellules=[r[0],r[1],clsCible?clsCible.name:(r[2]||''),r[3],r[4]];
+      return `<tr style="border-bottom:1px solid #f6ede0">${cellules.map(c=>`<td style="padding:5px 8px">${esc(c||'—')}</td>`).join('')}</tr>`;
+    }).join('')}
+    ${data.length>20?`<tr><td colspan="5" style="padding:5px 8px;color:#6f6557;font-style:italic">... et ${data.length-20} autres</td></tr>`:''}</tbody>
+  </table>`;
+  if(btn)btn.style.display='';
 };
 window.importCSVConfirm = () => {
   if(!S.user||!['direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
   const data=window._csvData; if(!data||!data.length){toast('Aucune donnée à importer','error');return;}
-  let added=0,skipped=0;
+  let added=0,skipped=0,refusesClasse=0;
+  const cidCible=$('csv_cid')?.value||'';
+  const clsCible=cidCible?gc(cidCible):null;
+  const creer=!!window._csvCreerClasses;
   data.forEach(r=>{
-    const [name,dob,className,parentName,parentPhone]=r;
+    const [name,dob,className,parentName,parentPhone,pere,mere,adresse]=r;
     if(!name||name.length<2){skipped++;return;}
-    const cl=(DB.classes||[]).find(c=>c.name.toLowerCase().trim()===(className||'').toLowerCase().trim());
+
+    // ── LA CLASSE : TROUVÉE, CRÉÉE, OU LA LIGNE EST REFUSÉE ───────────────
+    // Jamais `cid:null` par accident. Un élève sans classe sort de tout
+    // classement, de tout bulletin, de toute liste — et personne ne s'en
+    // aperçoit avant des semaines.
+    let cl=clsCible;
+    if(!cl){
+      const nom=(className||'').trim();
+      if(!nom){ refusesClasse++; return; }
+      cl=(DB.classes||[]).find(c=>(c.name||'').toLowerCase().trim()===nom.toLowerCase());
+      if(!cl){
+        if(!creer){ refusesClasse++; return; }
+        cl={id:_uid('c_'),name:nom,cycle:'primaire'};
+        DB.classes.push(cl); pushSync('classes','upsert',cl);
+        logAudit('classe_creee_import',`${nom} — créée par l'import CSV`,cl.id);
+      }
+    }
     let pid=null;
     if(parentPhone){
       let parent=(DB.users||[]).find(u=>u.role==='parent'&&u.phone&&u.phone.replace(/\s/g,'')===parentPhone.replace(/\s/g,''));
@@ -31963,7 +32208,11 @@ window.importCSVConfirm = () => {
       } else if(parent){pid=parent.id;}
     }
     const mat=genMat();
-    const ns={id:'s'+Date.now()+Math.random().toString(36).slice(2,5),name,mat,cid:cl?.id||null,pid,dob:dob||null,photo:null,access_parent:false};
+    // Père, mère et adresse arrivent enfin du fichier : la fiche les portait
+    // déjà, l'import ne les lisait pas, et il fallait les ressaisir à la main
+    // élève par élève.
+    const ns={id:'s'+Date.now()+Math.random().toString(36).slice(2,5),name,mat,cid:cl.id,pid,dob:dob||null,photo:null,access_parent:false,
+              nom_papa:(pere||'').trim()||null,nom_maman:(mere||'').trim()||null,adresse:(adresse||'').trim()||null};
     if((DB.students||[]).find(x=>x.name.toLowerCase().trim()===name.toLowerCase().trim()&&x.cid===ns.cid)){skipped++;return;}
     DB.students.push(ns);
     const newPays=['T1','T2','T3','inscription'].map(t=>({id:'p'+Date.now()+t+Math.random().toString(36).slice(2,4),sid:ns.id,t,paid:false}));
@@ -31972,9 +32221,14 @@ window.importCSVConfirm = () => {
     pushSync('payments','upsert',newPays);
     added++;
   });
-  logAudit('csv_import',`${added} élèves importés, ${skipped} ignorés`);
+  logAudit('csv_import',`${added} élèves importés, ${skipped} doublons, ${refusesClasse} refusés faute de classe`);
   saveToCrypt();
-  toast(`✅ ${added} élève(s) importé(s), ${skipped} ignoré(s)`,'success');
+  // Le compte des refusés est DIT. Un import qui n'annonce que ses succès
+  // laisse une liste incomplète passer pour une liste complète.
+  const dits=[`✅ ${added} élève(s) importé(s)`];
+  if(skipped) dits.push(`${skipped} déjà présent(s)`);
+  if(refusesClasse) dits.push(`${refusesClasse} refusé(s) — classe inconnue ou absente`);
+  toast(dits.join(' · '), refusesClasse?'warning':'success');
   closeModal();render();
 };
 

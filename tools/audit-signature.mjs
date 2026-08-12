@@ -89,6 +89,12 @@ const REGLE = {
   // retenue sur un salaire. Un document qui peut coûter de l'argent à
   // quelqu'un doit porter le nom de celui qui en répond.
   printRegistrePresence:       ['signe', 'registre de présence — fonde une retenue sur salaire, opposable au SECOPE'],
+  // La liste des élèves et de leurs tuteurs nomme des personnes privées et
+  // leurs téléphones. Elle se signe parce qu'elle ENGAGE : c'est la liste sur
+  // laquelle l'école appellera quelqu'un pour un enfant, et celle qu'on
+  // présente à qui demande qui a le droit de venir le chercher.
+  printListeTuteurs:           ['signe', 'liste élèves et tuteurs — nomme qui l’école appelle et qui peut venir chercher'],
+  exportTuteursCSV:            ['donnee', 'même liste en tableur — extraction, pas document'],
   printPersonnelFichePaie:     ['signe', 'fiche de paie remise à l’employé'],
   printFichePaie:              ['signe', 'fiche de paie remise à l’employé'],
   printFicheSante:             ['signe', 'fiche santé — remise à un soignant'],
