@@ -1656,6 +1656,47 @@ pour la dernière fois ?** ».
 Les vingt-trois sont passés à vingt-sept. Aucun des quatre ne bloque — ils
 informent — mais ils informent désormais quelqu'un.
 
+### Un encadré qui promet ce que le code ne fait pas
+
+L'import CSV des élèves affichait, en vert, dans son propre écran :
+
+> « La classe et le parent doivent exister **ou seront créés**. »
+
+Le code ne créait aucune classe. `classes.find(...)`, puis `cid: cl?.id || null`.
+Un fichier dont la classe était mal orthographiée — un accent, un espace, « 5e A »
+au lieu de « 5e Primaire A » — importait donc les élèves **sans classe**, en
+silence, en annonçant « ✅ 40 élève(s) importé(s) ».
+
+Ces élèves-là sortent de tout : pas de classement, pas de bulletin, pas de liste
+de classe. Et rien ne les signale — ils ne sont ni en erreur ni absents, ils sont
+juste **nulle part**. On les retrouve des semaines plus tard.
+
+> **Une promesse affichée est une spécification.** Elle est lue par celui qui
+> décide d'appuyer, et il en dépend. Un encadré d'aide qui ment coûte plus cher
+> qu'une absence d'aide : sans lui on vérifie, avec lui on fait confiance.
+
+La correction ne consiste pas à créer les classes en douce — ce serait fabriquer
+une classe à chaque faute de frappe. Elle consiste à **ne plus jamais deviner** :
+ou la classe existe, ou on la crée parce qu'on a coché la case en la voyant
+nommée à l'écran, ou **la ligne est refusée et comptée**. Et le compte des
+refusées est dit : un import qui n'annonce que ses succès laisse une liste
+incomplète passer pour une liste complète.
+
+### Une liste ne sert qu'au moment où on en a besoin
+
+La liste des élèves ne nommait qu'**une** personne par enfant : le compte parent.
+L'école connaît pourtant le père, la mère, l'adresse, et les personnes autorisées
+à venir le chercher — tout cela était en base, et rien ne le montrait ensemble.
+
+Le jour où on lit cette liste, c'est le jour où un enfant est malade et où il
+faut joindre quelqu'un. Lire « Parent : — » sur la ligne d'un enfant qui a un
+père, une mère et trois personnes autorisées, c'est une information qui existe
+et qu'on n'a pas sous les yeux **à la seule minute où elle compte**.
+
+Et une fiche vraiment vide se dit : « Aucun tuteur enregistré » n'est pas un
+enfant sans famille, c'est une **information qui manque à l'école** — donc une
+ligne à compléter, pas un blanc à ignorer.
+
 ### Une fonctionnalité peut être entièrement écrite et n'exister nulle part
 
 Le 12 août, Loms demande ce qui est fait côté présence du personnel. La réponse
