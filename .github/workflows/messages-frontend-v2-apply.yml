@@ -36,8 +36,10 @@ jobs:
           grep -Fq '<script src="messages-frontend-v2.js?v=20260812" defer></script>' dist/index.html
           grep -Fq "parent_to_dir" dist/messages-frontend-v2.js
           grep -Fq "openForwardParentMessage" dist/messages-frontend-v2.js
-          grep -Fq "sendTeacherReplyToDirection" dist/messages-frontend-v2.js
-          grep -Fq "archiveMessageV2" dist/messages-frontend-v2.js
+          grep -Fq "sendForwardParentMessage" dist/messages-frontend-v2.js
+          grep -Fq "openRelayTeacherMessage" dist/messages-frontend-v2.js
+          grep -Fq "sendRelayTeacherMessage" dist/messages-frontend-v2.js
+          grep -Fq "openArchivedMessages" dist/messages-frontend-v2.js
           grep -Fq "teacher_broadcast" dist/messages-frontend-v2.js
           test "$(grep -Fc '<script src=\"messages-frontend-v2.js?v=20260812\" defer></script>' dist/index.html)" -eq 1
 
