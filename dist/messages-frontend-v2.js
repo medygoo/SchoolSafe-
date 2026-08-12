@@ -31,8 +31,6 @@
     window._authClient = client;
     window.__SS_AUTH_BOOTSTRAP__.initialized = true;
 
-    // Même contrat que l'initialisation historique de index.html : on garde
-    // le JWT courant pour REST/RPC et les sessions invitation/récupération.
     client.auth.onAuthStateChange((_event, session) => {
       if (session?.access_token && typeof window._updateSupabase === 'function') {
         window._updateSupabase(OPS_SUPA_URL, OPS_SUPA_KEY, session.access_token);
@@ -44,15 +42,11 @@
     return client;
   };
 
-  // Chemin normal : le SDK `defer` placé dans <head> s'est exécuté avant ce
-  // script `defer` placé en fin de document. Zéro requête supplémentaire.
   window._ensureAuthClient = async () => {
     const ready = bindClient();
     if (ready) return ready;
     if (navigator.onLine === false) return null;
 
-    // Secours uniquement AU CLIC : si le CDN a réellement échoué au premier
-    // chargement, on retente le SDK sans ralentir l'ouverture de SchoolSafe.
     if (!window.__SS_AUTH_BOOTSTRAP__.sdkRetry) {
       window.__SS_AUTH_BOOTSTRAP__.sdkRetry = new Promise(resolve => {
         const s = document.createElement('script');
@@ -70,8 +64,6 @@
 
   bindClient();
 
-  // Le bouton attend l'initialisation locale du client AVANT d'exécuter le
-  // tryLogin existant. Aucun changement aux règles d'authentification.
   if (typeof window.tryLogin === 'function' && !window.tryLogin.__ssAuthWrapped) {
     const originalTryLogin = window.tryLogin;
     const wrapped = async function(...args) {
@@ -83,8 +75,7 @@
   }
 })();
 
-// Le travail Messages de Claude/SchoolSafe est conservé octet pour octet dans
-// ce fichier séparé et chargé ensuite. Ainsi la correction Auth reste isolée.
+// Le travail Messages de Claude/SchoolSafe est conservé dans son fichier séparé.
 (function loadPreservedMessagesFrontend() {
   'use strict';
   if (window.__SS_MESSAGES_CORE_LOADING__) return;
@@ -95,4 +86,22 @@
   s.onload = () => { window.__SS_MESSAGES_CORE_LOADED__ = true; };
   s.onerror = () => { console.warn('[SchoolSafe] frontend Messages V2 non chargé'); };
   document.head.appendChild(s);
+})();
+
+// Politique documents officiels : chargée ASYNCHRONEMENT, sans bloquer l'écran
+// d'accueil ni la saisie de connexion.
+(function loadOfficialDocumentsPolicy() {
+  'use strict';
+  if (window.__SS_DOCUMENTS_POLICY_LOADING__) return;
+  window.__SS_DOCUMENTS_POLICY_LOADING__ = true;
+  const load = () => {
+    const s = document.createElement('script');
+    s.src = 'documents-officiels-policy.js?v=20260812-1';
+    s.async = true;
+    s.onload = () => { window.__SS_DOCUMENTS_POLICY_LOADED__ = true; };
+    s.onerror = () => { console.warn('[SchoolSafe] politique documents PDF non chargée'); };
+    document.head.appendChild(s);
+  };
+  if ('requestIdleCallback' in window) requestIdleCallback(load, { timeout:1500 });
+  else setTimeout(load, 0);
 })();
