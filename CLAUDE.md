@@ -1288,6 +1288,88 @@ recette les revoit **tous les deux nommément**, pas seulement en nombre.
 termine par un `ROLLBACK` volontaire. Le navigateur est prêt ; **la base ne
 l'est pas encore**, et c'est Loms qui décide de la fusion.
 
+### Un secret dans le navigateur est un secret publié
+
+**11 août 2026, issue #102.** ChatGPT a livré le registre serveur des cartes —
+`public.student_cards` et cinq RPC. Le navigateur, lui, continuait à faire trois
+choses qu'il n'aurait jamais dû faire, et la troisième cassait tout :
+
+| | |
+|---|---|
+| il **signait** le QR permanent | avec `DB.settings.qr_secret`, descendu sur l'appareil. Qui le lit fabrique une carte que le portail accepte |
+| il **numérotait** les cartes | par un `length + 1` sur le registre local — deux Directions qui émettent en même temps produisent **deux pièces n° 42**, et un registre de délivrance qui se répète ne prouve plus rien |
+| il **décidait** au portail | en lisant `DB.student_cards`. Or le **gardien n'a aucune lecture sur cette table** : son registre local est toujours vide, donc **toute carte valable lui répondait « CARTE INCONNUE »** |
+
+Le troisième est le plus instructif : *le contrôle marchait parfaitement chez
+tous ceux qui n'en avaient pas besoin, et échouait chez le seul qui s'en sert.*
+Un droit de lecture restreint ne se voit pas depuis un compte Direction.
+
+> **Quand le serveur prend une décision, le navigateur ne la double pas : il la
+> DEMANDE.** Doubler, c'est fabriquer une seconde vérité — plus permissive quand
+> elle a le secret, plus stricte quand elle n'a pas les données.
+
+Corollaire écrit dans le code : **une carte ne s'émet pas hors ligne.** Le
+numéro, la signature et l'invalidation de l'ancienne sont une seule transaction
+serveur ; la couper en deux, c'est risquer deux cartes actives. Une déclaration
+de perte gardée dans la file laisse la carte ouvrir le portail — c'est le seul
+geste du registre qu'on ne peut pas différer. Hors ligne, on refuse et **on le
+dit**.
+
+### Un cache qui ment vit rarement sur l'appareil qui pourrait le corriger
+
+**Même audit, point 5.** `_cacheAcces` gardait la décision du portail cinq
+minutes. Le cas réel : enfant refusé pour frais → la famille régularise à la
+Caisse → elle revient tout de suite → **le gardien relisait l'ancien refus**, et
+l'enfant restait dehors alors qu'il avait payé.
+
+Le réflexe — *« vider le cache après l'encaissement »* — ne marche pas, et c'est
+ça qu'il faut retenir :
+
+> **Le cache qui ment vit sur le téléphone du GARDIEN ; l'encaissement se fait
+> sur celui de la CAISSE.** Aucun geste de la caissière n'atteint l'appareil du
+> portail. Une invalidation locale ne répare que les gestes faits au même
+> endroit.
+
+Le remède est donc dans la nature de ce qu'on garde : **on ne met plus un refus
+en cache du tout.** Un refus se redemande à chaque scan — un aller-retour de
+plus pour l'enfant qui est déjà arrêté devant la grille, jamais pour la file qui
+avance. Les décisions favorables, elles, se gardent.
+
+### Deux écrans qui répondent à la même question, encore
+
+**Même audit, point 6.** Le portail passe par `get_student_pickup_context` :
+actif **ET** approuvé **ET** dans ses dates. L'écran de consultation du gardien,
+celui de la Direction et celui du parent relisaient `DB.aps` avec le seul
+`active !== false`. **Une accréditation expirée y paraissait autorisée** — dans
+l'écran même où le gardien vient vérifier avant de laisser partir un enfant.
+
+`_apsValides` répond seul, et son symétrique `_apsHorsJeu` montre les autres
+**avec leur raison**. Les cacher aurait fait croire à une fiche vide, alors
+qu'il y a une date à renouveler.
+
+### Une promesse suivie d'un refus est pire qu'un bouton absent
+
+**Même audit, point 7.** L'espace Parent annonçait « Vous pouvez ajouter jusqu'à
+3 tutelles » et offrait « ➕ Ajouter ». `openTutelleForm` refusait ensuite le
+parent, et le serveur aussi. Le parent croyait avoir fait le nécessaire — et le
+jour où quelqu'un se présente au portail, la personne qu'il pensait avoir
+enregistrée n'existe nulle part.
+
+On dit la règle **avant**, et on donne le geste qui marche : passer au bureau
+avec la personne et sa pièce.
+
+`tools/recette-scanner-fermeture.mjs` tient 27 points sur ces quatre-là ;
+`--preuve` réinjecte les **quatre** défauts d'origine et vérifie qu'ils sont
+revus **nommément**. `tools/recette-cartes.mjs` est passée à 53 points et a
+changé de camp : elle gardait un registre tenu dans le navigateur, elle garde
+maintenant le fait qu'il n'en tient plus aucun.
+
+**Et une faute de harnais qui vaut d'être notée :** un `const` d'un bloc extrait
+restait enfermé dans la portée de son `new Function`, invisible au bloc suivant.
+Le défaut ne se déclenchait **que** quand le cache était non vide — donc
+uniquement en `--preuve`. Un harnais qui ne casse que dans un sens est un
+harnais qu'on croit bon.
+
 ---
 
 ## Les outils
@@ -1316,6 +1398,7 @@ npm run audit        # tout d'un coup
 | `audit-portee-parent.mjs` | de quelles données un rôle a-t-il réellement besoin |
 | `recette-contact.mjs` | corriger un téléphone ou une adresse, exécuté (`--preuve`) |
 | `recette-scanner-physique.mjs` | scanner physique ≠ accès QR Caisse, et **un refus n'est pas un silence** (`--preuve`) |
+| `recette-scanner-fermeture.mjs` | le cache d'accès, la vérité serveur des personnes autorisées, la promesse faite au parent (`--preuve`) |
 
 **Dans un nouveau dépôt, commencer par les lancer.** Leur sortie *est* la liste
 des manques — au lieu d'en discuter.

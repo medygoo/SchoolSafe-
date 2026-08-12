@@ -38,6 +38,7 @@ const OUTILS = [
   ['autorisees',  'recette-personnes-autorisees.mjs','les personnes autorisées au portail'],
   ['contact',     'recette-contact.mjs',       'corriger un téléphone ou une adresse'],
   ['scanphys',    'recette-scanner-physique.mjs','scanner physique ≠ accès QR Caisse'],
+  ['fermeture',   'recette-scanner-fermeture.mjs','les points de fermeture du Scanner'],
 ];
 
 const detail = process.argv.includes('--detail');
