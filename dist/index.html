@@ -2904,7 +2904,12 @@ window.ROLE_LOAD = {
     ],
     modules: {
       pedagogie:      ['matieres','attendance','devoirs','grades','appreciations','conduct','cahier_prep','cahier_texte','evaluations','prevision_matiere','timetables','rattrapages','tenafep','exetat'],
+      // `student_cards` est le registre SERVEUR des cartes (ChatGPT, #102) :
+      // il remplace le registre provisoire que le navigateur tenait seul. En
+      // `select=*` volontairement — nommer une colonne qu'on n'a pas vue ferait
+      // rejeter la lecture ENTIÈRE par PostgREST, et je n'ai pas lu ce schéma.
       eleves:         ['aps','scan_log','approbations','medical','medical_visits','sanctions','convocations','absences',
+                       _T('student_cards','select=*&order=issued_at.desc&limit=1000'),
                        _T('student_exit_events','select=id,sid,status,prepared_at,expires_at,prepared_by_name,gate_label,gate_scanned_at,escort_name_snapshot,validated_at&order=prepared_at.desc&limit=200')],
       activites:      ['activites','activites_inscriptions','cantine','cantine_menus','cantine_presence'],
       communication:  ['messages','events'],
@@ -2929,6 +2934,7 @@ window.ROLE_LOAD = {
     modules: {
       pedagogie:      ['attendance','devoirs','grades','appreciations','conduct','cahier_prep'],
       eleves:         ['approbations','aps','scan_log',
+                       _T('student_cards','select=*&order=issued_at.desc&limit=1000'),
                        _T('student_exit_events','select=id,sid,status,prepared_at,expires_at,prepared_by_name,gate_label,gate_scanned_at,escort_name_snapshot,validated_at&order=prepared_at.desc&limit=200')],
       // Direction 2 n'administre PAS la paie — décision de Loms, 5 août
       // 2026 — mais il est payé comme les autres et voit la sienne.
@@ -2970,6 +2976,10 @@ window.ROLE_LOAD = {
       pedagogie:     ['attendance','devoirs','grades','appreciations','conduct','cahier_prep','cahier_texte','prevision_matiere','timetables','rattrapages'],
       eleves:        [_T('scan_log','select='+_COLS_SCAN+'&order=time.desc&limit=500'),
                       _T('aps','select=id,sid,name,relation,photo,active,phone,approval_status,valid_until'),
+                      // Lecture seule, limitée à ses classes par la RLS de
+                      // ChatGPT. Il n'émet ni n'invalide : `_peutCarte()` le
+                      // refuse, et le serveur aussi.
+                      _T('student_cards','select=*&order=issued_at.desc&limit=500'),
                       // Il prépare les sorties : sans cette lecture, l'écran
                       // proposerait « Préparer » à un élève déjà en attente
                       // au portail, et le parent recevrait deux avis.
@@ -2994,6 +3004,10 @@ window.ROLE_LOAD = {
     modules: {
       suivi:         ['attendance','devoirs','grades','appreciations','conduct',
                       _T('scan_log','select='+_COLS_SCAN+'&order=date.desc&limit=300'),
+                      // Le parent lit les cartes de SES enfants — la RLS de
+                      // ChatGPT le limite. C'est ce qui lui permet de voir
+                      // qu'une carte est déclarée perdue.
+                      _T('student_cards','select=*&order=issued_at.desc&limit=100'),
                       _T('aps','select=*'),
                       // Ajoutées à la matrice : le menu du parent porte
                       // « Cahier de texte », « Emploi du temps » et
@@ -8851,12 +8865,21 @@ window.exportSSAllCardsZip=function(){
 //  registre. C'est la règle 9 de l'issue #63, et elle a une raison : on
 //  ouvre un aperçu dix fois pour vérifier une photo, on n'imprime qu'une.
 //
-//  ── CE QUE LE SERVEUR DOIT ENCORE FAIRE — demandé à ChatGPT ────────────
-//  Le numéro de carte et la signature du QR permanent appartiennent au
-//  serveur. Ici ils sont calculés dans le navigateur et **marqués comme
-//  provisoires** : `numero_provisoire:true`. Ce n'est pas un contournement,
-//  c'est un état déclaré, que `issue_student_card` remplacera. Voir le
-//  compte rendu déposé sur l'issue #63.
+//  ── SERVI, ET BRANCHÉ — #102, 11 août 2026 ─────────────────────────────
+//  Le registre vit maintenant dans `public.student_cards`, et TOUT passe par
+//  cinq RPC : `issue_student_card`, `declare_student_card_lost`,
+//  `revoke_student_card`, `count_student_card_print`, `verify_student_card_qr`.
+//  La table refuse toute écriture directe — `authenticated` n'a ni INSERT, ni
+//  UPDATE, ni DELETE.
+//
+//  Ce qui a disparu d'ici, et pourquoi : le numéro de carte (un `length + 1`
+//  local donne le même numéro à deux Directions qui émettent en même temps) et
+//  la signature du QR (un secret descendu dans le navigateur est un secret
+//  publié). La clé `student_card_v1` reste dans `private.qr_keys`.
+//
+//  ⚠️ `settings.year` vaut `2025-2026` sur la base, et `verify_student_card_qr`
+//  exige que la carte soit de l'année en cours. **On ne change pas l'année
+//  depuis ici** — consigne de ChatGPT, #102.
 // ════════════════════════════════════════════════════════════════════════════
 
 // Les cinq états d'une carte. `active` est le seul qui ouvre le portail.
@@ -8890,33 +8913,25 @@ window._cartesDe = (sid, annee) => (DB.student_cards || [])
 window._carteActive = (sid, annee) =>
   _cartesDe(sid, annee || _anneeScolaire()).find(c => c.status === 'active') || null;
 
-// ── LE NUMÉRO ──────────────────────────────────────────────────────────────
-// Séquentiel par année scolaire, comme un registre de délivrance : une
-// administration doit pouvoir demander « montrez-moi le n° 42 ».
-// PROVISOIRE tant que le serveur ne l'attribue pas — voir l'en-tête.
-window._carteNumero = (annee) => {
-  const an = annee || _anneeScolaire();
-  const n = (DB.student_cards || []).filter(c => c.year === an).length + 1;
-  return 'LS-' + an + '-' + String(n).padStart(4, '0');
-};
-
-// ── LE QR PERMANENT ────────────────────────────────────────────────────────
-// Il est DISTINCT du QR quotidien, et la différence se lit dans le format :
+// ── LE NUMÉRO ET LE QR APPARTIENNENT AU SERVEUR — #102 ─────────────────────
 //
-//    quotidien  schoolsafe://student/{mat}/{YYYYMMDD}/{sig}   — 6 segments
-//    permanent  schoolsafe://card/{numero}/{sig}              — 5 segments
+// Les deux étaient fabriqués ici : le numéro par un `length + 1` sur le
+// registre local, la signature par `_hmacSign(DB.settings.qr_secret, …)`.
+// Les deux sont partis, et ce n'est pas un durcissement de confort :
 //
-// Le permanent ne porte ni date d'expiration ni donnée familiale : seulement
-// le numéro de carte, qui ne dit rien tout seul. C'est le registre qui dit si
-// ce numéro est actif, à qui il appartient et pour quelle année — donc une
-// carte perdue cesse d'ouvrir le portail à la seconde où on la déclare, sans
-// qu'on ait besoin de la récupérer.
-window._carteQR = async (numero) => {
-  const secret = DB.settings?.qr_secret;
-  if (!secret) return null;   // pas de secret : on ne fabrique pas un faux
-  const sig = await _hmacSign(secret, 'card:' + numero);
-  return 'schoolsafe://card/' + numero + '/' + sig;
-};
+//   · `length + 1` sur un registre local donne le MÊME numéro à deux
+//     Directions qui émettent en même temps — un registre de délivrance dont
+//     deux pièces portent le n° 42 ne prouve plus rien ;
+//   · un secret de signature descendu dans le navigateur est un secret
+//     publié : qui le lit fabrique une carte que le portail accepte.
+//
+// Depuis #102, `issue_student_card` attribue le numéro, signe avec
+// `student_card_v1` (qui reste dans `private.qr_keys`) et rend la charge utile
+//     schoolsafe://card/{card_no}/{HMAC_SHA256_HEX_64}
+// L'invalidation de l'ancienne et l'activation de la nouvelle se font dans la
+// MÊME transaction : jamais deux cartes actives, et si ça échoue, rien n'a eu
+// lieu. Le format à 5 segments reste ce qui distingue le permanent du
+// quotidien à 6 — voir `_decodeQR`.
 
 // ── LE SEUL DROIT QUI COMPTE ───────────────────────────────────────────────
 // Loms, 10 août 2026 : « on fait maternelle et primaire pour la carte,
@@ -8925,22 +8940,21 @@ window._carteQR = async (numero) => {
 // réservait la déclaration de perte à Direction 1. Signalé à ChatGPT.
 window._peutCarte = () => !!S.user && ['direction', 'direction2'].includes(S.user.role);
 
-// ── INVALIDER ──────────────────────────────────────────────────────────────
-// Rien n'est supprimé, jamais. Une carte change d'état, et l'état garde qui,
-// quand et pourquoi. Une invalidation sans auteur ne vaut rien : le jour où
-// une famille conteste, c'est cette ligne-là qu'on lit.
-window._carteInvalider = (carte, etat, motif, remplacantId) => {
-  carte.status = etat;
-  carte.invalidated_at = new Date().toISOString();
-  carte.invalidated_by = S.user?.id || null;
-  carte.invalidated_by_name = window._acteur();
-  carte.invalidated_reason = motif || null;
-  if (remplacantId) carte.replaced_by = remplacantId;
-  pushSync('student_cards', 'patch', {
-    status: carte.status, invalidated_at: carte.invalidated_at,
-    invalidated_by: carte.invalidated_by, invalidated_by_name: carte.invalidated_by_name,
-    invalidated_reason: carte.invalidated_reason, replaced_by: carte.replaced_by || null,
-  }, 'id=eq.' + carte.id);
+// ── REFLÉTER CE QUE LE SERVEUR A DÉCIDÉ ────────────────────────────────────
+// Elle ÉCRIVAIT — elle posait l'état, l'auteur et la date, puis poussait un
+// `patch` direct sur `student_cards`. Cette table refuse désormais toute
+// écriture directe : `authenticated` n'a ni INSERT, ni UPDATE, ni DELETE, et
+// tout passe par les RPC (#102). Un `patch` qui part quand même n'échoue pas
+// bruyamment — il part dans la file et n'arrive jamais. C'est la leçon
+// « quand une écriture directe devient impossible, elle devient un mensonge ».
+//
+// Elle ne fait donc plus qu'une chose : refléter localement ce que la RPC
+// vient de renvoyer, pour que l'écran n'attende pas un rechargement.
+window._carteRefleter = (carte, srv) => {
+  if (!carte || !srv) return;
+  ['status','invalidated_at','invalidated_by','invalidated_by_name',
+   'invalidated_reason','replaced_by','print_count','card_no','qr_payload'
+  ].forEach(k => { if (srv[k] !== undefined) carte[k] = srv[k]; });
 };
 
 // ── L'ÉCRAN D'ÉMISSION ─────────────────────────────────────────────────────
@@ -9041,40 +9055,54 @@ window.confirmerEmissionCarte = async (sid) => {
   }
 
   const an = _anneeScolaire();
-  const cl = (DB.classes || []).find(c => c.id === s.cid);
   const ancienne = _carteActive(sid, an);
-  const numero = _carteNumero(an);
-  const carte = {
-    id: _uid('crt_'),
-    sid, year: an,
-    card_no: numero,
-    numero_provisoire: true,     // le serveur remplacera — voir l'en-tête
-    class_id: s.cid || null,
-    class_name: cl ? cl.name : null,
-    status: 'active',
-    emission: type,
-    motif: motif || null,
-    note: note || null,
-    photo: s.photo || null,      // la photo RÉELLEMENT imprimée, figée ici
-    qr_payload: await _carteQR(numero),
-    issued_by: S.user?.id || null,
-    issued_by_name: window._acteur(),
-    issued_at: new Date().toISOString(),
-    print_count: 1,
-    replaces: ancienne ? ancienne.id : null,
-  };
 
-  // L'ancienne devient invalide AVANT que la nouvelle soit active. Dans cet
-  // ordre : une seconde à deux cartes valables est une seconde de trop.
-  if (ancienne) {
-    const etat = type === 'duplicata_perte' ? 'perdue'
-               : type === 'duplicata_deterioration' ? 'deterioree'
-               : 'remplacee';
-    _carteInvalider(ancienne, etat, motif || _CARTE_TYPES[type].l, carte.id);
+  // Une carte d'élève est une pièce d'identité scolaire : elle ne s'émet pas
+  // hors ligne. Le numéro, la signature et l'invalidation de l'ancienne sont
+  // une SEULE transaction serveur — la couper en deux, c'est risquer deux
+  // cartes actives, et c'est exactement ce que #102 ferme.
+  if (!window.DB_ONLINE) {
+    toast('Hors ligne — une carte s’émet sur le serveur, jamais localement', 'error');
+    return;
   }
 
+  const r = await _rpc('issue_student_card', {
+    p_sid:      sid,
+    p_year:     an,
+    p_emission: type,
+    p_motif:    motif || null,
+    p_note:     note || null,
+    p_photo:    s.photo || null,   // la photo RÉELLEMENT imprimée, figée là-bas
+    p_class_id: s.cid || null,
+    p_replaces: ancienne ? ancienne.id : null,
+  });
+
+  if (!r.ok) {
+    // Le refus s'affiche EN ENTIER avec son code : la Direction doit pouvoir
+    // le lire au téléphone. Et rien n'est écrit localement — le registre local
+    // ne doit jamais porter une carte que le serveur n'a pas délivrée.
+    openM('La carte n’a pas pu être émise',
+      `<div style="padding:4px 2px">
+        <p style="margin:0 0 10px;font-size:15px"><b>${esc(s.name)}</b></p>
+        <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:11px;padding:12px 14px;color:#991b1b;font-size:14px;line-height:1.55">
+          ${esc(_codeMsg(r.code))}</div>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0">Code serveur : <span style="font-family:monospace">${esc(r.code || '—')}</span></p>
+      </div>`,
+      `<button class="btn btn-outline" onclick="closeModal()">Fermer</button>`);
+    return;
+  }
+
+  // La ligne rendue par le serveur FAIT FOI — numéro, charge utile signée,
+  // auteur, date. On ne recompose rien par-dessus.
+  const carte = r.data.card || r.data;
   (DB.student_cards = DB.student_cards || []).unshift(carte);
-  pushSync('student_cards', 'post', carte);
+
+  // L'ancienne a été invalidée par la MÊME transaction. On ne le décide pas
+  // ici : on le reflète, avec ce que le serveur en dit s'il le dit.
+  if (ancienne) _carteRefleter(ancienne, r.data.replaced_card ||
+    { status: type === 'duplicata_perte' ? 'perdue'
+            : type === 'duplicata_deterioration' ? 'deterioree' : 'remplacee',
+      replaced_by: carte.id });
 
   // Les trois anciens champs restent tenus à jour : le reste de l'application
   // les lit encore, et un champ qu'on cesse d'écrire sans le dire fabrique un
@@ -9087,10 +9115,10 @@ window.confirmerEmissionCarte = async (sid) => {
   }, 'id=eq.' + sid);
 
   saveToCrypt();
-  logAudit('card_issue', `${_CARTE_TYPES[type].l} — ${s.name} — ${numero} — année ${an}` +
+  logAudit('card_issue', `${_CARTE_TYPES[type].l} — ${s.name} — ${carte.card_no} — année ${an}` +
     (ancienne ? ` — remplace ${ancienne.card_no}` : '') + (motif ? ` — motif : ${motif}` : ''), sid);
   closeModal();
-  toast(`Carte ${numero} émise — ${_CARTE_TYPES[type].l.toLowerCase()}`, 'success');
+  toast(`Carte ${carte.card_no} émise — ${_CARTE_TYPES[type].l.toLowerCase()}`, 'success');
   imprimerCarte(carte.id, true);
   render();
 };
@@ -9118,14 +9146,24 @@ window.declarerCartePerdue = (sid) => {
      <button class="btn btn-danger" onclick="confirmerPerteCarte(${JSON.stringify(sid)})">Déclarer perdue</button>`);
 };
 
-window.confirmerPerteCarte = (sid) => {
+window.confirmerPerteCarte = async (sid) => {
   if (!_peutCarte()) return;
   const motif = (document.getElementById('perteMotif')?.value || '').trim();
   if (!motif) { markFieldError('perteMotif', 'Le motif reste dans le registre — il ne peut pas être vide.'); return; }
   const s = (DB.students || []).find(x => x.id === sid);
   const c = _carteActive(sid);
   if (!c) return;
-  _carteInvalider(c, 'perdue', motif, null);
+
+  // Ce qui INVALIDE doit invalider vraiment. Une déclaration de perte gardée
+  // dans la file hors ligne laisse la carte ouvrir le portail — c'est le seul
+  // geste du registre qu'on ne peut pas différer.
+  if (!window.DB_ONLINE) {
+    toast('Hors ligne — la perte se déclare sur le serveur, sinon la carte ouvre encore', 'error');
+    return;
+  }
+  const r = await _rpc('declare_student_card_lost', { p_card_id: c.id, p_motif: motif });
+  if (!r.ok) { toast(_codeMsg(r.code), 'error'); return; }
+  _carteRefleter(c, r.data.card || r.data || { status:'perdue' });
   saveToCrypt();
   logAudit('card_lost', `Carte ${c.card_no} déclarée perdue — ${s.name} — ${motif}`, sid);
   closeModal();
@@ -9152,13 +9190,19 @@ window.revoquerCarte = (cid) => {
      <button class="btn btn-danger" onclick="confirmerRevocation(${JSON.stringify(cid)})">Révoquer</button>`);
 };
 
-window.confirmerRevocation = (cid) => {
+window.confirmerRevocation = async (cid) => {
   if (!_peutCarte()) return;
   const motif = (document.getElementById('revocMotif')?.value || '').trim();
   if (!motif) { markFieldError('revocMotif', 'Le motif reste dans le registre.'); return; }
   const c = (DB.student_cards || []).find(x => x.id === cid);
   if (!c) return;
-  _carteInvalider(c, 'revoquee', motif, null);
+  if (!window.DB_ONLINE) {
+    toast('Hors ligne — la révocation se fait sur le serveur, sinon la carte ouvre encore', 'error');
+    return;
+  }
+  const r = await _rpc('revoke_student_card', { p_card_id: cid, p_motif: motif });
+  if (!r.ok) { toast(_codeMsg(r.code), 'error'); return; }
+  _carteRefleter(c, r.data.card || r.data || { status:'revoquee' });
   saveToCrypt();
   logAudit('card_revoke', `Carte ${c.card_no} révoquée — ${motif}`, c.sid);
   closeModal();
@@ -9221,7 +9265,7 @@ window.apercuCarte = (sid) => {
 // Toute autre ouverture est une RÉIMPRESSION et doit se compter — c'est ce
 // qui permet de voir, dans l'écran de gestion, les cartes réimprimées trois
 // fois dans l'année.
-window.imprimerCarte = (cid, premiere) => {
+window.imprimerCarte = async (cid, premiere) => {
   // Imprimer une carte d'élève, c'est produire une pièce d'identité scolaire :
   // le contrôle est ici, pas seulement dans le rendu du bouton. Cacher un
   // bouton ne protège rien.
@@ -9229,8 +9273,17 @@ window.imprimerCarte = (cid, premiere) => {
   const c = (DB.student_cards || []).find(x => x.id === cid);
   if (!c) { toast('Carte introuvable', 'error'); return; }
   if (!premiere) {
-    c.print_count = (c.print_count || 1) + 1;
-    pushSync('student_cards', 'patch', {print_count: c.print_count}, 'id=eq.' + c.id);
+    // Le compteur appartient au registre serveur : `count_student_card_print`.
+    // Un `patch` direct ne passe plus (aucun UPDATE sur `student_cards`), et
+    // une réimpression non comptée est justement ce que le registre existe
+    // pour voir. Si le serveur ne répond pas, on le DIT et on n'imprime pas :
+    // un papier sorti sans ligne au registre est un papier qui n'a jamais été
+    // imprimé, pour tout le monde sauf pour la famille qui l'a en main.
+    if (!window.DB_ONLINE) { toast('Hors ligne — une réimpression se compte au registre', 'error'); return; }
+    const r = await _rpc('count_student_card_print', { p_card_id: c.id });
+    if (!r.ok) { toast(_codeMsg(r.code), 'error'); return; }
+    _carteRefleter(c, r.data.card || r.data ||
+      { print_count: (c.print_count || 1) + 1 });
     saveToCrypt();
   }
   const s = (DB.students || []).find(x => x.id === c.sid);
@@ -13131,6 +13184,10 @@ window.toggleStudentAccess = sid => {
   const s=DB.students.find(x=>x.id===sid); if(!s) return;
   s.access_blocked=!s.access_blocked;
   pushSync('students','patch',{access_blocked:s.access_blocked},'id=eq.'+sid);
+  // La décision d'accès du portail vient de changer : celle qu'on a en mémoire
+  // ne vaut plus rien. Sur un autre appareil, c'est le non-cache des refus qui
+  // s'en charge.
+  window._oublierAcces(sid);
   logAudit(s.access_blocked?'student_block':'student_unblock', s.name, sid);
   toast(s.access_blocked?`🔒 ${s.name} — accès bloqué`:`🔓 ${s.name} — accès autorisé`, s.access_blocked?'info':'success');
   saveToCrypt(); render();
@@ -13174,6 +13231,7 @@ window.blockAllUnpaid = () => {
   showC(`Bloquer ${unpaid.length} élève(s) ?`,
     `Élèves n'ayant pas réglé ${_libTrim}. Ils ne pourront plus entrer à l'école, et leurs parents en seront informés.`,()=>{
     unpaid.forEach(s=>{s.access_blocked=true;});
+    window._oublierAcces();   // on ne sait plus qui a bougé : on oublie tout
     window._patchLot('students', {access_blocked:true}, unpaid.map(s=>s.id));
     // Un enfant refoulé au portail sans que son parent sache pourquoi, c'est
     // l'enfant qui porte la sanction. Le parent est prévenu au moment du
@@ -13196,6 +13254,7 @@ window.unblockAll = () => {
   if(!blocked.length){toast('Aucun élève bloqué','info');return;}
   showC(`Débloquer ${blocked.length} élève(s) ?`,'Tous les élèves bloqués auront à nouveau accès à l\'école.',()=>{
     blocked.forEach(s=>{s.access_blocked=false;});
+    window._oublierAcces();
     window._patchLot('students', {access_blocked:false}, blocked.map(s=>s.id));
     toast(`${blocked.length} élève(s) débloqué(s)`,'success');
     saveToCrypt(); render();
@@ -15483,6 +15542,11 @@ window.enregistrerVersement = async () => {
     });
     if (!r.ok) { toast(_codeMsg(r.code), 'error'); return; }
 
+    // La famille vient de régulariser : la décision d'accès qu'on a en mémoire
+    // est périmée. Sur l'appareil du gardien, c'est le non-cache des refus qui
+    // garantit qu'il redemandera — la Caisse ne peut pas l'atteindre d'ici.
+    window._oublierAcces(sid);
+
     const t = r.data.transaction || r.data;
     const recu = t.receipt_no || '—';
     logAudit('payment_record', `${_fmtMt(t.amount ?? montant, t.currency)} — reçu ${recu}`, sid);
@@ -15552,6 +15616,7 @@ window._confirmerAnnulation = async (transactionId) => {
                          { p_transaction_id: transactionId, p_reason: motif });
     if (!r.ok) { toast(_codeMsg(r.code), 'error'); return; }
 
+    window._oublierAcces(r.data.student_id || _cfEtat.sid);
     logAudit('payment_reversed', `${r.data.receipt_no || transactionId} — ${motif}`, r.data.student_id);
     closeModal();
     toast(`Paiement ${r.data.receipt_no || ''} annulé`, 'success');
@@ -18396,10 +18461,13 @@ function _decodeQR(raw) {
   // rien de la famille. C'est le registre qui dit à qui il appartient : donc
   // une carte perdue cesse d'ouvrir le portail à la seconde où on la déclare,
   // sans qu'on ait à la récupérer.
+  // La charge utile PART TELLE QUELLE au serveur : `verify_student_card_qr`
+  // prend `p_payload`, pas un numéro découpé. On garde le numéro seulement
+  // pour l'afficher si le contrôle échoue — jamais pour décider.
   if(str.startsWith('schoolsafe://card/')){
     const p=str.split('/');
-    if(p.length===5) return {carteNo:p[3], carteSig:p[4], mat:null, qrSig:null, qrTs:null};
-    return {carteNo:null, carteSig:null, mat:str, qrSig:null, qrTs:null};
+    if(p.length===5) return {cartePayload:str, carteNo:p[3], carteSig:p[4], mat:null, qrSig:null, qrTs:null};
+    return {cartePayload:null, carteNo:null, carteSig:null, mat:str, qrSig:null, qrTs:null};
   }
 
   if(str.startsWith('schoolsafe://student/')||str.startsWith('schoolsafe://verify/')){
@@ -18421,41 +18489,74 @@ function _decodeQR(raw) {
   if(byId) return {mat:byId.mat, qrSig:null, qrTs:null};
   return {mat, qrSig:null, qrTs:null};
 }
-// ── LE QR PERMANENT AU PORTAIL — P0-8 ──────────────────────────────────────
-// Cinq contrôles, dans cet ordre, et chacun a sa propre réponse à l'écran.
-// Un gardien qui lit « refusé » sans savoir pourquoi ne peut ni expliquer à
-// la famille ni alerter la bonne personne : c'est la leçon des quatre pannes
-// derrière un seul message, appliquée d'avance.
-window._resoudreCarteQR = async (numero, sig) => {
-  const secret = DB.settings?.qr_secret;
-  if (!secret) return {ok:false, titre:'CONTRÔLE IMPOSSIBLE',
-    detail:'Le secret de signature n’est pas posé — prévenez la Direction'};
+// ── LE QR PERMANENT AU PORTAIL — LA DÉCISION APPARTIENT AU SERVEUR ─────────
+//
+// **Elle vérifiait la signature DANS LE NAVIGATEUR**, avec `DB.settings.qr_secret`,
+// puis lisait l'état dans `DB.student_cards`. Trois défauts, et le troisième
+// suffisait à tout casser :
+//
+//   · un secret de signature posé sur l’appareil est un secret publié — qui le
+//     lit fabrique une carte que le portail accepte ;
+//   · l'état venait d'un cache local : une carte déclarée perdue il y a deux
+//     minutes ouvrait encore le portail d'un appareil non rafraîchi ;
+//   · **le gardien n'a AUCUNE lecture directe sur `student_cards`** (ChatGPT,
+//     #102). Son `DB.student_cards` est donc toujours vide, et toute carte
+//     valable lui répondait « CARTE INCONNUE ».
+//
+// Depuis #102, le serveur tient tout : `verify_student_card_qr(p_payload)`
+// reçoit la charge utile ENTIÈRE et rend la décision. La clé `student_card_v1`
+// vit dans `private.qr_keys` et ne descend plus jamais ici.
+//
+// ⚠️ CE QUE JE N'AI PAS VU : la FORME exacte de la réponse. ChatGPT a donné le
+// contrat d'entrée et un code de refus (`CARD_PERDUE`), pas la liste des champs
+// rendus. Je lis donc l'identité de l'élève sur les noms les plus probables, et
+// **si aucun n'est là, je refuse en le disant** au lieu de deviner. Un document
+// dit l'intention ; seule la fonction dit la forme — question posée dans #102.
+window._CARTE_REFUS = {
+  CARD_PERDUE:        'Déclarée perdue — cette carte n’ouvre plus',
+  CARD_REMPLACEE:     'Une carte plus récente a été émise',
+  CARD_DETERIOREE:    'Carte déclarée détériorée — un duplicata a été émis',
+  CARD_REVOQUEE:      'Carte révoquée par la Direction',
+  CARD_NOT_FOUND:     'Ce numéro n’est pas au registre de l’école',
+  CARD_INVALID_SIGNATURE: 'Signature invalide — alertez la Direction',
+  CARD_WRONG_YEAR:    'Cette carte n’est pas celle de l’année en cours',
+  FORBIDDEN:          'Votre profil ne vérifie pas les cartes',
+};
 
-  const attendu = await _hmacSign(secret, 'card:' + numero);
-  if (sig !== attendu) return {ok:false, titre:'CARTE FALSIFIÉE',
-    detail:'Signature invalide — alertez la Direction'};
+window._resoudreCarteQR = async (payload) => {
+  if (!payload) return {ok:false, titre:'CARTE ILLISIBLE',
+    detail:'Ce QR n’est pas une carte SchoolSafe'};
 
-  const c = (DB.student_cards || []).find(x => x.card_no === numero);
-  if (!c) return {ok:false, titre:'CARTE INCONNUE',
-    detail:'Ce numéro n’est pas au registre de l’école'};
+  if (!window.DB_ONLINE) return {ok:false, titre:'CONTRÔLE IMPOSSIBLE',
+    detail:'Une carte permanente se vérifie sur le serveur — pas de réseau. Contrôle manuel.'};
 
-  const s = (DB.students || []).find(x => x.id === c.sid);
-  const nom = s ? s.name : null;
+  const r = await _rpc('verify_student_card_qr', { p_payload: payload });
 
-  if (c.status !== 'active') {
-    const e = window._CARTE_ETATS[c.status];
-    return {ok:false, nom, titre:'CARTE ' + (e ? e.l.toUpperCase() : 'INVALIDE'),
-      detail: c.status === 'perdue' ? 'Déclarée perdue — cette carte n’ouvre plus'
-            : c.status === 'remplacee' ? 'Une carte plus récente a été émise'
-            : 'Carte invalidée par la Direction'};
+  if (!r.ok) {
+    const d = window._CARTE_REFUS[r.code];
+    return {ok:false, titre: d ? 'CARTE REFUSÉE' : 'CONTRÔLE IMPOSSIBLE',
+      detail: d ? d : 'Le serveur n’a pas validé cette carte (' + esc(r.code || 'sans code') + ')'};
   }
-  if (c.year !== _anneeScolaire()) return {ok:false, nom, titre:'CARTE D’UNE AUTRE ANNÉE',
-    detail:'Carte ' + c.year + ' — l’année en cours est ' + _anneeScolaire()};
 
-  if (!s) return {ok:false, titre:'ÉLÈVE INTROUVABLE', detail:'Le dossier n’est pas dans cet appareil'};
-  if (s.archived) return {ok:false, nom, titre:'ÉLÈVE ARCHIVÉ', detail:'Cet élève n’est plus inscrit'};
+  const d = r.data || {};
+  const nom = d.student_name || d.name || null;
 
-  return {ok:true, mat:s.mat, carte:c, nom};
+  // L'identité que l'entrée réclame ensuite. Aucun repli sur le registre
+  // local : le gardien n'en a pas, et s'en servir ramènerait le défaut.
+  const s = (DB.students || []).find(x =>
+    (d.mat && x.mat === d.mat) || (d.sid && x.id === d.sid) || (d.student_id && x.id === d.student_id));
+  const mat = d.mat || (s ? s.mat : null);
+
+  if (!mat) return {ok:false, nom, titre:'CONTRÔLE INCOMPLET',
+    detail:'Le serveur a validé la carte mais n’a pas rendu l’élève — signalé à la Direction'};
+
+  // L'élève peut être absent du dossier local sans que la carte soit en cause :
+  // c'est le serveur qui vient de l'authentifier. On continue avec SON
+  // matricule — l'entrée sera de toute façon tranchée par `record_entry_scan`.
+  if (s && s.archived) return {ok:false, nom, titre:'ÉLÈVE ARCHIVÉ',
+    detail:'Cet élève n’est plus inscrit'};
+
+  return {ok:true, mat, carte:d, nom};
 };
 
 function _startDecodeLoop(video) {
@@ -18480,7 +18581,7 @@ function _startDecodeLoop(video) {
         if(!_dqr) return;
         let _mat=_dqr.mat, _qSig=_dqr.qrSig, _qTs=_dqr.qrTs, _perm=false;
         if(_dqr.carteNo){
-          const _r=await _resoudreCarteQR(_dqr.carteNo,_dqr.carteSig);
+          const _r=await _resoudreCarteQR(_dqr.cartePayload);
           if(!_r.ok){ showScanResult('red','⛔',_r.titre,_r.nom||'Carte '+_dqr.carteNo,_r.detail,nowTime()); return; }
           _mat=_r.mat; _qSig=null; _qTs=null; _perm=true;
         }
@@ -18533,7 +18634,9 @@ function showScanResult(color,icon,title,name,sub,time,logId,sid) {
 window._escorteChoix = (logId, sid) => {
   const s = (DB.students||[]).find(x => x.id === sid);
   const parent = s && s.pid ? gu(s.pid) : null;
-  const tutelles = (DB.aps||[]).filter(a => a.sid === sid && a.active !== false).slice(0, 3);
+  // Repli local quand la RPC n'a pas répondu : il DOIT appliquer la règle du
+  // serveur, sinon il propose au gardien quelqu'un que le portail refusera.
+  const tutelles = _apsValides(sid).slice(0, 3);
 
   const puce = (kind, id, lib, emoji) =>
     `<button onclick="event.stopPropagation();_setEscorte('${logId}','${kind}','${id||''}')"
@@ -18766,12 +18869,37 @@ window.manualScanEntry = () => {
 // Statut d'accès au portail. Le navigateur ne le calcule JAMAIS : il le
 // demande, le garde cinq minutes, puis le redemande.
 //
+// ── UN REFUS NE SE MET PLUS EN CACHE — audit ChatGPT #102, point 5 ────────
+// Le cas qu'il décrit : enfant refusé au portail → la famille régularise à la
+// Caisse → elle revient tout de suite → **le gardien relisait l'ancien refus
+// pendant cinq minutes**, et l'enfant restait dehors alors qu'il avait payé.
+//
+// Vider le cache après l'encaissement ne suffit PAS, et c'est ce qui décide de
+// la forme du remède : le cache qui ment vit sur le téléphone du GARDIEN,
+// l'encaissement se fait sur celui de la CAISSE. Aucun geste de la caissière
+// n'atteint l'appareil du portail.
+//
+// Donc on ne garde en mémoire QUE les décisions favorables. Un refus se
+// redemande à chaque scan — un aller-retour de plus pour l'enfant qui est déjà
+// arrêté devant la grille, jamais pour la file qui avance. Et l'invalidation
+// locale reste, pour les gestes faits sur le MÊME appareil (la Direction qui
+// débloque un élève depuis son écran).
+//
 // Passé ce délai il n'est plus utilisable — l'écran affiche « contrôle manuel
 // requis » plutôt qu'une décision périmée. Et le cache ne transforme jamais un
 // « en retard » en « bloqué » : un blocage vient d'une décision serveur
 // enregistrée et auditée, jamais d'une déduction locale.
 window._cacheAcces = {};
 const _ACCES_TTL = 5 * 60 * 1000;
+
+// Oublier une décision d'accès. Appelée par tout geste qui peut la changer sur
+// CE téléphone : un encaissement, un déblocage, une annulation de versement.
+// Sans argument, elle oublie tout — c'est ce qu'il faut après un contrôle de
+// frais en masse, où l'on ne sait plus quels élèves ont bougé.
+window._oublierAcces = (sid) => {
+  if (sid) delete window._cacheAcces[sid];
+  else window._cacheAcces = {};
+};
 
 // Le passage s'enregistre PAR LE SERVEUR quand il répond, et par la file
 // quand il ne répond pas. Un gardien au portail doit pouvoir travailler hors
@@ -18872,7 +19000,11 @@ window._statutPortail = async (sid) => {
     const r = await _rpc('check_gate_access_status', { p_sid: sid, p_source: 'qr' });
     if (r.ok && r.data) {
       const d = window._normAcces(r.data);
-      window._cacheAcces[sid] = { r: d, at: Date.now() };
+      // SEULES les décisions favorables se gardent. Un refus se redemande à
+      // chaque scan : c'est lui qui change quand la famille régularise, et le
+      // cache qui le porte vit sur un autre téléphone que la Caisse.
+      if (d.allowed === true) window._cacheAcces[sid] = { r: d, at: Date.now() };
+      else delete window._cacheAcces[sid];
       return d;
     }
   }
@@ -19263,7 +19395,12 @@ window.confirmerAnnulationSortie = async (eventId) => {
   if (e) { e.status = 'cancelled'; e.cancel_reason = motif; }
   saveToCrypt(); closeModal();
   logAudit('exit_prepare_cancel', `Préparation annulée — ${motif}`);
-  toast('Préparation annulée — le parent est prévenu', 'success');
+  // Elle annonçait « le parent est prévenu » SANS lire ce que le serveur dit
+  // de l'envoi. C'était la faute déjà corrigée sur la préparation, restée ici :
+  // annoncer un message qui n'est jamais parti, c'est un parent qui vient
+  // chercher son enfant pour rien. `_libelleNotif` dit ce qui est vrai — dans
+  // SchoolSafe, en file, ou aucun appareil enregistré.
+  toast('Préparation annulée — ' + _libelleNotif(r.data && r.data.notification), 'success');
   render();
 };
 
@@ -19477,9 +19614,14 @@ window.signalerPersonneInconnue = (sid) => {
     <b>${esc(s.name)} ne sort pas.</b> La Direction et le parent sont alertés immédiatement.</div>
   <label class="form-label">Décrivez la personne <span style="color:#dc2626">obligatoire</span></label>
   <input class="form-input" id="refDesc" maxlength="200" placeholder="Ex. homme, chemise bleue, dit être l’oncle">
-  <label class="form-label" style="margin-top:12px">Photo <span style="font-weight:400;color:var(--text-muted)">(facultative)</span></label>
-  <input class="form-input" type="file" accept="image/*" capture="environment" onchange="previewRefPhoto(this)">
+  <label class="form-label" style="margin-top:12px">Photo de preuve <span style="font-weight:400;color:var(--text-muted)">(fortement conseillée)</span></label>
+  <input type="file" id="refPhotoInput" accept="image/*" capture="environment" style="display:none" onchange="previewRefPhoto(this)">
+  <button type="button" class="btn btn-outline" style="width:100%;min-height:44px;font-weight:700"
+          onclick="document.getElementById('refPhotoInput').click()">📷 Prendre une photo de la personne</button>
   <div id="refPhotoPreview" style="margin-top:8px"></div>
+  <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 0;line-height:1.55">
+    La photo sert de <b>preuve d’incident</b>. Elle n’est visible que par la Direction et le parent de l’enfant.
+    <b>Si elle ne part pas, le refus tient quand même</b> — l’enfant ne sort pas.</p>
 </div>`,
     `<button class="btn btn-outline" onclick="closeModal()">Annuler</button>
      <button class="btn btn-danger" onclick="doExitRefused(${JSON.stringify(sid)})">Signaler et alerter</button>`);
@@ -19737,9 +19879,23 @@ window.previewRefPhoto = (input) => {
   const pr = COMPRESS.photo_preuve;
   compressImage(f, pr.maxW, pr.maxH, pr.quality, data => {
     const p=document.getElementById('refPhotoPreview');
-    if(p) p.innerHTML=`<img src="${data}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;border:2px solid #dc2626">`;
+    // Aperçu AVANT enregistrement, et on peut reprendre : au portail, la
+    // première photo est floue une fois sur deux, et une preuve floue ne
+    // prouve rien.
+    if(p) p.innerHTML=`
+      <img src="${data}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;border:2px solid #dc2626">
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button type="button" class="btn btn-outline btn-sm" style="flex:1;min-height:36px" onclick="document.getElementById('refPhotoInput').click()">🔄 Reprendre</button>
+        <button type="button" class="btn btn-outline btn-sm" style="flex:1;min-height:36px" onclick="retirerRefPhoto()">🗑️ Retirer</button>
+      </div>`;
     window._refPhotoData=data;
   });
+};
+
+window.retirerRefPhoto = () => {
+  window._refPhotoData = null;
+  const p = document.getElementById('refPhotoPreview'); if (p) p.innerHTML = '';
+  const i = document.getElementById('refPhotoInput'); if (i) i.value = '';
 };
 window.doExitRefused = async (sid) => {
   if(!S.user||!['gardien','enseignant','direction','direction2'].includes(S.user.role)){toast('Accès non autorisé','error');return;}
@@ -19750,9 +19906,57 @@ window.doExitRefused = async (sid) => {
   window._refPhotoData=null;
   closeModal();
   const time=nowTime();
+
+  // ── LA PREUVE MONTE AVANT, ET SON ÉCHEC NE LIBÈRE JAMAIS L'ENFANT ───────
+  // Le serveur veut une RÉFÉRENCE de stockage, pas du base64 (ChatGPT, #102) :
+  // une image collée serait refusée avec un code que personne ne relie à la
+  // photo. On monte donc d'abord.
+  //
+  // Mais la règle 10 de Loms prime sur tout le reste : « si la caméra ou
+  // l'envoi de photo échoue, le refus de sortie reste effectif ». Contrairement
+  // aux personnes autorisées — où une montée ratée annule l'appel — ici on
+  // continue SANS la preuve, et on le DIT. L'incident vaut plus que sa photo.
+  let preuveRef = null, preuveEchec = false;
+  if (photo) {
+    try {
+      const blob = await (await fetch(photo)).blob();
+      preuveRef = await window._uploadFile(blob, 'incidents', 'preuve_' + sid + '_' + Date.now() + '.jpg');
+    } catch (e) { preuveRef = null; }
+    if (!preuveRef) preuveEchec = true;
+  }
+
   const log={id:_uid('sl_'),sid,name:s.name,type:'exit',status:'unauthorized',
-    label:'REFUSÉ — Personne inconnue 🔴',description:desc,photo_thumb:photo||null,time,date:today(),by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role,
+    label:'REFUSÉ — Personne inconnue 🔴',description:desc,
+    photo_thumb:preuveRef||null,   // une RÉFÉRENCE, plus jamais du base64
+    time,date:today(),by_uid:S.user.id,by_name:S.user.name,by_role:S.user.role,
     escort_kind:'inconnu',escort_id:null,escort_name:desc.slice(0,80)};
+
+  // ── LE REGISTRE OFFICIEL — PRÊT, PAS INVENTÉ ────────────────────────────
+  // ChatGPT a vérifié la contrainte : `student_exit_events.escort_kind` n'admet
+  // que primary | accredited | self | NULL, et `scan_student_exit_at_gate`
+  // rend ESCORT_REQUIRED pour tout le reste. **Le cas « personne inconnue »
+  // n'a aujourd'hui aucun chemin serveur.** Il propose une RPC dédiée plutôt
+  // qu'une surcharge, et je ne fabrique pas de faux `aps_id` pour y entrer.
+  //
+  // L'appel est donc écrit, et seulement TENTÉ. Si la fonction n'existe pas
+  // encore, `PGRST202` revient, et on garde la trace locale en DISANT que le
+  // registre officiel ne la porte pas. Ce qu'il ne faut surtout pas, c'est
+  // afficher « incident enregistré » quand seul `scan_log` l'a reçu — ce
+  // serait le mensonge que l'audit de ChatGPT nous reproche justement.
+  let auRegistre = false, exitEventId = null;
+  if (window.DB_ONLINE) {
+    const r = await _rpc('record_unknown_pickup_attempt', {
+      p_sid: sid,
+      p_description: desc,
+      p_proof_photo_ref: preuveRef,
+      p_gate_label: _portailCourant(),
+      p_teacher_gate_reason: S.user.role === 'enseignant'
+        ? 'Enseignant au portail — signalement personne inconnue' : null,
+      p_manual: false,
+    });
+    if (r.ok) { auRegistre = true; exitEventId = (r.data && r.data.exit_event_id) || null; log.exit_event_id = exitEventId; }
+  }
+
   (DB.scan_log=DB.scan_log||[]).unshift(log);
   const alertMsg=`🚨 ALERTE SÉCURITÉ — Personne inconnue tente de récupérer ${s.name} à ${time}. Description: ${desc}`;
   (DB.users||[]).filter(u=>u.role==='direction'||u.role==='direction2').forEach(u=>{
@@ -19761,8 +19965,20 @@ window.doExitRefused = async (sid) => {
   });
   if(s.pid) await pushNotif(s.pid,`🚨 ALERTE : Tentative de récupération non autorisée pour ${s.name} à ${time}. Personne inconnue au portail. La Direction a été alertée.`);
   pushSync('scan_log','post',log);
-  showExitDone('red','🚫','REFUSÉ — Direction alertée',s.name,`Personne inconnue · ${desc.slice(0,60)}`,time);
-  toast(`${s.name} — REFUSÉ 🔴 — Direction alertée`,'error');
+
+  // Ce que l'écran annonce est ce qui s'est VRAIMENT passé, pièce par pièce.
+  // L'enfant ne sort pas, dans tous les cas — c'est la seule ligne qui ne
+  // dépend d'aucune réussite technique.
+  const detail = [
+    `Personne inconnue · ${desc.slice(0,60)}`,
+    auRegistre ? 'Incident au registre officiel de sortie'
+               : 'Trace gardée — le registre officiel ne prend pas encore ce cas',
+    preuveEchec ? '⚠️ La photo de preuve n’a PAS pu être envoyée' : (preuveRef ? 'Photo de preuve jointe' : null),
+  ].filter(Boolean).join(' · ');
+
+  showExitDone('red','🚫','REFUSÉ — Direction alertée',s.name,detail,time);
+  toast(`${s.name} — REFUSÉ 🔴 — l’enfant ne sort pas`,'error');
+  if (preuveEchec) toast('La photo n’est pas partie — le refus tient, décrivez la personne à la Direction','warning');
   saveToCrypt();
 };
 
@@ -19957,6 +20173,46 @@ window.sendAttendanceList = async () => {
 };
 
 // ── PARENT: AUTORISÉS & ABSENCES (lecture seule avec placeholder) ──
+// ── QUI PEUT VRAIMENT VENIR CHERCHER CET ENFANT — une seule réponse ────────
+//
+// Audit ChatGPT #102, point 6. Le vrai portail passe par
+// `get_student_pickup_context`, qui ne rend que l'**actif ET approuvé ET dans
+// ses dates**. Cet écran-ci relisait `DB.aps` avec le seul `active !== false`.
+// Deux vérités sur la même question, et la plus permissive était celle qui
+// s'affichait : **une accréditation expirée ou non approuvée y passait pour
+// autorisée**. Le gardien la voyait dans la liste de consultation, puis le
+// portail la refusait — ou pire, quelqu'un s'y fiait.
+//
+// Ce n'est pas une deuxième vérité qu'il faut, c'est la même. Le filtre est
+// donc écrit une fois ici, avec les trois conditions du serveur, et tout ce
+// qui répond à « qui peut récupérer cet enfant » l'appelle.
+//
+// ⚠️ Ce que ce filtre NE fait PAS, et qui doit rester écrit : il ne remplace
+// pas la RPC. C'est une transcription locale destinée à MONTRER — la décision
+// du portail vient de `get_student_pickup_context`, toujours. Même règle que
+// pour le solde et pour le téléphone.
+window._apsValides = (sid) => {
+  const auj = today();
+  return (DB.aps || []).filter(a => a.sid === sid
+    && a.active
+    && a.approval_status === 'approved'
+    && (!a.valid_until || a.valid_until >= auj));
+};
+
+// Et son symétrique : celles qui sont enregistrées mais ne valent PAS au
+// portail. Elles ne disparaissent pas de l'écran — les cacher ferait croire à
+// une fiche vide alors qu'il y a une date à renouveler. Elles se montrent avec
+// la raison.
+window._apsHorsJeu = (sid) => {
+  const auj = today();
+  return (DB.aps || []).filter(a => a.sid === sid).map(a => {
+    if (!a.active)                            return { a, raison:'Suspendue' };
+    if (a.approval_status !== 'approved')     return { a, raison:'En attente d’approbation' };
+    if (a.valid_until && a.valid_until < auj) return { a, raison:'Accréditation expirée le ' + a.valid_until };
+    return null;
+  }).filter(Boolean);
+};
+
 R.authorized = () => {
   const role = S.user.role;
 
@@ -19965,7 +20221,7 @@ R.authorized = () => {
     const q = (window._apQ||'').toLowerCase();
     const studs = q ? DB.students.filter(s=>(s.name||'').toLowerCase().includes(q)||(s.mat||'').toLowerCase().includes(q)) : DB.students;
     const _wParent=DB.students.filter(s=>s.pid).length;
-    const _tuts=(DB.aps||[]).length;
+    const _tuts=(DB.students||[]).reduce((t,x)=>t+_apsValides(x.id).length,0);
     const _noParent=DB.students.length-_wParent;
     return _wrapDark(`
     <button onclick="go('scanner')" style="display:inline-flex;align-items:center;gap:6px;background:none;border:none;color:rgba(255,255,255,.6);font-size:13px;font-weight:600;cursor:pointer;padding:4px 0;margin-bottom:12px" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.6)'">← Retour au Scanner</button>
@@ -19987,7 +20243,8 @@ R.authorized = () => {
       ${studs.map(s=>{
         const c=gc(s.cid); const parent=gu(s.pid);
         const [cc,cbg]=clsColor(c?c.name:'');
-        const tuts=(DB.aps||[]).filter(a=>a.sid===s.id);
+        const tuts=_apsValides(s.id);
+        const horsJeu=_apsHorsJeu(s.id);
         return `<div class="premium-section" style="margin-bottom:0">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
             <div style="width:44px;height:44px;border-radius:13px;background:${cbg};color:${cc};display:flex;align-items:center;justify-content:center;font-weight:700;overflow:hidden;flex-shrink:0">
@@ -20050,22 +20307,46 @@ R.authorized = () => {
                         : `<button onclick="suspendreTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#fef3c7;color:#92400e;cursor:pointer;font-size:11px;font-weight:700">Suspendre</button>`}
               </div>
             </div>`).join('')}
-          </div>`:`<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:8px">Aucune tutelle secondaire — cliquez ➕ pour en ajouter</div>`}
+          </div>`:`<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:8px">Aucune personne autorisée au portail — cliquez ➕ pour en enregistrer une</div>`}
+          ${horsJeu.length?`<div style="margin-top:9px;border-top:1px dashed var(--border-light,#e2e8f0);padding-top:9px">
+            <div style="font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#92400e;margin-bottom:6px">N’ouvrent pas le portail</div>
+            ${horsJeu.map(({a,raison})=>`<div style="display:flex;align-items:center;gap:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:7px 10px;margin-bottom:5px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12.5px;font-weight:700">${esc(a.name)}</div>
+                <div style="font-size:11px;color:#92400e">${esc(raison)}</div>
+              </div>
+              <button class="btn btn-outline btn-sm" style="padding:4px 8px;font-size:11px;flex-shrink:0" onclick="openTutelleForm('${s.id}','${a.id}')">Corriger</button>
+              ${a.active===false?`<button onclick="reactiverTutelle('${a.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#dcfce7;color:#15603f;cursor:pointer;font-size:11px;font-weight:700;flex-shrink:0">Réactiver</button>`:''}
+            </div>`).join('')}
+          </div>`:''}
         </div>`;
       }).join('')}
     </div>`);
   }
 
-  // ── PARENT : vue avec ajout + toggle ──
+  // ── PARENT : il CONSULTE — il n'enregistre pas ────────────────────────────
+  //
+  // Audit ChatGPT #102, point 7. L'écran annonçait « Vous pouvez ajouter
+  // jusqu'à 3 tutelles » et offrait « ➕ Ajouter » ; `openTutelleForm` refusait
+  // ensuite le parent en expliquant que seule la Direction enregistre. Le
+  // serveur dit la même chose que la modale : `FORBIDDEN` hors direction.
+  //
+  // Une promesse suivie d'un refus est pire qu'une absence de bouton : le
+  // parent croit avoir fait le nécessaire, et le jour où quelqu'un se présente
+  // au portail, la personne qu'il pensait avoir enregistrée n'existe nulle
+  // part. On dit donc la règle AVANT, et on donne le geste qui marche —
+  // passer au bureau avec la personne et sa pièce.
   if (role === 'parent') {
     const myKids = DB.students.filter(s=>s.pid===S.user.id);
     if (!myKids.length) return _wrapDark(`<div style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:60px;margin-bottom:16px">🔑</div>Aucun enfant lié à ce compte</div>`);
     return _wrapDark(`
-    <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;padding:12px 14px;background:#dbeafe;border-radius:10px;border-left:3px solid #2f7bd6">
-      🔑 Vous pouvez ajouter jusqu'à <strong>3 tutelles</strong> par enfant et activer/désactiver leur autorisation de récupérer votre enfant.
+    <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;padding:12px 14px;background:#dbeafe;border-radius:10px;border-left:3px solid #2f7bd6;line-height:1.6">
+      🔑 Voici les personnes que l’école autorise à récupérer votre enfant, et que le gardien reconnaîtra au portail.<br>
+      <strong>C’est la Direction qui les enregistre</strong>, avec la pièce d’identité et la photo — passez au bureau avec la personne. Vous pouvez en compter jusqu’à <strong>3</strong> par enfant.
     </div>
     ${myKids.map(s=>{
-      const tuts = (DB.aps||[]).filter(a=>a.sid===s.id);
+      const tuts = _apsValides(s.id);
+      const horsJeu = _apsHorsJeu(s.id);
       const parent = gu(s.pid);
       const c = gc(s.cid); const [cc,cbg] = clsColor(c?c.name:'');
       return `<div class="premium-section" style="margin-bottom:14px">
@@ -20094,16 +20375,17 @@ R.authorized = () => {
           </div>
         </div>
 
-        <!-- TUTELLES SECONDAIRES avec ajout + toggle -->
+        <!-- PERSONNES AUTORISÉES — consultation. La Direction enregistre. -->
         <div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">🔑 Tutelles secondaires (${tuts.length}/3)</div>
-            ${tuts.length<3?`<button class="btn btn-primary btn-sm" onclick="openTutelleForm('${s.id}')">➕ Ajouter</button>`:`<span class="pill pill-orange">Max 3</span>`}
+            <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">🔑 Personnes autorisées (${tuts.length}/3)</div>
+            ${tuts.length<3?`<span class="pill" style="background:#dbeafe;color:#1e40af;font-size:10px">${3-tuts.length} place${3-tuts.length>1?'s':''} — au bureau</span>`:`<span class="pill pill-orange">Max 3</span>`}
           </div>
           ${!tuts.length
-            ? `<div style="font-size:13px;color:var(--text-muted);padding:14px;background:var(--bg);border-radius:10px;text-align:center">
+            ? `<div style="font-size:13px;color:var(--text-muted);padding:14px;background:var(--bg);border-radius:10px;text-align:center;line-height:1.6">
                  <div style="font-size:28px;margin-bottom:6px">👥</div>
-                 Aucune tutelle — cliquez <strong>➕ Ajouter</strong> pour enregistrer les personnes autorisées à récupérer votre enfant
+                 Aucune personne autorisée pour l’instant.<br>
+                 <strong>Passez au bureau</strong> avec la personne, sa pièce d’identité et une photo : l’école l’enregistre, et le gardien la reconnaîtra au portail.
                </div>`
             : tuts.map(t=>{
                 const active = t.active !== false;
@@ -20121,15 +20403,15 @@ R.authorized = () => {
                   <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
                     ${t.status_note?`<div style="font-size:10.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:5px 8px;max-width:180px;line-height:1.4">${esc(t.status_note)}</div>`:''}
                     ${t.valid_until?`<div style="font-size:10.5px;color:${t.valid_until<today()?'#dc2626':'var(--text-muted)'}">${t.valid_until<today()?'Expirée le ':'Valable jusqu’au '}${esc(t.valid_until)}</div>`:''}
-                    <div style="display:flex;gap:4px">
-                      <button onclick="openTutelleForm('${s.id}','${t.id}')" style="padding:5px 8px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:11px">✏️</button>
-                      ${t.active===false
-                        ? `<button onclick="reactiverTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#dcfce7;color:#15603f;cursor:pointer;font-size:11px;font-weight:700">Réactiver</button>`
-                        : `<button onclick="suspendreTutelle('${t.id}')" style="padding:5px 8px;border-radius:8px;border:none;background:#fef3c7;color:#92400e;cursor:pointer;font-size:11px;font-weight:700">Suspendre</button>`}
-                    </div>
+
                   </div>
                 </div>`;
               }).join('')}
+          ${horsJeu.length?`<div style="margin-top:10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:11px;padding:10px 12px">
+            <div style="font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#92400e;margin-bottom:6px">N’ouvrent pas le portail</div>
+            ${horsJeu.map(({a,raison})=>`<div style="font-size:12px;color:#92400e;line-height:1.6">· <b>${esc(a.name)}</b> — ${esc(raison)}</div>`).join('')}
+            <div style="font-size:11.5px;color:#92400e;margin-top:7px;line-height:1.5">Pour les remettre en service, passez au bureau de la Direction.</div>
+          </div>`:''}
         </div>
       </div>`;
     }).join('')}`);
@@ -20144,11 +20426,16 @@ R.authorized = () => {
       <input placeholder="Rechercher un élève..." oninput="window._apQG=this.value;clearTimeout(window._dT);window._dT=setTimeout(render,300)" value="${window._apQG||''}">
     </div>
   </div>
-  <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;padding:10px 14px;background:var(--bg);border-radius:10px;border-left:3px solid #2f7bd6">
-    Vérifiez ici les personnes autorisées <strong>avant de laisser sortir un enfant</strong>. Seules les personnes avec un badge <span style="color:#1f9d6b;font-weight:700">vert</span> peuvent récupérer l'enfant.
+  <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;padding:10px 14px;background:var(--bg);border-radius:10px;border-left:3px solid #2f7bd6;line-height:1.6">
+    Écran de <strong>consultation</strong>. Il montre les mêmes personnes que le portail : actives, approuvées, et dans leurs dates.<br>
+    <strong>Il n’autorise rien</strong> — une sortie se fait par « Scanner Sortie », qui redemande la liste au serveur au moment du passage.
   </div>
   ${studsToShow.map(s=>{
-    const tuts=(DB.aps||[]).filter(a=>a.sid===s.id&&a.active!==false);
+    // Même règle que `get_student_pickup_context`, pas `active !== false` :
+    // une accréditation expirée ou non approuvée paraissait ici comme
+    // autorisée, dans l'écran même où le gardien vient vérifier.
+    const tuts=_apsValides(s.id);
+    const horsJeu=_apsHorsJeu(s.id);
     const parent=gu(s.pid);
     const c=gc(s.cid); const [cc,cbg]=clsColor(c?c.name:'');
     const totalAps = (parent?1:0) + tuts.length;
@@ -20182,6 +20469,10 @@ R.authorized = () => {
         </div>`).join('')}
         ${totalAps===0?`<div style="font-size:12px;color:#dc2626;padding:12px;background:#fee2e2;border-radius:10px;width:100%">⚠️ Aucune personne autorisée enregistrée</div>`:''}
       </div>
+      ${horsJeu.length?`<div style="margin-top:10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:8px 11px">
+        <div style="font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#92400e;margin-bottom:5px">Enregistrées, mais elles n’ouvrent PAS le portail</div>
+        ${horsJeu.map(({a,raison})=>`<div style="font-size:11.5px;color:#92400e;line-height:1.5">· <b>${esc(a.name)}</b> — ${esc(raison)}</div>`).join('')}
+      </div>`:''}
     </div>`;
   }).join('')}`);
 };
@@ -20205,9 +20496,7 @@ window.openTutelleForm = (sid, tid) => {
   // Le plafond de trois ne compte que les ACTIVES et NON EXPIRÉES — c'est le
   // compte que le serveur tient. Une personne suspendue ne prend pas la place
   // de quelqu'un d'autre.
-  const auj=today();
-  const actives=(DB.aps||[]).filter(a=>a.sid===sid && a.active && a.approval_status==='approved'
-    && (!a.valid_until || a.valid_until>=auj));
+  const actives=_apsValides(sid);
   if(!t && actives.length>=3){
     toast('Trois personnes autorisées actives — suspendez-en une d’abord','error'); return;
   }
