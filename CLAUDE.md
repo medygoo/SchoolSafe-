@@ -1502,6 +1502,47 @@ Le `/*` doit être **en début de ligne** — c'est ainsi que les vrais commenta
 s'écrivent ici. Le défaut dormait dans le nettoyeur depuis le début : il a fallu
 qu'un `*/` apparaisse plus loin dans le fichier pour qu'il se réveille.
 
+### Un contrôle qui ne couvre qu'un fichier ne protège que ce fichier
+
+**12 août 2026.** ChatGPT a livré la messagerie V2 — `dist/messages-frontend-v2.js`,
+445 lignes qui décident du routage Parent → Direction → enseignant → Direction →
+Parent. Le contrat est bon et il est branché proprement, `defer`, juste avant le
+vrai `</body>`.
+
+**Mais nos vingt audits ne lisent que `dist/index.html`.** Ce fichier serait donc
+arrivé chez l'école sans qu'aucun outil ne l'ait regardé — ni sa portée, ni ses
+gardes de rôle, ni ses écritures. Le filet existait, le poisson est passé à côté.
+
+Deux défauts trouvés en le lisant, et tous deux sont des leçons **déjà écrites
+ici**, reproduites dans un fichier voisin :
+
+1. **« Message envoyé » annoncé sans preuve.** `pushSync` met en file, il ne
+   confirme rien. Hors ligne, le parent lisait *« Message envoyé à la Direction »*
+   alors que rien n'était parti — et il attendait une réponse qui ne pouvait pas
+   venir. Les quatre annonces disent maintenant ce qui est vrai, et **changent de
+   ton** : un envoi différé n'est pas un succès.
+2. **Le nouveau script était figé en cache pour toujours.** Le Cache-First
+   générique du service worker ne réinterroge jamais le réseau : une correction
+   n'aurait atteint personne tant que son `?v=` n'était pas changé à la main.
+   C'est exactement la panne qu'on venait de réparer pour `index.html`, prête à
+   se reproduire à côté. Tout script de production de l'école suit désormais la
+   même règle — servi du cache tout de suite, revérifié derrière, et **on le dit**.
+
+> **Quand on répare une classe de panne, il faut chercher où elle vit ailleurs.**
+> Une règle écrite pour un fichier ne se propage pas toute seule au fichier
+> d'à côté.
+
+`audit-demarrage` vérifie désormais **tout `dist/*.js`** : il se parse, il se
+charge sans bloquer, il n'est pas figé. Et il écrit dans sa sortie ce qu'il ne
+sait toujours pas voir — **la logique de ces fichiers n'est lue par aucun outil.**
+
+**Et une preuve qui s'est périmée en silence, le même jour.** En faisant suivre
+la même règle aux scripts, le motif saboté par `--preuve` est apparu **deux
+fois** dans le service worker. Le `replace` n'en corrompait qu'une, le contrôle
+trouvait encore l'autre, et la preuve se déclarait tenue alors qu'elle ne gardait
+plus rien. `replaceAll`. **Une preuve qui ne suit pas le code qu'elle garde se
+périme sans rien dire** — c'est la troisième fois que ce dépôt le note.
+
 ---
 
 ## Les outils
@@ -1533,6 +1574,8 @@ npm run audit        # tout d'un coup
 | `recette-scanner-fermeture.mjs` | le cache d'accès, la vérité serveur des personnes autorisées, la promesse faite au parent (`--preuve`) |
 | `audit-demarrage.mjs` | ce qui retarde l'ouverture — scripts bloquants, cache, **et ce qu'il ne sait pas voir** (`--preuve`) |
 | `audit-entete.mjs` | la chaîne de responsabilité des documents · **un ministère est un réglage** · le dessin unique de Finance et RH (`--preuve`) |
+| `recette-messages-v2.mjs` | le routage Parent → Direction → enseignant · **et l'honnêteté de l'envoi** |
+| `recette-recu-v2.mjs` | le reçu de paiement V2, prêt à brancher |
 
 **Dans un nouveau dépôt, commencer par les lancer.** Leur sortie *est* la liste
 des manques — au lieu d'en discuter.
