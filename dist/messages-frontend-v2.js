@@ -1,4 +1,96 @@
 /*
+ * SchoolSafe — connexion rapide et résiliente
+ * Aucun appel réseau au chargement de la page : l’écran d’accueil
+ * reste instantané. Le diagnostic supplémentaire ne s’exécute
+ * qu’après un échec réel de connexion.
+ */
+(function installSchoolSafeFastLoginResilience() {
+  'use strict';
+  if (window.__SS_LOGIN_RESILIENCE_FAST__) return;
+  if (typeof window._loginRelais !== 'function') return;
+  if (typeof OPS_SUPA_URL === 'undefined' || typeof OPS_SUPA_KEY === 'undefined') return;
+
+  const LOGIN_TIMEOUT_MS = 6000;
+  const PROBE_TIMEOUT_MS = 900;
+  const state = window.__SS_LOGIN_RESILIENCE_FAST__ = {
+    version: '2026-08-12.1', startupNetworkCalls: 0, last: null,
+  };
+
+  const probeHostReachable = async () => {
+    if (navigator.onLine === false) return false;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
+    try {
+      await fetch(`${OPS_SUPA_URL}/auth/v1/health`, {
+        method:'GET', mode:'no-cors', cache:'no-store', signal:ctrl.signal,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  window._loginRelais = async (channel, identifier, password) => {
+    const startedAt = Date.now();
+    state.last = null;
+    if (navigator.onLine === false) {
+      state.last = { at:Date.now(), kind:'offline', reachable:false, elapsed_ms:0 };
+      return { ok:false, code:'NETWORK_ERROR', raw:null };
+    }
+
+    const ctrl = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, LOGIN_TIMEOUT_MS);
+    try {
+      const r = await fetch(`${OPS_SUPA_URL}/functions/v1/school-login`, {
+        method:'POST',
+        headers:{
+          apikey:OPS_SUPA_KEY,
+          Authorization:'Bearer ' + OPS_SUPA_KEY,
+          'Content-Type':'application/json',
+        },
+        body:JSON.stringify({ channel, identifier, password }),
+        cache:'no-store', signal:ctrl.signal,
+      });
+      const d = await r.json().catch(() => null);
+      state.last = { at:Date.now(), kind:'http', reachable:true, status:r.status, elapsed_ms:Date.now()-startedAt };
+      if (!r.ok || d?.ok !== true) return { ok:false, code:(d && d.code) || ('HTTP_' + r.status), raw:d };
+      return { ok:true, data:d };
+    } catch (e) {
+      const reachable = await probeHostReachable();
+      state.last = { at:Date.now(), kind:timedOut?'timeout':'network', reachable, elapsed_ms:Date.now()-startedAt };
+      return { ok:false, code:'NETWORK_ERROR', raw:e };
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const rewriteNetworkMessage = () => {
+    const el = document.getElementById('PM');
+    const d = state.last;
+    if (!el || !d || Date.now()-d.at > 15000 || navigator.onLine === false) return;
+    if (!(el.textContent || '').includes('Le serveur de l’école ne répond pas')) return;
+    if (d.reachable && d.kind === 'timeout') {
+      el.textContent = 'La connexion est trop lente — le serveur est joignable. Réessayez.';
+    } else if (d.reachable && d.kind === 'network') {
+      el.textContent = 'La liaison de connexion a été interrompue — le serveur est joignable. Réessayez.';
+    } else if (!d.reachable && d.kind === 'timeout') {
+      el.textContent = 'Connexion trop lente ou serveur momentanément inaccessible — réessayez.';
+    }
+  };
+
+  const observeLoginMessage = () => {
+    const el = document.getElementById('PM');
+    if (!el) return;
+    new MutationObserver(rewriteNetworkMessage).observe(el, { childList:true, subtree:true, characterData:true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observeLoginMessage, { once:true });
+  else observeLoginMessage();
+})();
+
+/*
  * SchoolSafe — Messages frontend V2
  * Contrat validé par Loms, 12 août 2026.
  *
