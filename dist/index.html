@@ -9024,8 +9024,7 @@ window.ssPrintCard=function(){
   let css='';
   try{css=Array.from(document.styleSheets).reduce((a,ss)=>{try{return a+Array.from(ss.cssRules).map(r=>r.cssText).join('\n');}catch(e){return a;}},'')}catch(e){}
   const win=window.open('','_blank','width=900,height=700'); if(!win)return;
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito+Sans:opsz,wght@6..12,700;6..12,800&display=swap" rel="stylesheet"><style>body{margin:20px;background:#e9ecf4;display:flex;justify-content:center;flex-wrap:wrap;gap:22px}@media print{@page{margin:8mm}}</style><style>${css}</style></head><body><div class="ss-card-studio" data-fam="${fam}" style="display:flex;flex-wrap:wrap;gap:22px;justify-content:center;--ss-cc:${col.cc};--ss-cc-soft:${col.soft};--ss-cc-dark:${col.dark}">${studio.innerHTML}</div><script>window.onload=function(){window.print()};<\/script><script src="messages-frontend-v2.js?v=20260812" defer></script>
-</body></html>`);
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito+Sans:opsz,wght@6..12,700;6..12,800&display=swap" rel="stylesheet"><style>body{margin:20px;background:#e9ecf4;display:flex;justify-content:center;flex-wrap:wrap;gap:22px}@media print{@page{margin:8mm}}</style><style>${css}</style></head><body><div class="ss-card-studio" data-fam="${fam}" style="display:flex;flex-wrap:wrap;gap:22px;justify-content:center;--ss-cc:${col.cc};--ss-cc-soft:${col.soft};--ss-cc-dark:${col.dark}">${studio.innerHTML}</div><script>window.onload=function(){window.print()};<\/script></body></html>`);
   win.document.close();
 };
 
@@ -33477,5 +33476,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 })();
 </script>
+<script src="messages-frontend-v2.js?v=20260812" defer></script>
 </body>
 </html>
