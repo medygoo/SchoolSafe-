@@ -2952,7 +2952,14 @@ window.ROLE_LOAD = {
     bootstrap: [
       _T('classes',  'select=*'),
       _T('students', 'select=id,name,mat,cid,pid,photo,access_blocked,blocked,access_parent,archived,may_leave_alone,leave_alone_until&archived=eq.false'),
-      _T('users',    'select=id,name,role,initials,phone,photo_url,email,status,created_at,auth_user_id,access_channel,must_change_password,invitation_sent_at,login_email_enabled,login_phone_enabled'),
+      // `login_name` : ChatGPT a vérifié le 12 août que la colonne EXISTE en
+      // production, avec son index unique et sa génération d'alias — migration
+      // `20260811131724`. Elle n'était demandée dans AUCUN select : le
+      // navigateur lisait donc `u.login_name` toujours indéfini, et la carte de
+      // première connexion n'écrivait jamais la ligne « Nom de connexion ».
+      // Le champ mort à l'envers : il existe côté serveur, il est lu ici, et
+      // personne ne le tirait.
+      _T('users',    'select=id,name,role,initials,login_name,phone,photo_url,email,status,created_at,auth_user_id,access_channel,must_change_password,invitation_sent_at,login_email_enabled,login_phone_enabled'),
       _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
       // Les demandes de préinscription arrivent du site public. Direction 1
       // seule les voit et les valide — décision de Loms, 4 août 2026.
@@ -2983,7 +2990,7 @@ window.ROLE_LOAD = {
       // et par quelle voie : sans eux, Direction 2 ne peut pas savoir s'il faut
       // OUVRIR un accès ou le RÉINITIALISER, et le bouton se tromperait de
       // demande. Ce ne sont pas des données personnelles, seulement un état.
-      _T('users',    'select=id,name,role,initials,phone,photo_url,status,auth_user_id,access_channel,must_change_password,invitation_sent_at,login_email_enabled,login_phone_enabled'),
+      _T('users',    'select=id,name,role,initials,login_name,phone,photo_url,status,auth_user_id,access_channel,must_change_password,invitation_sent_at,login_email_enabled,login_phone_enabled'),
       _T('matieres', 'select=id,cid,name,lang,active'),
       _T('notifs',   'select='+_COLS_NOTIFS+'&order=date.desc,time.desc&limit=100'),
     ],
@@ -5235,10 +5242,13 @@ window._loginRelais = async (channel, identifier, password) => {
 };
 
 async function _loginWithSupabaseAuth(identifiant, password, voie) {
-  // `identifier` est le canal demandé à ChatGPT pour l'abréviation et le nom
-  // de connexion (voir coordination/). Tant qu'il n'est pas servi, le serveur
-  // rend INVALID_CREDENTIALS — et l'écran le DIT au lieu d'accuser le mot de
-  // passe : un refus mal nommé envoie ressaisir vingt fois un code juste.
+  // `identifier` est le canal de l'abréviation et du nom de connexion. Il est
+  // SERVI depuis le 12 août : `resolve_school_login_identity` le résolvait
+  // déjà, mais le relais `school-login` le remplaçait par la chaîne vide et
+  // refusait avant même d'appeler le RPC. Le message UNSUPPORTED_CHANNEL
+  // ci-dessous reste en place — il ne coûte rien et couvre le jour où un
+  // serveur plus ancien répondrait encore. Un refus mal nommé envoie ressaisir
+  // vingt fois un mot de passe qui n'a jamais été en cause.
   const canal = voie === 'tel' ? 'phone' : voie === 'mail' ? 'email' : 'identifier';
   const r = await window._loginRelais(canal, identifiant, password);
 

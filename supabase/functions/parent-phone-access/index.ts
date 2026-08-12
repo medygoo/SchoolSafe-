@@ -73,8 +73,27 @@ function digits(n: number): string {
   return Array.from(bytes, (b) => String(b % 10)).join("");
 }
 
+// FORMAT ARRÊTÉ PAR LOMS : exactement 2 LETTRES + 6 CHIFFRES, sans tiret, sans
+// espace, sans symbole — `LS482731`. Il remplace `Sa-1234-5678`.
+//
+// Pourquoi la forme compte, alors qu'un mot de passe Auth accepte n'importe
+// quoi : ce code se DICTE au téléphone et se RETAPE sur un clavier de
+// smartphone. Un tiret se confond avec un espace, une majuscule isolée se perd,
+// et chaque caractère de plus est une occasion de se tromper — puis de croire
+// que « le code ne marche pas ».
+//
+// Les lettres sont tirées d'un alphabet SANS I, O ni Q : à côté de chiffres,
+// I ressemble à 1, O à 0, et Q à O. Les chiffres, eux, ne sont pas ambigus.
+const CODE_LETTRES = "ABCDEFGHJKLMNPRSTUVWXYZ";   // ni I, ni O, ni Q
+
+function lettres(n: number): string {
+  const bytes = new Uint8Array(n);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => CODE_LETTRES[b % CODE_LETTRES.length]).join("");
+}
+
 function tempCode(): string {
-  return `Sa-${digits(4)}-${digits(4)}`;
+  return `${lettres(2)}${digits(6)}`;
 }
 
 function httpFor(code: string): number {
