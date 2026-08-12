@@ -1656,6 +1656,57 @@ pour la dernière fois ?** ».
 Les vingt-trois sont passés à vingt-sept. Aucun des quatre ne bloque — ils
 informent — mais ils informent désormais quelqu'un.
 
+### « Lent » peut vouloir dire « il attend »
+
+Le 12 août, Loms : *« l'écran de connexion est lent, en retard »*. On avait
+pourtant déjà traité le démarrage — service worker, JSZip retiré, SDK différé —
+et `audit-demarrage` passait ses vingt points.
+
+Il avait raison quand même. Une fois l'application **entièrement chargée**,
+elle ne faisait plus rien : le splash attendait un doigt. Aucune minuterie.
+Le commentaire d'à côté le disait noir sur blanc — « il attend un appui, il n'y
+a AUCUNE minuterie » — écrit comme un fait, jamais lu comme un problème.
+
+> **Pour qui ouvre l'application, une attente d'appui et un calcul lent sont
+> rigoureusement le même écran figé.** Personne ne se dit « c'est à moi de
+> jouer » devant un logo qui vient d'apparaître.
+
+Et la leçon d'outillage est plus dure : `audit-demarrage` mesurait le coût du
+chargement — octets, scripts bloquants, dépendances. Il ne mesurait pas le
+**temps jusqu'à l'écran utile**, qui est la seule durée que quelqu'un ressent.
+Un outil qui mesure la bonne quantité au mauvais endroit donne vingt points
+verts sur une application qu'on trouve lente.
+
+### Un aperçu qui juge pendant la frappe
+
+Même jour, même écran : *« quand j'écris le mail ça bugue »*. Rien ne buguait —
+ça **accusait**. L'aperçu se recalculait à chaque touche et affichait le refus
+en rouge. En tapant `loms@gmail.com` on lisait, dans l'ordre :
+
+| frappe | message |
+|---|---|
+| `l` | « Identifiant non reconnu » — **rouge** |
+| `lo` … `loms` | « Connexion avec l'identifiant loms » — blanc |
+| `loms@` … `loms@gmail.co` | « Adresse e-mail incomplète » — **rouge** |
+| `loms@gmail.com` | « Connexion à l'adresse … » — blanc |
+
+Rouge, blanc, rouge, sur une saisie parfaitement juste. Personne ne lit cette
+suite comme « continuez » ; beaucoup effacent tout et recommencent — et croient
+l'application cassée.
+
+> **On confirme pendant la frappe, on ne refuse qu'après.** Un aperçu sert à
+> rassurer celui qui tape, pas à le juger avant qu'il ait fini.
+
+Le refus reste — il est utile, et il arrive à la pause ou à la sortie du champ.
+Rien n'est perdu : la connexion elle-même redit tous les refus.
+
+Et le décor ne passe pas devant la saisie : le fond de l'écran de connexion
+téléchargeait une photo de 50 à 100 Ko toutes les sept secondes, décodée sur le
+fil principal, **pendant la frappe**. Vingt-quatre photos, deux mégaoctets,
+rien en cache au premier passage. Sur un téléphone modeste à Kinshasa, la
+lettre arrive en retard et l'application « bugue ». Un agrément qui se dispute
+le téléphone avec la raison d'être de l'écran perd.
+
 ### Un contrôle qui nomme un fichier ne contrôle pas une fonction
 
 Le 12 août, `recette-messages-v2` a annoncé **dix-sept pannes sur vingt** dans

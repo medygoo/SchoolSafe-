@@ -1233,8 +1233,13 @@ body.dark{background:radial-gradient(circle at 20% 0%,#162155 0%,#0a1130 55%,#06
 <!-- ── LOGIN SCREEN ── -->
 <div class="login-screen" id="LS" style="opacity:0;pointer-events:none">
   <div class="login-bg" id="LH">
-    <img class="login-bg-img" id="LH_IMG_A" src="login-kid-1.jpg" alt="" style="opacity:1;object-position:40% 8%;object-fit:cover">
-    <img class="login-bg-img" id="LH_IMG_B" src="login-kid-2.jpg" alt="" style="object-position:25% 8%;object-fit:cover">
+    <!-- `decoding="async"` : le décodage de la photo ne bloque plus le fil qui
+         dessine le formulaire. Et LH_IMG_B n'a PLUS de `src` de départ — c'est
+         la moitié invisible du fondu, jamais affichée telle quelle : elle
+         coûtait 51 Ko et un décodage à l'ouverture pour une image que personne
+         n'a jamais vue. La rotation lui donne sa source au premier tour. -->
+    <img class="login-bg-img" id="LH_IMG_A" src="login-kid-1.jpg" alt="" decoding="async" style="opacity:1;object-position:40% 8%;object-fit:cover">
+    <img class="login-bg-img" id="LH_IMG_B" alt="" decoding="async" style="object-position:25% 8%;object-fit:cover">
   </div>
   <div class="login-container" id="login-form">
     <div class="login-logo-wrap"><span class="lring"></span><span class="lring r2"></span>
@@ -4562,6 +4567,25 @@ window.closeSB = () => { S.sbOpen=false; $('SB').classList.remove('open'); $('SO
     window._loginHeroTimer = setInterval(function(){
       var a = document.getElementById('LH_IMG_A'), b = document.getElementById('LH_IMG_B');
       if(!a || !b) return;
+      // ── LE DÉCOR NE PASSE PAS DEVANT LA SAISIE ──────────────────────────
+      //
+      // Chaque rotation télécharge une photo de 50 à 100 Ko, puis la décode
+      // sur le fil principal. Vingt-quatre photos, deux mégaoctets, une
+      // toutes les sept secondes — et rien de tout cela n'est en cache au
+      // premier passage. Sur un téléphone modeste et une connexion de
+      // Kinshasa, ça tombe pile pendant qu'on tape son adresse : le champ
+      // saute, la lettre arrive en retard, et l'application « bugue ».
+      //
+      // Un fond qui tourne est un agrément. Une adresse qu'on tape est la
+      // raison d'être de l'écran. Quand les deux se disputent le téléphone,
+      // ce n'est pas l'agrément qui gagne.
+      //
+      // On saute donc le tour — sans arrêter la minuterie : dès que le champ
+      // est quitté, ou que l'onglet redevient visible, la rotation reprend
+      // d'elle-même au tour suivant.
+      if(document.hidden) return;
+      var actif = document.activeElement;
+      if(actif && (actif.id === 'LN' || actif.id === 'LP')) return;
       var nextIdx = _lhIdx;
       if(_LH_PHOTOS.length > 1){
         while(nextIdx === _lhIdx) nextIdx = Math.floor(Math.random() * _LH_PHOTOS.length);
@@ -5185,24 +5209,66 @@ window._voieDe = (saisie) => {
 // laquelle le serveur connaît cet identifiant. Un numéro tapé
 // « 08 10 00 01 11 » et cherché « +243810000111 » ne se rejoignent jamais —
 // et l'écran répondrait « identifiants incorrects » à quelqu'un qui a tout bon.
-window._telApercuConnexion = () => {
+//  ── UNE ADRESSE INCOMPLÈTE N'EST PAS UNE ADRESSE FAUSSE ──────────────────
+//
+//  Loms, 12 août 2026 : « quand j'écris le mail ça bug ».
+//
+//  Ça ne buguait pas : ça ACCUSAIT. L'aperçu se recalculait à chaque touche et
+//  affichait le refus en rouge sur une adresse qu'on était en train de taper.
+//  En écrivant `loms@gmail.com`, on lisait successivement :
+//
+//      l          → « Identifiant non reconnu »      (rouge)
+//      lo…loms    → « Connexion avec l'identifiant » (blanc)
+//      loms@…     → « Adresse e-mail incomplète »    (rouge, jusqu'au dernier
+//                                                     caractère)
+//
+//  Rouge, blanc, rouge — sur une saisie parfaitement juste. Personne ne lit ça
+//  comme « continuez », tout le monde le lit comme « c'est cassé », et beaucoup
+//  effacent tout pour recommencer.
+//
+//  La règle : **on confirme pendant la frappe, on ne refuse qu'après.** Un
+//  aperçu sert à rassurer celui qui tape, pas à le juger avant qu'il ait fini.
+//  Le refus reste — il est utile — mais il attend une vraie pause (l'utilisateur
+//  s'est arrêté) ou la sortie du champ. Aucun refus n'est perdu : la connexion
+//  elle-même les redit tous.
+window._RETARD_REFUS_MS = 900;
+window._telApercuConnexion = (opts) => {
   const ln = $('LN'), vu = $('LN_VU');
   if (!ln || !vu) return;
+  const tout_de_suite = !!(opts && opts.immediat);
+  clearTimeout(window._apercuRefusT);
+
   const brut = (ln.value || '').trim();
   if (!brut) { vu.textContent = ''; return; }
   const { voie, valeur } = window._voieDe(brut);
+
   if (valeur) {
     vu.textContent = (voie === 'tel')  ? ('Connexion au numéro ' + valeur)
                    : (voie === 'mail') ? ('Connexion à l’adresse ' + valeur)
                    : ('Connexion avec l’identifiant ' + valeur);
     vu.style.color = 'rgba(255,255,255,.82)';
-  } else {
-    vu.textContent = (voie === 'tel')
+    return;
+  }
+
+  const refuser = () => {
+    // On relit le champ au moment d'afficher : entre-temps la personne a pu
+    // finir de taper, et un refus calculé sur l'ancienne valeur mentirait.
+    const maintenant = (ln.value || '').trim();
+    if (!maintenant) { vu.textContent = ''; return; }
+    const r = window._voieDe(maintenant);
+    if (r.valeur) return window._telApercuConnexion({ immediat: true });
+    vu.textContent = (r.voie === 'tel')
       ? 'Numéro non reconnu — 0810000111 ou +243810000111'
-      : (voie === 'mail') ? 'Adresse e-mail incomplète'
+      : (r.voie === 'mail') ? 'Adresse e-mail incomplète'
       : 'Identifiant non reconnu';
     vu.style.color = '#ffc9c9';
-  }
+  };
+
+  if (tout_de_suite) return refuser();
+  // Pendant la frappe : on efface l'ancien message plutôt que d'en écrire un
+  // faux. Le champ reste calme tant que la personne avance.
+  vu.textContent = '';
+  window._apercuRefusT = setTimeout(refuser, window._RETARD_REFUS_MS);
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -33612,7 +33678,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // La voie d'entrée choisie la dernière fois, et l'aperçu du numéro pendant
   // la frappe : personne ne doit découvrir après coup que son numéro n'est pas
   // écrit comme le serveur le connaît.
-  if(ln) ln.addEventListener('input', window._telApercuConnexion);
+  if(ln) ln.addEventListener('input', () => window._telApercuConnexion());
+  // Le refus attend la sortie du champ — voir `_telApercuConnexion`. Sans ce
+  // `blur`, quelqu'un qui quitte un champ incomplet ne serait jamais prévenu.
+  if(ln) ln.addEventListener('blur', () => window._telApercuConnexion({ immediat:true }));
   if(np) np.addEventListener('keydown', e=>{ if(e.key==='Enter' && cp) cp.focus(); });
   if(cp) cp.addEventListener('keydown', e=>{ if(e.key==='Enter') window._completePasswordSetup(); });
 
@@ -33644,6 +33713,26 @@ document.addEventListener('DOMContentLoaded', () => {
     splash.addEventListener('touchend', function(e){ e.preventDefault(); goLogin(); }, {once:true, passive:false});
     splash.addEventListener('click', goLogin, {once:true});
     document.addEventListener('keydown', e=>{ if(e.key==='Enter') goLogin(); });
+
+    // ── L'OUVERTURE « LENTE » ÉTAIT UNE ATTENTE, PAS UN CALCUL ─────────────
+    //
+    // Loms, 12 août 2026 : « l'écran de connexion est lent, en retard ».
+    //
+    // On a cherché longtemps ce qui ralentissait le démarrage — le service
+    // worker, JSZip, le SDK Supabase — et tout cela était réel. Mais il restait
+    // ceci, que rien ne mesurait : **une fois l'application entièrement
+    // chargée, elle ne faisait plus rien du tout.** Elle attendait un doigt.
+    //
+    // Le commentaire d'à côté le disait déjà : « il attend un appui, il n'y a
+    // AUCUNE minuterie ». C'était noté comme un fait, jamais comme un problème.
+    // Pour qui ouvre l'application, l'attente d'un appui et un calcul lent sont
+    // rigoureusement le même écran figé — et personne ne se dit « c'est à moi
+    // de jouer » devant un logo qui vient d'apparaître.
+    //
+    // Le splash s'efface donc seul. L'appui reste, et il coupe court : qui
+    // connaît l'application n'attend pas la fin de la seconde et demie.
+    window._SPLASH_MS = 1600;
+    setTimeout(goLogin, window._SPLASH_MS);
   }
 
   // Retour de la page dédiée après création ou changement du mot de passe.
