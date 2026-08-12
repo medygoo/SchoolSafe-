@@ -17,42 +17,58 @@ jobs:
           ref: chatgpt/messages-frontend-lock
           fetch-depth: 0
 
-      - name: Insert Messages V2 loader in dist/index.html
+      - name: Insert Messages V2 loader at real document end
         shell: python
         run: |
           from pathlib import Path
           p = Path('dist/index.html')
           text = p.read_text(encoding='utf-8')
           tag = '<script src="messages-frontend-v2.js?v=20260812" defer></script>'
-          if tag not in text:
-              if '</body>' not in text:
-                  raise SystemExit('dist/index.html: balise </body> introuvable')
-              text = text.replace('</body>', tag + '\n</body>', 1)
-              p.write_text(text, encoding='utf-8')
+          # Nettoie toute insertion antérieure, y compris une occurrence dans
+          # une chaîne HTML d'impression, puis cible la DERNIÈRE fermeture body.
+          text = text.replace(tag + '\n', '').replace(tag, '')
+          head, sep, tail = text.rpartition('</body>')
+          if not sep:
+              raise SystemExit('dist/index.html: balise finale </body> introuvable')
+          text = head + tag + '\n</body>' + tail
+          p.write_text(text, encoding='utf-8')
 
       - name: Frontend checks
+        shell: python
         run: |
-          set -euxo pipefail
-          node --check dist/messages-frontend-v2.js
-          grep -F '<script src="messages-frontend-v2.js?v=20260812" defer></script>' dist/index.html >/dev/null
-          grep -F "parent_to_dir" dist/messages-frontend-v2.js >/dev/null
-          grep -F "openForwardParentMessage" dist/messages-frontend-v2.js >/dev/null
-          grep -F "sendForwardParentMessage" dist/messages-frontend-v2.js >/dev/null
-          grep -F "openRelayTeacherMessage" dist/messages-frontend-v2.js >/dev/null
-          grep -F "sendRelayTeacherMessage" dist/messages-frontend-v2.js >/dev/null
-          grep -F "openArchivedMessages" dist/messages-frontend-v2.js >/dev/null
-          grep -F "return original.openComposeMsg()" dist/messages-frontend-v2.js >/dev/null
-          grep -F "return original.sendMsg(mode)" dist/messages-frontend-v2.js >/dev/null
-          test "$(grep -Fc 'messages-frontend-v2.js?v=20260812' dist/index.html)" -eq 1
+          import subprocess
+          from pathlib import Path
+          p = Path('dist/index.html')
+          text = p.read_text(encoding='utf-8')
+          tag = '<script src="messages-frontend-v2.js?v=20260812" defer></script>'
+          assert text.count(tag) == 1, f'loader count={text.count(tag)}'
+          tag_pos = text.rfind(tag)
+          body_pos = text.rfind('</body>')
+          assert 0 <= tag_pos < body_pos, 'loader absent avant le body final'
+          assert body_pos - tag_pos < 200, 'loader trop loin du body final'
+          subprocess.run(['node','--check','dist/messages-frontend-v2.js'], check=True)
+          src = Path('dist/messages-frontend-v2.js').read_text(encoding='utf-8')
+          for needle in [
+              'parent_to_dir',
+              'openForwardParentMessage',
+              'sendForwardParentMessage',
+              'openRelayTeacherMessage',
+              'sendRelayTeacherMessage',
+              'openArchivedMessages',
+              'return original.openComposeMsg()',
+              'return original.sendMsg(mode)',
+          ]:
+              assert needle in src, f'contrôle manquant: {needle}'
+          print('Messages V2: syntaxe + routage + intégration finale OK')
 
       - name: Commit branch integration
         run: |
           if git diff --quiet -- dist/index.html; then
-            echo 'Loader already present.'
+            echo 'Loader already correct.'
             exit 0
           fi
           git config user.name 'SchoolSafe ChatGPT'
           git config user.email 'actions@users.noreply.github.com'
           git add dist/index.html
-          git commit -m 'feat(messages): activer V2 sur branche de recette [messages-v2-applied]'
+          git commit -m 'feat(messages): activer V2 au bon emplacement [messages-v2-applied]'
           git push origin HEAD:chatgpt/messages-frontend-lock
