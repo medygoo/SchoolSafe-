@@ -44,6 +44,17 @@ const OUTILS = [
   ['messages',    'recette-messages-v2.mjs',    'le routage Parent → Direction → enseignant'],
   ['recuv2',      'recette-recu-v2.mjs',        'le reçu de paiement V2'],
   ['whatsapp',    'recette-acces-whatsapp.mjs', 'l’invitation par code WhatsApp'],
+  // ── QUATRE OUTILS QUI EXISTAIENT SANS JAMAIS TOURNER ────────────────────
+  // `CLAUDE.md` les présentait dans son tableau des outils comme faisant
+  // partie du filet. Ils n'étaient dans aucune liste : `npm run audit` ne les
+  // a jamais lancés une seule fois. C'est la leçon du 4 août, commise ici même
+  // — « une règle qu'on lit et qu'on n'exécute pas ne protège de rien » — et
+  // c'est aussi celle de l'enchaînement `&&` : un filet troué ne se voit pas,
+  // il se mesure.
+  ['mort',        'audit-mort.mjs',            'les fonctions exposées sans appelant'],
+  ['ecritures',   'audit-writes.mjs',          'les écritures dont l’échec est invisible'],
+  ['schema',      'audit-schema.mjs',          'code ↔ SQL, et ce qu’il ne peut pas vérifier'],
+  ['porteeparent','audit-portee-parent.mjs',   'ce dont le parent a réellement besoin'],
 ];
 
 const detail = process.argv.includes('--detail');

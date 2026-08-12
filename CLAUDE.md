@@ -1593,6 +1593,29 @@ d'enfant : il cherchait `note` dans tout l'écran, et lisait « **Note**z le
 code ». **Un test qui se trompe de cible accuse du texte parfaitement sain** —
 il visait l'écran, il devait viser le message.
 
+### Quatre outils dans le tableau, zéro dans le filet
+
+**12 août 2026.** Ce fichier présente ses outils dans un tableau, et ce tableau
+disait vrai sur ce qu'ils font. Il ne disait rien sur **ce qui les lance**.
+
+Quatre d'entre eux — `audit-mort`, `audit-writes`, `audit-schema`,
+`audit-portee-parent` — n'étaient dans **aucune liste**. `npm run audit` ne les
+a jamais exécutés une seule fois. Les fonctions exposées sans appelant, les
+écritures dont l'échec est invisible, l'écart entre le code et le SQL, ce que le
+parent lit sans qu'on le lui charge : quatre questions posées, jamais reposées.
+
+C'est **exactement** la leçon du 4 août, commise ici même :
+
+> **Une règle qu'on lit et qu'on n'exécute pas ne protège de rien.**
+
+Et c'est la même famille que l'enchaînement `&&` qui arrêtait `npm run audit` au
+troisième outil : **un filet troué ne se voit pas, il se mesure.** La bonne
+question n'est jamais « l'outil existe-t-il ? » mais « **quand a-t-il tourné
+pour la dernière fois ?** ».
+
+Les vingt-trois sont passés à vingt-sept. Aucun des quatre ne bloque — ils
+informent — mais ils informent désormais quelqu'un.
+
 ---
 
 ## Les outils
