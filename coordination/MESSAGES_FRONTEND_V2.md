@@ -10,7 +10,7 @@ Date : 12 août 2026
 - La Direction choisit un seul enseignant correspondant aux enfants/classes du parent et lui transmet le message.
 - L’enseignant répond à la Direction, jamais directement au parent.
 - La Direction transmet ensuite la réponse au parent.
-- Le seul message enseignant directement destiné aux familles est un **message collectif à tous les parents de sa classe**, déjà soumis à approbation D1/D2 avant envoi.
+- Le seul message enseignant directement destiné aux familles est un **message collectif à tous les parents de sa classe**, soumis à approbation D1/D2 avant envoi.
 - Direction peut écrire à un parent, tous les parents, les parents d’une classe, un enseignant/tous les enseignants, D2, Caisse et Gardien.
 - Ajouter en haut de la page une courte explication adaptée au rôle.
 - Remplacer la suppression définitive par l’archivage.
@@ -19,30 +19,50 @@ Date : 12 août 2026
 
 ## Construction effectuée
 
-Fichier : `dist/messages-frontend-v2.js`
+Fichier principal : `dist/messages-frontend-v2.js`.
 
-Le patch surcharge uniquement la couche frontend existante :
+Le patch frontend :
 
-- bloque `parent_direct` et force le routage parent vers la Direction ;
+- bloque l’ancien chemin `parent_direct` et force le routage parent vers la Direction ;
 - notifie D1 + D2 pour un message parent ;
 - ajoute le panneau **Routage Direction** ;
 - ajoute `openForwardParentMessage` / `sendForwardParentMessage` ;
 - ajoute `openRelayTeacherMessage` / `sendRelayTeacherMessage` ;
 - étend le composer Direction aux parents par classe et aux personnels utiles ;
 - remplace l’action de suppression par un archivage local non destructif ;
-- introduit un état de lecture local par utilisateur pour ne plus considérer un message collectif comme « lu par tout le monde » dès qu’une seule personne le lit.
+- introduit un état de lecture local par utilisateur pour éviter qu’un message collectif devienne « lu par tout le monde » après une seule lecture ;
+- délègue les fonctions enseignant déjà existantes au code historique afin de conserver le message collectif soumis à approbation ;
+- conserve le chiffrement existant avant synchronisation.
 
-## Important — non activé dans `main`
+## Intégration sur la branche de recette
 
-Ce fichier est volontairement isolé sur la branche `chatgpt/messages-frontend-lock`. Il ne modifie ni Supabase, ni RLS, ni RPC, ni migration.
-
-Pour l’activer dans l’application, le chargement suivant devra être ajouté **après le code principal de `dist/index.html`** :
+La branche `chatgpt/messages-frontend-lock` charge maintenant V2 une seule fois, à la vraie fin du document principal :
 
 ```html
-<script src="./messages-frontend-v2.js"></script>
+<script src="messages-frontend-v2.js?v=20260812" defer></script>
+</body>
+</html>
 ```
 
-Ne pas activer en production tant que les contrôles mobile ne sont pas terminés.
+Un premier automatisme avait ciblé par erreur un `</body>` contenu dans une chaîne d’impression. Cette insertion n’a pas été publiée : elle a été détectée dans la recette puis corrigée. Le branchement final utilise bien le dernier `</body>` réel de `dist/index.html`.
+
+La recette GitHub du branchement final (run `31570171486`) a validé :
+
+- syntaxe JavaScript ;
+- présence unique du loader ;
+- position du loader juste avant le `</body>` final ;
+- présence des chemins Parent → Direction, Direction → enseignant et Direction → Parent ;
+- délégation au comportement enseignant existant.
+
+Le workflow temporaire utilisé pour modifier le grand fichier `dist/index.html` a ensuite été supprimé de la branche afin qu’il ne soit jamais fusionné dans `main`.
+
+Une recette durable, sans réseau ni modification de données, est conservée dans `tools/recette-messages-v2.mjs`.
+
+## Statut de publication
+
+**`main` et la production ne sont pas modifiés par cette branche tant que la PR #111 n’est pas fusionnée.**
+
+Le frontend V2 est donc construit, branché et contrôlé sur la branche de recette, mais il n’est pas encore déclaré comme garantie serveur complète.
 
 ## Backend restant avant garantie complète multi-appareil
 
