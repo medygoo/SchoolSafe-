@@ -1543,6 +1543,56 @@ trouvait encore l'autre, et la preuve se déclarait tenue alors qu'elle ne garda
 plus rien. `replaceAll`. **Une preuve qui ne suit pas le code qu'elle garde se
 périme sans rien dire** — c'est la troisième fois que ce dépôt le note.
 
+### Un incident d'affichage ne doit jamais coûter ce que le serveur a déjà fait
+
+**12 août 2026.** Loms : *« l'invitation avec code sur WhatsApp, ça ne
+fonctionne pas ».*
+
+Le parcours était juste, et le défaut n'était pas dans le parcours : il était
+dans ce qui l'entoure. Au moment où la carte s'affiche, **le serveur a déjà
+agi** — le code est posé comme mot de passe Auth, l'accès précédent est
+invalidé, le délai d'une minute court, et **le code n'est rendu qu'une fois** :
+il n'est enregistré nulle part, ni ici, ni là-bas.
+
+Or toute la chaîne d'affichage était appelée **sans un seul `catch`** :
+`_dessinerCarteAcces` (canvas 1120 × 1400, deux images, `toBlob`),
+`createObjectURL`, puis la modale. Et `_envoyerLienWhatsApp` avait
+`try { … } finally` — **sans `catch`**.
+
+Un seul incident — canvas contaminé, mémoire courte sur un téléphone d'entrée
+de gamme, `toBlob` qui lève — et :
+
+| | |
+|---|---|
+| l'écran | ne montrait **rien** |
+| la Direction | rappuyait → `TOO_SOON` |
+| la personne | ne pouvait plus entrer avec son ancien accès, et n'avait pas le nouveau |
+
+> **Ce qui est irréversible passe avant ce qui est décoratif.** La carte est un
+> confort ; le code est la seule chose qui compte. Quand un geste a déjà changé
+> l'état du serveur, plus rien de ce qui l'AFFICHE ne doit pouvoir le perdre.
+
+Trois filets, du plus intérieur au plus extérieur : le dessin ne jette plus
+jamais, l'affichage de la carte non plus, et si tout lâche un dernier recours
+montre le code **en clair, sans dessiner ni charger la moindre image** — pour ne
+pas échouer à son tour. Et le repli dit ce qu'il faut savoir : *« notez le code
+avant de fermer : il ne sera plus jamais réaffiché »*.
+
+**La leçon de méthode :** on cherche ce défaut en se demandant, à chaque
+`await` qui suit une écriture serveur, *« si la ligne suivante jette, qu'est-ce
+qui est déjà parti et ne reviendra pas ? »*
+
+`tools/recette-acces-whatsapp.mjs` tient 18 points en cassant vraiment le
+canvas ; `--preuve` retire les trois filets et **revoit le code disparaître**.
+
+**Et deux outils qui ont fait leur travail sur moi, le même jour :** en
+renommant `_dessinerCarteAcces` en `…Impl`, `audit-logo` a aussitôt déclaré
+l'emblème « lu hors d'un document » — un renommage avait fait sortir un document
+de sa liste. Et mon propre test a accusé le message d'emporter une donnée
+d'enfant : il cherchait `note` dans tout l'écran, et lisait « **Note**z le
+code ». **Un test qui se trompe de cible accuse du texte parfaitement sain** —
+il visait l'écran, il devait viser le message.
+
 ---
 
 ## Les outils
@@ -1576,6 +1626,7 @@ npm run audit        # tout d'un coup
 | `audit-entete.mjs` | la chaîne de responsabilité des documents · **un ministère est un réglage** · le dessin unique de Finance et RH (`--preuve`) |
 | `recette-messages-v2.mjs` | le routage Parent → Direction → enseignant · **et l'honnêteté de l'envoi** |
 | `recette-recu-v2.mjs` | le reçu de paiement V2, prêt à brancher |
+| `recette-acces-whatsapp.mjs` | l'invitation par code WhatsApp — **le code survit à tout incident d'affichage** (`--preuve`) |
 
 **Dans un nouveau dépôt, commencer par les lancer.** Leur sortie *est* la liste
 des manques — au lieu d'en discuter.

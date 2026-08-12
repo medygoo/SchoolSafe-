@@ -43,6 +43,7 @@ const OUTILS = [
   ['entete',      'audit-entete.mjs',          'la chaîne de responsabilité des documents'],
   ['messages',    'recette-messages-v2.mjs',    'le routage Parent → Direction → enseignant'],
   ['recuv2',      'recette-recu-v2.mjs',        'le reçu de paiement V2'],
+  ['whatsapp',    'recette-acces-whatsapp.mjs', 'l’invitation par code WhatsApp'],
 ];
 
 const detail = process.argv.includes('--detail');
