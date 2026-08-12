@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 const CACHE_PREFIX = 'schoolsafe-';
-const CACHE = `${CACHE_PREFIX}v69`;
+const CACHE = `${CACHE_PREFIX}v70`;
 
 // Ressources à mettre en cache au démarrage
 const PRECACHE = [
@@ -15,7 +15,6 @@ const PRECACHE = [
   // Librairies CDN critiques — disponibles hors-ligne après 1er chargement
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
 ];
@@ -64,6 +63,26 @@ self.addEventListener('activate', evt => {
   );
 });
 
+// ── A-T-ELLE CHANGÉ ? ────────────────────────────────────────────────────────
+// On ne compare pas les corps : télécharger 2,4 Mo pour les relire octet par
+// octet coûterait plus que ce qu'on économise. GitHub Pages rend un `ETag` sur
+// chaque fichier ; à défaut, `Last-Modified`, puis la longueur. Si aucun des
+// trois n'est là, on ne prétend PAS savoir — on ne dérange personne.
+async function _aChange(ancienne, nouvelle) {
+  for (const cle of ['etag', 'last-modified', 'content-length']) {
+    const a = ancienne.headers.get(cle), b = nouvelle.headers.get(cle);
+    if (a && b) return a !== b;
+  }
+  return false;
+}
+
+// Prévenir les pages ouvertes. C'est la moitié qui manquait au
+// Stale-While-Revalidate : il mettait à jour et ne le disait pas.
+async function _prevenirLesPages() {
+  const pages = await self.clients.matchAll({ type: 'window' });
+  for (const p of pages) p.postMessage({ type: 'SS_MAJ_DISPONIBLE' });
+}
+
 // ── Fetch : Network-First pour l'interface, Cache-First pour le reste ─────────
 self.addEventListener('fetch', evt => {
   const url = new URL(evt.request.url);
@@ -94,54 +113,58 @@ self.addEventListener('fetch', evt => {
   // Bypass pour les pages outil (diagnostic/auth) — jamais servies du cache
   if (BYPASS_PATHS.some(p => url.pathname.endsWith(p))) return;
 
-  // Network-First réel pour toute navigation / index.html.
-  // Une ancienne interface ne doit jamais être préférée quand le réseau fonctionne.
+  // ── L'INTERFACE : SERVIE TOUT DE SUITE, VÉRIFIÉE DERRIÈRE ────────────────
+  //
+  // Trois stratégies se sont succédé ici, et chacune corrigeait la précédente
+  // en cassant autre chose. La leçon est dans la succession :
+  //
+  //  1. Stale-While-Revalidate. Le cache d'abord, mise à jour silencieuse.
+  //     Conséquence : à chaque publication, l'école voyait **l'ancienne
+  //     interface au premier chargement**. Loms nous disait que ses
+  //     corrections n'étaient pas en ligne — elles l'étaient, c'était le
+  //     téléphone qui lui resservait la veille.
+  //
+  //  2. Network-First. Le réseau d'abord, cache en secours. La fraîcheur
+  //     revient — et l'application reste blanche tant que le réseau n'a pas
+  //     rendu 2,4 Mo. Un `catch` ne le voit pas : **une requête LENTE n'est
+  //     pas une requête en ÉCHEC.**
+  //
+  //  3. Network-First borné à 4 s. L'écran blanc est borné, mais il reste :
+  //     sur un réseau de Kinshasa, **les 4 secondes s'écoulent en entier à
+  //     chaque ouverture**, alors qu'une version parfaitement utilisable
+  //     dormait dans le cache depuis le début.
+  //
+  // Ce qui manquait aux trois : la fraîcheur et l'attente étaient traitées
+  // comme un seul curseur, alors que ce sont deux problèmes.
+  //
+  //   · **L'attente** se règle en servant le cache IMMÉDIATEMENT. Zéro seconde.
+  //   · **La fraîcheur** ne se règle pas en faisant attendre quelqu'un : elle
+  //     se règle en allant chercher la nouvelle version DERRIÈRE, et en le
+  //     DISANT quand elle est là.
+  //
+  // Le défaut du n° 1 n'était pas de servir le cache — c'était de **se taire**.
+  // Une mise à jour silencieuse qui arrive au prochain démarrage est un échec
+  // silencieux, celui-là même que tous nos audits traquent.
   if (evt.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
-    // AMÉLIORÉ, PAS REMPLACÉ — 11 août 2026.
-    //
-    // Le Network-First de ChatGPT corrige une vraie panne : le cache resservait
-    // l'ancienne interface, donc des corrections publiées n'atteignaient
-    // personne. On le garde entier.
-    //
-    // Ce qu'il coûte, et qu'on lui ajoute : sur un réseau de Kinshasa qui
-    // répond en dix secondes, `fetch` ne rend la main qu'au bout de dix
-    // secondes — l'application reste sur un écran blanc alors qu'une version
-    // parfaitement utilisable dort dans le cache. Un `catch` ne s'en aperçoit
-    // pas : une requête LENTE n'est pas une requête en ÉCHEC.
-    //
-    // On borne donc l'attente à 4 secondes : passé ce délai on sert le cache
-    // pour que l'école travaille, ET on laisse la requête réseau finir pour
-    // que le cache soit à jour au prochain démarrage. La fraîcheur est
-    // préservée, l'attente ne l'est plus.
-    const AVEC_DELAI = (requete, ms) => {
-      const reseau = fetch(requete).then(async response => {
-        if (response.ok) {
-          const cache = await caches.open(CACHE);
-          await cache.put(requete, response.clone());
+    evt.respondWith((async () => {
+      const cache  = await caches.open(CACHE);
+      const cached = await cache.match(evt.request) || await cache.match('./index.html');
+
+      // Ce qui part au réseau, quoi qu'il arrive — mais sans que personne
+      // l'attende quand une copie existe déjà.
+      const reseau = fetch(evt.request).then(async reponse => {
+        if (reponse && reponse.ok) {
+          await cache.put(evt.request, reponse.clone());
+          if (cached && await _aChange(cached, reponse)) await _prevenirLesPages();
         }
-        return response;
-      });
-      const repli = new Promise(resolve => setTimeout(async () => {
-        const cached = await caches.match(requete) || await caches.match('./index.html');
-        resolve(cached || null);
-      }, ms));
-      return Promise.race([reseau, repli]).then(r => r || reseau);
-    };
-    evt.respondWith(
-      AVEC_DELAI(evt.request, 4000)
-        .then(async response => {
-          if (response.ok) {
-            const cache = await caches.open(CACHE);
-            await cache.put(evt.request, response.clone());
-          }
-          return response;
-        })
-        .catch(async () => {
-          const direct = await caches.match(evt.request);
-          if (direct) return direct;
-          return caches.match('./index.html');
-        })
-    );
+        return reponse;
+      }).catch(() => null);
+
+      if (cached) { evt.waitUntil(reseau); return cached; }
+
+      // Premier chargement, ou cache vidé : là, il faut bien attendre.
+      return (await reseau) || Response.error();
+    })());
     return;
   }
 
