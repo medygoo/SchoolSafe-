@@ -51,7 +51,13 @@ if (PREUVE) {
 const sansCommentaires = (src) => src
   .split('\n').map(l => l.replace(/^\s*\/\/.*$/, '')).join('\n')
   .replace(/<!--[\s\S]*?-->/g, '')
-  .replace(/\/\*[\s\S]*?\*\//g, '');
+  // ⚠️ Le `/*` doit être en DÉBUT DE LIGNE. Sans cette ancre, `accept="image/*"`
+  // — un attribut HTML parfaitement normal — ouvre un faux commentaire CSS que
+  // le premier `*/` venu referme : mesuré, **351 Ko avalés d'un coup**, dont la
+  // seule ligne qui emploie `jsQR`. L'outil déclarait alors « bibliothèque
+  // téléchargée sans être appelée » sur une bibliothèque parfaitement utilisée.
+  // Un nettoyeur qui ne comprend pas le contexte n'omet pas : il INVENTE.
+  .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, '');
 
 const codeHtml = sansCommentaires(html);
 const codeSw   = sansCommentaires(sw);

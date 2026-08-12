@@ -42,6 +42,9 @@ if (PREUVE) {
   const avant = html;
   html = html.replace('      ${_enteteOfficiel()}\n      <h1>🎓 LISTE OFFICIELLE ENAFEP',
     '      <div style="font-size:11px">REPUBLIQUE DEMOCRATIQUE DU CONGO · Ministère de l\'EPSP</div>\n      <h1>🎓 LISTE OFFICIELLE ENAFEP');
+  // Et le dessin : un document qui reprend sa feuille à lui.
+  html = html.replace('  const CSS = window._CSS_DOC;',
+    '  const CSS = `*{box-sizing:border-box}body{font-family:Arial}`;');
   if (html === avant) { console.log('\n✗ PREUVE IMPOSSIBLE — le point à réinjecter est introuvable.\n'); process.exit(1); }
 }
 
@@ -51,7 +54,13 @@ if (PREUVE) {
 const code = html
   .split('\n').map(l => l.replace(/^\s*\/\/.*$/, '')).join('\n')
   .replace(/<!--[\s\S]*?-->/g, '')
-  .replace(/\/\*[\s\S]*?\*\//g, '');
+  // ⚠️ Le `/*` doit être en DÉBUT DE LIGNE. Sans cette ancre, `accept="image/*"`
+  // — un attribut HTML parfaitement normal — ouvre un faux commentaire CSS que
+  // le premier `*/` venu referme : mesuré, **351 Ko avalés d'un coup**, dont la
+  // seule ligne qui emploie `jsQR`. L'outil déclarait alors « bibliothèque
+  // téléchargée sans être appelée » sur une bibliothèque parfaitement utilisée.
+  // Un nettoyeur qui ne comprend pas le contexte n'omet pas : il INVENTE.
+  .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, '');
 const lignes = code.split('\n');
 
 const R = []; const ok = (q, v, d = '') => R.push({ q, v: !!v, d });
@@ -117,8 +126,54 @@ for (const fn of VERS_MINISTERE) {
      /_enteteOfficiel\(/.test(bout), i < 0 ? 'fonction introuvable' : 'en-tête absent');
 }
 
+// ── 6 · UN SEUL DESSIN POUR LA FINANCE ET LA RH ───────────────────────────
+// Loms, 11 août 2026 : « que tous les documents qui proviennent de cette partie
+// prennent le même design ». La référence est le reçu de ChatGPT.
+//
+// Il y avait DIX feuilles de style écrites à la main, une par document : deux
+// papiers sortis de la même caisse le même jour ne se ressemblaient pas. C'est
+// la leçon des neuf copies du classement, appliquée au dessin — quand dix
+// endroits répondent à la même question, ils appellent le même code.
+const FINANCE_RH = ['exportEtatFinancierPDF','exportJournalPDF','exportBalancePDF',
+  'exportGrandLivrePDF','exportComptabilitePDF','exportBilanPDF',
+  'printFichePaie','printPersonnelFichePaie','printVersementRecu','viewReceipt'];
+
+ok('la feuille commune des documents existe', /window\._CSS_DOC\s*=/.test(code));
+ok('elle parle la langue du reçu — bandeau, badge, cartouche, cachet',
+   /\.amount-box/.test(code) && /\.stamp/.test(code) && /\.badge/.test(code) && /#556777/.test(code));
+ok('l’en-tête de tableau se répète en haut de chaque page',
+   /thead\{display:table-header-group\}/.test(code),
+   'sinon une colonne de comptes devient illisible dès la deuxième page');
+ok('la barre d’action ne s’imprime jamais',
+   /\.pbtn,\.dl-btn,\.print-bar,\.dl-bar\{display:none\}/.test(code),
+   'elle n’appartient pas au document');
+ok('la comptabilité DÉRIVE de la feuille commune au lieu d’en écrire une autre',
+   /_COMPTA_CSS\s*=\s*window\._CSS_DOC\s*\+/.test(code));
+
+// La tranche s'arrête à la DÉCLARATION SUIVANTE au premier niveau, pas au
+// prochain document de la liste : entre deux documents de Finance il y a
+// parfois des milliers de lignes, et la feuille d'un voisin serait comptée
+// comme celle qu'on examine. Une tranche trop large ne trouve pas moins —
+// elle attribue à tort.
+const _finDe = (i) => {
+  const m = /\n(?:window\.[A-Za-z_0-9.]+\s*=|function\s+[A-Za-z_0-9]+|R\.[a-z_0-9]+\s*=|const\s+[A-Z_]+\s*=)/.exec(code.slice(i + 40));
+  return m ? i + 40 + m.index : Math.min(i + 20000, code.length);
+};
+const solitaires = [];
+FINANCE_RH.map(n => [n, code.indexOf('window.' + n + ' =')])
+  .filter(([, i]) => i >= 0)
+  .forEach(([n, i]) => {
+  const bout = code.slice(i, _finDe(i));
+  const partagee = /_CSS_DOC|_COMPTA_CSS/.test(bout);
+  // Une feuille écrite à la main se reconnaît à ses règles, pas à sa longueur.
+  const propre = /const CSS\s*=\s*`|<style>\s*\*\{/.test(bout);
+  if (!partagee || propre) solitaires.push(n + (propre ? ' (feuille propre)' : ' (aucune feuille)'));
+});
+ok('les 10 documents de Finance et RH partagent le MÊME dessin',
+   solitaires.length === 0, solitaires.join(', '));
+
 // ── Verdict ───────────────────────────────────────────────────────────────
-console.log('\n═══ AUDIT — L’EN-TÊTE OFFICIEL DES DOCUMENTS ═══\n');
+console.log('\n═══ AUDIT — L’EN-TÊTE OFFICIEL ET LE DESSIN DES DOCUMENTS ═══\n');
 for (const r of R) console.log(`  ${r.v ? '✓' : '✗'} ${r.q}${r.v ? '' : '   → ' + r.d}`);
 
 console.log('\n  CE QUE CET OUTIL NE VÉRIFIE PAS, et il faut le savoir :');
@@ -135,9 +190,10 @@ const ko = R.filter(r => !r.v);
 if (PREUVE) {
   const dur = R.find(r => /aucun ministère n’est écrit en dur/.test(r.q));
   const doc = R.find(r => /printTenafepList porte la chaîne/.test(r.q));
-  if (dur && !dur.v && doc && !doc.v) {
-    console.log('\n✔ PREUVE TENUE — un ministère remis en dur est revu, et le document');
-    console.log('  qui perd son en-tête partagé aussi.\n');
+  const des = R.find(r => /partagent le MÊME dessin/.test(r.q));
+  if (dur && !dur.v && doc && !doc.v && des && !des.v) {
+    console.log('\n✔ PREUVE TENUE — un ministère remis en dur est revu, le document');
+    console.log('  qui perd son en-tête aussi, et celui qui reprend sa propre feuille.\n');
     process.exit(0);
   }
   console.log('\n✗ PREUVE MANQUÉE — le ministère en dur est repassé sans être vu.\n');
