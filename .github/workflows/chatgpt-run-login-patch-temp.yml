@@ -125,6 +125,9 @@ jobs:
       - name: Verify JS syntax
         run: node --check dist/messages-frontend-v2.js
 
+      - name: Install audit dependencies
+        run: npm ci
+
       - name: Run SchoolSafe audits
         run: npm run audit
 
