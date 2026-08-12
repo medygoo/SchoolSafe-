@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 const CACHE_PREFIX = 'schoolsafe-';
-const CACHE = `${CACHE_PREFIX}v70`;
+const CACHE = `${CACHE_PREFIX}v71`;
 
 // Ressources à mettre en cache au démarrage
 const PRECACHE = [
@@ -163,6 +163,39 @@ self.addEventListener('fetch', evt => {
       if (cached) { evt.waitUntil(reseau); return cached; }
 
       // Premier chargement, ou cache vidé : là, il faut bien attendre.
+      return (await reseau) || Response.error();
+    })());
+    return;
+  }
+
+  // ── LE CODE DE L'ÉCOLE, SERVI VITE MAIS JAMAIS FIGÉ ─────────────────────
+  //
+  // `messages-frontend-v2.js` est du CODE de production, comme `index.html` —
+  // 445 lignes qui décident du routage des messages entre parents, Direction et
+  // enseignants. Le Cache-First générique en dessous ne réinterroge JAMAIS le
+  // réseau une fois le fichier en cache : une correction n'atteindrait personne
+  // tant que son `?v=` n'est pas changé à la main.
+  //
+  // C'est exactement la panne qu'on vient de réparer pour l'interface, prête à
+  // se reproduire sur un fichier voisin. **Une règle qui ne vaut que pour un
+  // fichier ne protège que ce fichier.**
+  //
+  // Même traitement, donc : le cache répond tout de suite, le réseau vérifie
+  // derrière, et si la version a changé on le DIT — la page propose de
+  // recharger, elle ne se recharge pas toute seule.
+  if (url.origin === self.location.origin && url.pathname.endsWith('.js')
+      && !url.pathname.endsWith('sw.js')) {
+    evt.respondWith((async () => {
+      const cache  = await caches.open(CACHE);
+      const cached = await cache.match(evt.request);
+      const reseau = fetch(evt.request).then(async reponse => {
+        if (reponse && reponse.ok) {
+          await cache.put(evt.request, reponse.clone());
+          if (cached && await _aChange(cached, reponse)) await _prevenirLesPages();
+        }
+        return reponse;
+      }).catch(() => null);
+      if (cached) { evt.waitUntil(reseau); return cached; }
       return (await reseau) || Response.error();
     })());
     return;

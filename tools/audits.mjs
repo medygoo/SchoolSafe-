@@ -41,6 +41,8 @@ const OUTILS = [
   ['fermeture',   'recette-scanner-fermeture.mjs','les points de fermeture du Scanner'],
   ['demarrage',   'audit-demarrage.mjs',       'ce qui retarde l’ouverture'],
   ['entete',      'audit-entete.mjs',          'la chaîne de responsabilité des documents'],
+  ['messages',    'recette-messages-v2.mjs',    'le routage Parent → Direction → enseignant'],
+  ['recuv2',      'recette-recu-v2.mjs',        'le reçu de paiement V2'],
 ];
 
 const detail = process.argv.includes('--detail');

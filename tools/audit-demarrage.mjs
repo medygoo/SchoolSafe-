@@ -41,8 +41,13 @@ if (PREUVE) {
     '<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>\n'
     + '<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>');
   html = html.replace(/<script defer src=/g, '<script src=');
-  sw = sw.replace('if (cached) { evt.waitUntil(reseau); return cached; }',
-                  'if (cached) { return (await reseau) || cached; }');
+  // `replaceAll` — depuis que le service worker sert AUSSI les scripts de
+  // production sans attendre, ce motif apparaît DEUX fois. Un `replace` simple
+  // n'en sabotait qu'une, le contrôle trouvait encore l'autre, et la preuve
+  // passait pour tenue alors qu'elle ne l'était plus. **Une preuve qui ne suit
+  // pas le code qu'elle garde se périme en silence.**
+  sw = sw.replaceAll('if (cached) { evt.waitUntil(reseau); return cached; }',
+                     'if (cached) { return (await reseau) || cached; }');
 }
 
 // Les commentaires expliquent souvent le défaut RETIRÉ : les compter
@@ -127,7 +132,34 @@ ok('il PROPOSE de recharger, il ne le fait jamais tout seul',
    /ss-maj-oui/.test(codeHtml) && /ss-maj-non/.test(codeHtml),
    'un rechargement automatique interromprait un scan au portail');
 
-// ── 5 · CE QUE L'OUTIL NE SAIT PAS VOIR, IL LE DIT ────────────────────────
+// ── 5 · LE CODE HORS DE `index.html` N'ÉCHAPPE PAS AUX CONTRÔLES ──────────
+// `messages-frontend-v2.js` est entré en production le 12 août 2026 : 445
+// lignes qui décident du routage des messages entre parents, Direction et
+// enseignants. Tous nos audits ne lisent que `dist/index.html` — ce fichier
+// serait donc arrivé chez l'école SANS qu'aucun outil ne l'ait regardé.
+//
+// **Un contrôle qui ne couvre qu'un fichier ne protège que ce fichier.** On
+// vérifie ici le minimum vital pour tout script de production : il se parse, il
+// est chargé sans bloquer, et il n'est pas figé en cache.
+import { readdirSync } from 'node:fs';
+const AUTRES_JS = readdirSync(new URL('.', RACINE))
+  .filter(f => f.endsWith('.js') && f !== 'sw.js');
+
+for (const f of AUTRES_JS) {
+  const src = readFileSync(new URL(f, RACINE), 'utf8');
+  let seParse = true;
+  try { new Function(src); } catch (e) { seParse = false; }
+  ok(`${f} se parse`, seParse, 'une faute de syntaxe rend le fichier muet, pas bruyant');
+  ok(`${f} est chargé sans bloquer l’affichage`,
+     !codeHtml.includes(`src="${f}`) || new RegExp('<script[^>]*\\b(defer|async)\\b[^>]*src="' + f).test(codeHtml)
+       || new RegExp('<script[^>]*src="' + f + '[^"]*"[^>]*\\b(defer|async)\\b').test(codeHtml),
+     'chargé sans defer');
+}
+ok('les scripts de production hors index.html sont servis du cache PUIS revérifiés',
+   /url\.pathname\.endsWith\('\.js'\)/.test(codeSw) && /_prevenirLesPages\(\)/.test(codeSw),
+   'sinon une correction reste bloquée dans le cache des téléphones');
+
+// ── 6 · CE QUE L'OUTIL NE SAIT PAS VOIR, IL LE DIT ────────────────────────
 const poids = Buffer.byteLength(html) / 1024;
 ok('le poids de l’interface est connu et annoncé', poids > 0, '');
 
@@ -140,7 +172,9 @@ console.log('  (les <script src> des documents imprimés sont hors du champ de c
 console.log('  CE QUE CET OUTIL NE PEUT PAS VOIR, et qui compte :');
 console.log('    · le poids réel des bibliothèques CDN — pas d’accès sortant ici ;');
 console.log('    · le temps d’ouverture sur un vrai téléphone, sur un vrai réseau ;');
-console.log('    · le coût d’analyse des 33 000 lignes de l’interface.');
+console.log('    · le coût d’analyse des 33 000 lignes de l’interface ;');
+console.log('    · ce que fait VRAIMENT ' + AUTRES_JS.join(', ') + ' — il se parse et');
+console.log('      se charge bien, mais aucun de nos audits ne lit sa logique.');
 console.log('    Seule une mesure sur l’appareil de l’école tranchera.');
 
 const ko = R.filter(r => !r.v);

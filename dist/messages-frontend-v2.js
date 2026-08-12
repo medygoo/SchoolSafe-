@@ -53,6 +53,10 @@
     };
     const saveRouteMap = map => localStorage.setItem(routeKey(), JSON.stringify(map || {}));
 
+    // Le message est-il seulement DANS LA FILE ? Renseigné par
+    // `pushEncryptedMessage`, lu par tout ce qui annonce un envoi.
+    const enFile = () => !!window.__SS_MESSAGES_FRONTEND_V2__.dernierEnvoiEnFile;
+
     const isArchived = mid => storageSet(archiveKey()).has(mid);
     const isCollective = m => !!(m && (
       m.to_role || m.to_class_cid || m.to_class ||
@@ -275,6 +279,12 @@
         toast('Message non envoyé', 'error');
         return false;
       }
+      // `pushSync` MET EN FILE — il ne confirme rien. Hors ligne, le message
+      // n'est parti nulle part, et annoncer « envoyé » fait croire au parent
+      // que la Direction l'a reçu. C'est la leçon déjà écrite deux fois dans
+      // ce dépôt : l'écran ne dit pas « envoyé » quand la file dit « en
+      // attente ». On rend donc l'état réel, et l'appelant le formule.
+      window.__SS_MESSAGES_FRONTEND_V2__.dernierEnvoiEnFile = !window.DB_ONLINE;
       (targets || []).filter(Boolean).forEach(u => {
         const n = { id:_uid('n_'), uid:u.id, msg:`✉️ ${S.user.name} : “${msg.subject}”`, time:nowTime(), date:today(), read:false, type:'info' };
         (DB.notifs = DB.notifs || []).unshift(n);
@@ -301,7 +311,11 @@
         (DB.notifs = DB.notifs || []).unshift(n);
         try { pushSync('notifs', 'post', n); } catch (_) {}
       });
-      closeModal(); render(); toast('Message envoyé à la Direction 1 / Direction 2', 'success');
+      closeModal(); render();
+      toast(enFile()
+        ? 'Message enregistré — il partira à la Direction dès le retour du réseau'
+        : 'Message envoyé à la Direction 1 / Direction 2',
+        enFile() ? 'warning' : 'success');
     };
 
     const sendDirectionV2 = async () => {
@@ -331,7 +345,11 @@
       const msg = { id:_uid('msg_'), from:S.user.id, from_role:roleUI(S.user.role), to, to_role:toRole, to_class_cid:toClassCid,
         subject, body, msg_type:msgType, date:today(), time:nowTime(), status:'sent', read:false };
       if (!(await pushEncryptedMessage(msg, targets))) return;
-      closeModal(); render(); toast(`Message envoyé à ${targets.length || 1} destinataire(s)`, 'success');
+      closeModal(); render();
+      toast(enFile()
+        ? `Message enregistré — il partira à ${targets.length || 1} destinataire(s) dès le retour du réseau`
+        : `Message envoyé à ${targets.length || 1} destinataire(s)`,
+        enFile() ? 'warning' : 'success');
     };
 
     window.sendMsg = async mode => {
@@ -391,7 +409,11 @@
         subject, body, msg_type:'normal', date:today(), time:nowTime(), status:'sent', read:false };
       if (!(await pushEncryptedMessage(msg, [teacher]))) return;
       const routes = routeMap(); routes[ref] = { parent_id:originalParentMsg.from, source_message_id:mid, teacher_id:teacher.id, forwarded_message_id:msg.id }; saveRouteMap(routes);
-      closeModal(); render(); toast(`Message transmis uniquement à ${teacher.name}`, 'success');
+      closeModal(); render();
+      toast(enFile()
+        ? `Transmission enregistrée — elle partira à ${teacher.name} dès le retour du réseau`
+        : `Message transmis uniquement à ${teacher.name}`,
+        enFile() ? 'warning' : 'success');
     };
 
     const routeRefFromSubject = subject => {
@@ -430,7 +452,11 @@
       const msg = { id:_uid('msg_'), from:S.user.id, from_role:roleUI(S.user.role), to:parent.id, to_role:null, to_class_cid:null,
         subject, body:bodyText, msg_type:'normal', date:today(), time:nowTime(), status:'sent', read:false };
       if (!(await pushEncryptedMessage(msg, [parent]))) return;
-      closeModal(); render(); toast(`Réponse transmise à ${parent.name}`, 'success');
+      closeModal(); render();
+      toast(enFile()
+        ? `Réponse enregistrée — elle partira à ${parent.name} dès le retour du réseau`
+        : `Réponse transmise à ${parent.name}`,
+        enFile() ? 'warning' : 'success');
     };
 
     window.__SS_MESSAGES_FRONTEND_V2__.installed = true;
