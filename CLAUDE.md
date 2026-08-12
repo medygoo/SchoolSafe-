@@ -1656,6 +1656,39 @@ pour la dernière fois ?** ».
 Les vingt-trois sont passés à vingt-sept. Aucun des quatre ne bloque — ils
 informent — mais ils informent désormais quelqu'un.
 
+### Un contrôle qui nomme un fichier ne contrôle pas une fonction
+
+Le 12 août, `recette-messages-v2` a annoncé **dix-sept pannes sur vingt** dans
+la messagerie. Le premier réflexe a été le bon — « quelque chose a tronqué ce
+fichier, je vérifie » — et la vérification a dit l'inverse de l'alarme.
+
+Il ne s'était rien cassé. Le fichier avait été **scindé** : le bootstrap
+d'authentification est resté sous le nom `messages-frontend-v2.js`, et la
+messagerie — conservée octet pour octet — est partie dans
+`messages-frontend-v2-core.js`. L'outil lisait le nom, pas la fonction. Il a
+donc crié au feu dans une maison qui n'avait rien.
+
+Un faux « tout va bien » coûte cher, on le sait. Mais un **faux « tout est
+cassé » coûte aussi** : il envoie réparer ce qui marche, et il use la seule
+chose qui fasse tenir un filet — qu'on le croie. Le troisième cri au loup
+sur un fichier déplacé, personne ne lit plus le tableau.
+
+> **Un outil qui code un chemin en dur mesure ce chemin, pas ce qu'il croit
+> mesurer.** Le jour où le chemin bouge, il ne détecte pas une panne : il en
+> devient une.
+
+Deux corrections, pas une : l'outil lit désormais la messagerie là où elle est,
+**et** il vérifie la chaîne de chargement maillon par maillon —
+`index.html` → bootstrap → core. Car la scission a ajouté un maillon qui
+**échoue en silence** : le core est injecté à l'exécution, et son `onerror` ne
+fait qu'un `console.warn`. Si ce nom se démode encore une fois, la messagerie
+disparaît de l'école sans qu'une ligne ne le dise. Le filet le tient maintenant.
+
+Et la preuve a rattrapé une faute dans la preuve elle-même : le premier
+sabotage renommait `openForwardParentMessage` en `openForwardParentMessageXX` —
+qui **contient encore** le motif cherché. La recette passait sur une messagerie
+pourtant amputée. Un sabotage doit effacer, pas décorer.
+
 ---
 
 ## Les outils

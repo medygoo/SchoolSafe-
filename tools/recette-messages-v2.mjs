@@ -1,11 +1,53 @@
+// ══════════════════════════════════════════════════════════════════════════
+//  LE 12 AOÛT, LA MESSAGERIE A CHANGÉ DE FICHIER — ET L'OUTIL NE L'A PAS SU
+//
+//  Cet outil lisait `dist/messages-frontend-v2.js` et y cherchait la
+//  messagerie. Le 12 août au matin, ce fichier a été scindé en deux : le
+//  bootstrap d'authentification est resté sous ce nom, et la messagerie —
+//  conservée octet pour octet — est partie dans
+//  `messages-frontend-v2-core.js`. L'outil a alors annoncé 17 pannes sur 20.
+//
+//  Aucune des dix-sept n'existait. La messagerie était intacte ; c'est l'outil
+//  qui regardait au mauvais endroit. Un contrôle qui nomme un fichier en dur
+//  ne contrôle pas une fonction, il contrôle un chemin — et le jour où le
+//  chemin bouge, il crie au feu dans une maison qui n'a rien.
+//
+//  Corrigé, et la chaîne de chargement est désormais vérifiée elle aussi :
+//  index.html → bootstrap → core. Elle a maintenant un maillon de plus, et ce
+//  maillon échoue en silence (un `console.warn`). Un maillon qui se casse sans
+//  bruit doit être tenu par le filet, sinon la messagerie peut disparaître de
+//  l'école sans qu'une seule ligne ne le dise.
+//
+//    node tools/recette-messages-v2.mjs            — la recette
+//    node tools/recette-messages-v2.mjs --preuve   — la recette se prouve
+// ══════════════════════════════════════════════════════════════════════════
 import fs from 'node:fs';
 import vm from 'node:vm';
 
 const indexPath = 'dist/index.html';
-const patchPath = 'dist/messages-frontend-v2.js';
+const bootPath  = 'dist/messages-frontend-v2.js';       // bootstrap Auth + chargeur
+const corePath  = 'dist/messages-frontend-v2-core.js';  // la messagerie elle-même
+
+const preuve = process.argv.includes('--preuve');
 
 const index = fs.readFileSync(indexPath, 'utf8');
-const patch = fs.readFileSync(patchPath, 'utf8');
+let boot = fs.readFileSync(bootPath, 'utf8');
+let patch = fs.readFileSync(corePath, 'utf8');
+
+// ── LA PREUVE ────────────────────────────────────────────────────────────
+// Une vérification qui ne sait dire que « oui » ne vérifie rien. On réinjecte
+// dans la vraie source les deux défauts que cet outil existe pour voir : la
+// messagerie amputée, et le maillon de chargement coupé. S'il ne les voit
+// pas, c'est l'outil qui est en panne, pas l'application.
+if (preuve) {
+  // Le sabotage doit VRAIMENT effacer le motif cherché. Un premier essai
+  // ajoutait un suffixe — `openForwardParentMessageXX` contient encore
+  // `openForwardParentMessage`, et le contrôle passait sur une messagerie
+  // pourtant amputée. On préfixe donc, ce qui ne laisse rien à trouver.
+  patch = patch.replace(/openForwardParentMessage/g, 'XXForwardParentMessage');
+  boot  = boot.replace("messages-frontend-v2-core.js?v=20260812-core1", 'nexiste-pas.js');
+}
+
 const tag = '<script src="messages-frontend-v2.js?v=20260812" defer></script>';
 
 const checks = [];
@@ -19,11 +61,22 @@ const tagPos = index.lastIndexOf(tag);
 const bodyPos = index.lastIndexOf('</body>');
 check('loader placé avant le vrai </body> final', tagPos >= 0 && bodyPos > tagPos && bodyPos - tagPos < 200);
 
-try {
-  new vm.Script(patch, { filename: patchPath });
-  check('syntaxe JavaScript valide', true);
-} catch (e) {
-  check(`syntaxe JavaScript valide (${e.message})`, false);
+// ── LA CHAÎNE DE CHARGEMENT, MAILLON PAR MAILLON ─────────────────────────
+check('la messagerie existe sous son propre nom', fs.existsSync(corePath));
+const srcCore = (boot.match(/['"](messages-frontend-v2-core\.js[^'"]*)['"]/) || [])[1] || '';
+check('le bootstrap charge bien le fichier de messagerie', srcCore.startsWith('messages-frontend-v2-core.js'));
+check('le fichier chargé est celui qui existe sur le disque',
+      srcCore ? fs.existsSync('dist/' + srcCore.split('?')[0]) : false);
+check('le bootstrap crée le client Auth que index.html n’a pas pu créer',
+      boot.includes('window._authClient = client'));
+
+for (const [nom, fichier, texte] of [['bootstrap', bootPath, boot], ['messagerie', corePath, patch]]) {
+  try {
+    new vm.Script(texte, { filename: fichier });
+    check(`syntaxe JavaScript valide — ${nom}`, true);
+  } catch (e) {
+    check(`syntaxe JavaScript valide — ${nom} (${e.message})`, false);
+  }
 }
 
 const needles = [

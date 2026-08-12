@@ -122,9 +122,27 @@ Deno.serve(async (req: Request) => {
   const identifier = String(body.identifier || "").trim();
   const password = String(body.password || "");
   const requestedChannel = String(body.channel || "").trim().toLowerCase();
+  // ── LE CANAL `identifier` PASSE ENFIN — audit ChatGPT du 12 août ────────
+  //
+  // `resolve_school_login_identity` SAIT DÉJÀ résoudre `identifier`, `login` et
+  // `alias` vers le même `auth_user_id` : ChatGPT l'a vérifié sur le Supabase
+  // réel. Mais ce relais-ci retombait sur la chaîne vide pour tout ce qui
+  // n'était ni `email` ni `phone`, et la ligne suivante refusait alors la
+  // connexion avec `INVALID_CREDENTIALS` — **avant même d'appeler le RPC qui
+  // avait la réponse**.
+  //
+  // Le navigateur envoyait déjà `channel:'identifier'` : une personne tapait
+  // son abréviation ou son nom de connexion, parfaitement justes, et s'entendait
+  // répondre que ses identifiants étaient incorrects. Un refus mal nommé envoie
+  // ressaisir vingt fois un mot de passe qui n'a jamais été en cause.
+  //
+  // On ne devine PAS ici s'il s'agit des initiales ou du nom de connexion : le
+  // relais ne lit pas `users`, et c'est tout son objet. Il transmet, le RPC
+  // tranche.
   const channel = requestedChannel === "email"
     ? "email"
-    : (["phone", "phone_whatsapp"].includes(requestedChannel) ? "phone" : "");
+    : (["phone", "phone_whatsapp"].includes(requestedChannel) ? "phone"
+      : (["identifier", "login", "alias"].includes(requestedChannel) ? "identifier" : ""));
 
   if (!identifier || identifier.length > 320 || !password || password.length > 256 || !channel) {
     return reply(origin, 401, { ok: false, code: "INVALID_CREDENTIALS" }, requestId);
