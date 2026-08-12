@@ -44,6 +44,7 @@ const OUTILS = [
   ['messages',    'recette-messages-v2.mjs',    'le routage Parent → Direction → enseignant'],
   ['recuv2',      'recette-recu-v2.mjs',        'le reçu de paiement V2'],
   ['whatsapp',    'recette-acces-whatsapp.mjs', 'l’invitation par code WhatsApp'],
+  ['connexionux', 'recette-ecran-connexion.mjs','l’ouverture et la frappe, sur l’écran de connexion'],
   // ── QUATRE OUTILS QUI EXISTAIENT SANS JAMAIS TOURNER ────────────────────
   // `CLAUDE.md` les présentait dans son tableau des outils comme faisant
   // partie du filet. Ils n'étaient dans aucune liste : `npm run audit` ne les
