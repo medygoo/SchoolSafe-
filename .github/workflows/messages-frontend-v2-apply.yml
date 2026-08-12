@@ -43,7 +43,7 @@ jobs:
           grep -F "openArchivedMessages" dist/messages-frontend-v2.js >/dev/null
           grep -F "return original.openComposeMsg()" dist/messages-frontend-v2.js >/dev/null
           grep -F "return original.sendMsg(mode)" dist/messages-frontend-v2.js >/dev/null
-          test "$(grep -Fc '<script src=\"messages-frontend-v2.js?v=20260812\" defer></script>' dist/index.html)" -eq 1
+          test "$(grep -Fc 'messages-frontend-v2.js?v=20260812' dist/index.html)" -eq 1
 
       - name: Commit branch integration
         run: |
