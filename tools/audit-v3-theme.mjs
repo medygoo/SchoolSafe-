@@ -26,6 +26,13 @@ if (fs.existsSync(cssPath)) {
   if (!css.includes('.dark .app {')) fail('la palette sombre doit rester scoped à .app');
   if (!css.includes('body[data-role="direction"] .app')) fail('les accents de rôle doivent être scoped à .app');
 
+  const legacyColors = ['#2f7bd6','#2fbf8f','#1f9d6b','#ff7a4d','#9b6fd4','#d98a2b','#ef4444','#dc2626'];
+  for (const legacy of legacyColors) {
+    if (!css.includes(`[style*=\"color:${legacy}\"]`)) {
+      fail(`la couleur legacy ${legacy} doit être harmonisée pour le texte inline`);
+    }
+  }
+
   const bannedProps = /(^|[;{]\s*)(transform|animation|transition|width|height|padding|margin|display|position|grid-template|flex|border-radius)\s*:/gm;
   const matches = [...css.matchAll(bannedProps)].map(m => m[2]);
   if (matches.length) {
