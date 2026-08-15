@@ -42,6 +42,8 @@
   --v3-nav-muted:rgba(255,255,255,.42);
   --v3-topbar:rgba(15,29,64,.66);
   --v3-bottom:rgba(15,29,64,.76);
+  --v3-orange:#df8350;
+  --v3-orange-bg:#faece3;
   --v3-violet:#8058b8;
   --v3-violet-bg:#f0eafa;
   --v3-neutral-bg:#eef2f7;
@@ -85,6 +87,8 @@
   --v3-nav-muted:rgba(255,255,255,.45);
   --v3-topbar:rgba(9,20,47,.72);
   --v3-bottom:rgba(9,20,47,.82);
+  --v3-orange:#f09a6b;
+  --v3-orange-bg:rgba(223,131,80,.22);
   --v3-violet:#b99ae2;
   --v3-violet-bg:rgba(128,88,184,.22);
   --v3-neutral-bg:rgba(255,255,255,.08);
@@ -331,3 +335,69 @@ body[data-role="parent"] .app {
   background:var(--error);
   color:#ffffff;
 }
+
+/* Normalisation des anciennes couleurs inline, limitée à l’interface interne. */
+.app [style*="color:#243a6b"] { color:var(--navy)!important; }
+.app [style*="color:#2f7bd6"],
+.app [style*="color:#205fae"] { color:var(--info)!important; }
+.app [style*="color:#2fbf8f"],
+.app [style*="color:#1f9d6b"] { color:var(--success)!important; }
+.app [style*="color:#ff7a4d"] { color:var(--v3-orange,#df8350)!important; }
+.app [style*="color:#9b6fd4"],
+.app [style*="color:#8255c4"],
+.app [style*="color:#6f44ab"] { color:var(--v3-violet)!important; }
+.app [style*="color:#d98a2b"],
+.app [style*="color:#f59e0b"] { color:var(--warning)!important; }
+.app [style*="color:#ef4444"],
+.app [style*="color:#dc2626"],
+.app [style*="color:#ef5b5b"] { color:var(--error)!important; }
+
+.app [style*="background:#2f7bd6"],
+.app [style*="background-color:#2f7bd6"] { background:var(--info)!important; background-color:var(--info)!important; }
+.app [style*="background:#2fbf8f"],
+.app [style*="background:#1f9d6b"],
+.app [style*="background-color:#2fbf8f"],
+.app [style*="background-color:#1f9d6b"] { background:var(--success)!important; background-color:var(--success)!important; }
+.app [style*="background:#ff7a4d"],
+.app [style*="background-color:#ff7a4d"] { background:var(--v3-orange,#df8350)!important; background-color:var(--v3-orange,#df8350)!important; }
+.app [style*="background:#9b6fd4"],
+.app [style*="background:#8255c4"],
+.app [style*="background-color:#9b6fd4"],
+.app [style*="background-color:#8255c4"] { background:var(--v3-violet)!important; background-color:var(--v3-violet)!important; }
+.app [style*="background:#d98a2b"],
+.app [style*="background:#f59e0b"],
+.app [style*="background-color:#d98a2b"],
+.app [style*="background-color:#f59e0b"] { background:var(--warning)!important; background-color:var(--warning)!important; }
+.app [style*="background:#ef4444"],
+.app [style*="background:#dc2626"],
+.app [style*="background:#ef5b5b"],
+.app [style*="background-color:#ef4444"],
+.app [style*="background-color:#dc2626"],
+.app [style*="background-color:#ef5b5b"] { background:var(--error)!important; background-color:var(--error)!important; }
+
+.app [style*="background:#dbeafe"],
+.app [style*="background:rgba(47,123,214,.12)"] { background:var(--info-bg)!important; }
+.app [style*="background:#d8f3e6"],
+.app [style*="background:rgba(47,191,143,.12)"],
+.app [style*="background:rgba(31,157,107,.12)"] { background:var(--success-bg)!important; }
+.app [style*="background:#fdeccd"],
+.app [style*="background:#fde68a"],
+.app [style*="background:rgba(217,164,58,.12)"] { background:var(--warning-bg)!important; }
+.app [style*="background:#fee2e2"],
+.app [style*="background:rgba(239,68,68,.12)"],
+.app [style*="background:rgba(239,68,68,.1)"] { background:var(--error-bg)!important; }
+.app [style*="background:#f0e9fa"],
+.app [style*="background:#ede9fe"],
+.app [style*="background:rgba(155,111,212,.12)"] { background:var(--v3-violet-bg)!important; }
+
+.app [style*="border-color:#243a6b"] { border-color:var(--navy)!important; }
+.app [style*="border-color:#2f7bd6"],
+.app [style*="border-color:#205fae"] { border-color:var(--info)!important; }
+.app [style*="border-color:#2fbf8f"],
+.app [style*="border-color:#1f9d6b"] { border-color:var(--success)!important; }
+.app [style*="border-color:#9b6fd4"],
+.app [style*="border-color:#8255c4"] { border-color:var(--v3-violet)!important; }
+.app [style*="border-color:#d98a2b"],
+.app [style*="border-color:#f59e0b"] { border-color:var(--warning)!important; }
+.app [style*="border-color:#ef4444"],
+.app [style*="border-color:#dc2626"] { border-color:var(--error)!important; }
