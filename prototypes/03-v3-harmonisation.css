@@ -1,0 +1,333 @@
+/* SchoolSafe V3 — harmonisation chromatique des écrans internes uniquement. */
+.app {
+  --primary:#315fce;
+  --primary-dark:#244aa6;
+  --primary-light:#e9effc;
+  --accent-orange:#d8753d;
+  --accent-green:#178a62;
+  --accent-red:#cf4055;
+  --accent-purple:#8058b8;
+  --green:#178a62;
+  --pink:#c95b94;
+  --blue:#315fce;
+  --bg:#f4f6fb;
+  --bg-card:#ffffff;
+  --bg-card-2:#f8faff;
+  --bg-secondary:#f6f8fc;
+  --border:#dfe5f1;
+  --border-light:#e9edf5;
+  --text:#17213a;
+  --text-secondary:#5e687d;
+  --text-muted:#929caf;
+  --gold:#d6a43a;
+  --gold-light:#f4e3b7;
+  --navy:#101d42;
+  --navy-light:#1d3268;
+  --success:#178a62;
+  --success-bg:#e2f5ed;
+  --success-border:#a7dfca;
+  --warning:#b87518;
+  --warning-bg:#fbedd7;
+  --warning-border:#efcc8b;
+  --error:#cf4055;
+  --error-bg:#fbe7ea;
+  --error-border:#efb2bc;
+  --info:#315fce;
+  --info-bg:#e9effc;
+  --info-border:#afc1ed;
+  --v3-nav-1:#0f1d40;
+  --v3-nav-2:#1a2d5c;
+  --v3-nav-border:rgba(255,255,255,.09);
+  --v3-nav-text:rgba(255,255,255,.72);
+  --v3-nav-muted:rgba(255,255,255,.42);
+  --v3-topbar:rgba(15,29,64,.66);
+  --v3-bottom:rgba(15,29,64,.76);
+  --v3-violet:#8058b8;
+  --v3-violet-bg:#f0eafa;
+  --v3-neutral-bg:#eef2f7;
+  --v3-neutral-text:#657084;
+  background:var(--bg);
+  color:var(--text);
+}
+
+.dark .app {
+  --primary:#6f92ee;
+  --primary-dark:#5579d5;
+  --primary-light:rgba(79,118,218,.20);
+  --bg:#0b1228;
+  --bg-card:rgba(25,37,70,.72);
+  --bg-card-2:rgba(20,31,61,.74);
+  --bg-secondary:rgba(18,28,56,.78);
+  --border:rgba(255,255,255,.11);
+  --border-light:rgba(255,255,255,.07);
+  --text:#f2f5fc;
+  --text-secondary:#b0bad0;
+  --text-muted:#7f8ba6;
+  --gold:#e0b454;
+  --gold-light:#f4dfa7;
+  --navy:#0b1735;
+  --navy-light:#162956;
+  --success:#43bd91;
+  --success-bg:rgba(23,138,98,.20);
+  --success-border:rgba(67,189,145,.35);
+  --warning:#e0a84f;
+  --warning-bg:rgba(184,117,24,.20);
+  --warning-border:rgba(224,168,79,.35);
+  --error:#ed7183;
+  --error-bg:rgba(207,64,85,.20);
+  --error-border:rgba(237,113,131,.36);
+  --info:#7f9ff1;
+  --info-bg:rgba(49,95,206,.22);
+  --info-border:rgba(127,159,241,.36);
+  --v3-nav-1:#09142f;
+  --v3-nav-2:#142651;
+  --v3-nav-text:rgba(255,255,255,.78);
+  --v3-nav-muted:rgba(255,255,255,.45);
+  --v3-topbar:rgba(9,20,47,.72);
+  --v3-bottom:rgba(9,20,47,.82);
+  --v3-violet:#b99ae2;
+  --v3-violet-bg:rgba(128,88,184,.22);
+  --v3-neutral-bg:rgba(255,255,255,.08);
+  --v3-neutral-text:#b7c0d2;
+  background:var(--bg);
+  color:var(--text);
+}
+
+body[data-role="direction"] .app {
+  --role-accent:#5f83df;
+  --role-accent-light:rgba(95,131,223,.18);
+}
+body[data-role="direction2"] .app {
+  --role-accent:#787fd8;
+  --role-accent-light:rgba(120,127,216,.18);
+}
+body[data-role="direction3"] .app {
+  --role-accent:#2d9b73;
+  --role-accent-light:rgba(45,155,115,.18);
+}
+body[data-role="enseignant"] .app {
+  --role-accent:#349789;
+  --role-accent-light:rgba(52,151,137,.18);
+}
+body[data-role="gardien"] .app {
+  --role-accent:#df8350;
+  --role-accent-light:rgba(223,131,80,.18);
+}
+body[data-role="parent"] .app {
+  --role-accent:#9a72c8;
+  --role-accent-light:rgba(154,114,200,.18);
+}
+
+.app .sidebar {
+  background:linear-gradient(180deg,var(--v3-nav-1) 0%,var(--v3-nav-2) 50%,var(--v3-nav-1) 100%);
+  border-right-color:var(--v3-nav-border);
+}
+.app .sidebar-header,
+.app .sidebar-footer {
+  border-color:var(--v3-nav-border);
+}
+.app .sidebar-brand-role,
+.app .sidebar-user-role,
+.app .logout-btn {
+  color:var(--v3-nav-muted);
+}
+.app .nav-section-label {
+  color:var(--v3-nav-muted);
+}
+.app .nav-item {
+  color:var(--v3-nav-text);
+}
+.app .nav-item:hover {
+  background:rgba(255,255,255,.07);
+  color:#ffffff;
+}
+.app .nav-section-light {
+  background:rgba(250,252,255,.97);
+}
+.app .nav-section-light .nav-section-label {
+  color:#8a95a8;
+}
+.app .nav-section-light .nav-item {
+  color:#526078;
+}
+.app .nav-section-light .nav-item:hover {
+  background:#eef3fb;
+  color:#17213a;
+}
+.app .nav-section-light .nav-item.active {
+  background:var(--role-accent-light);
+  color:var(--role-accent);
+  border-right-color:var(--role-accent);
+}
+
+.app .topbar {
+  background:var(--v3-topbar);
+  color:#ffffff;
+}
+.app .topbar-title,
+.app .topbar-menu-btn,
+.app .topbar-notif-btn,
+.app .dark-toggle {
+  color:#ffffff;
+}
+.app .topbar-date {
+  color:rgba(255,255,255,.64);
+}
+.app .topbar-notif-btn:hover,
+.app .dark-toggle:hover,
+.app .cube-btn:hover {
+  background:rgba(255,255,255,.10);
+}
+
+.app .bottom-nav {
+  background:var(--v3-bottom);
+  border-top-color:var(--v3-nav-border);
+}
+.app .bnav-indicator {
+  background:var(--role-accent,var(--primary));
+}
+
+.app .premium-section,
+.app .ww-section,
+.app .ww-card,
+.app .ww-card-body,
+.app .dp-section,
+.app .quick-btn {
+  background:var(--bg-card);
+  border-color:var(--border-light);
+  color:var(--text);
+}
+.app .quick-btn {
+  background:var(--bg-card-2);
+}
+.app .role-dark-page {
+  background:var(--bg);
+}
+
+.app .form-input,
+.app .form-select,
+.app textarea,
+.app input,
+.app select {
+  background-color:var(--bg-card);
+  border-color:var(--border);
+  color:var(--text);
+  caret-color:var(--primary);
+}
+.app .form-input:hover,
+.app .form-select:hover,
+.app textarea:hover,
+.app input:hover,
+.app select:hover {
+  border-color:var(--info-border);
+}
+.app .form-input:focus,
+.app .form-select:focus,
+.app textarea:focus,
+.app input:focus,
+.app select:focus {
+  border-color:var(--primary);
+  outline-color:var(--primary);
+}
+
+.app .btn-primary {
+  background:var(--primary);
+  color:#ffffff;
+}
+.app .btn-primary:hover {
+  background:var(--primary-dark);
+}
+.app .btn-success {
+  background:var(--success);
+  color:#ffffff;
+}
+.app .btn-danger {
+  background:var(--error);
+  color:#ffffff;
+}
+.app .btn-gold {
+  background:linear-gradient(135deg,var(--gold),#aa7d22);
+  color:#ffffff;
+}
+.app .btn-outline,
+.app .action-btn,
+.app .btn-icon {
+  border-color:var(--border);
+  color:var(--text);
+}
+.app .btn-outline:hover,
+.app .action-btn:hover {
+  border-color:var(--primary);
+  color:var(--primary);
+  background:var(--primary-light);
+}
+.app .btn-ghost {
+  color:var(--primary);
+}
+.app .btn-ghost:hover,
+.app .btn-subtle {
+  background:var(--primary-light);
+  color:var(--primary);
+}
+
+.app .pill-green,
+.app .pill-success {
+  background:var(--success-bg);
+  color:var(--success);
+}
+.app .pill-red {
+  background:var(--error-bg);
+  color:var(--error);
+}
+.app .pill-blue,
+.app .pill-info {
+  background:var(--info-bg);
+  color:var(--info);
+}
+.app .pill-orange,
+.app .pill-yellow,
+.app .pill-warning {
+  background:var(--warning-bg);
+  color:var(--warning);
+}
+.app .pill-violet {
+  background:var(--v3-violet-bg);
+  color:var(--v3-violet);
+}
+.app .pill-gray,
+.app .pill {
+  background:var(--v3-neutral-bg);
+  color:var(--v3-neutral-text);
+}
+
+.app .hero-premium::before {
+  background:linear-gradient(160deg,var(--navy),var(--navy-light) 40%,var(--primary));
+}
+.app .hero-school,
+.app .hero-bar {
+  color:var(--gold-light);
+}
+.app .hero-bar {
+  background:linear-gradient(90deg,var(--gold),var(--gold-light));
+}
+.app .dash-hero-light {
+  background:rgba(15,29,64,.58);
+  border-color:rgba(255,255,255,.10);
+}
+.app .dp-section-dark {
+  background:var(--navy);
+  border-color:rgba(255,255,255,.09);
+  color:#ffffff;
+}
+
+.app .toast {
+  background:var(--bg-card);
+  border-color:var(--border);
+  color:var(--text);
+}
+.app .notif-badge,
+.app .nav-badge,
+.app .bnav-badge {
+  background:var(--error);
+  color:#ffffff;
+}
