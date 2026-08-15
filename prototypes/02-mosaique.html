@@ -1,0 +1,1268 @@
+<title>SchoolSafe Mosaïque</title>
+
+<div class="demo">
+  <div class="demo-brand">
+    <span class="demo-mark" id="demoMark"></span>
+    <div><b>Mosaïque</b><span>Prototype manipulable · proposition n° 2</span></div>
+  </div>
+  <div class="demo-ctl">
+    <div class="demo-grp" role="group" aria-label="Profil">
+      <span class="demo-lbl">Profil</span>
+      <div class="demo-seg" id="segRole"></div>
+    </div>
+    <div class="demo-grp" role="group" aria-label="Appareil">
+      <span class="demo-lbl">Appareil</span>
+      <div class="demo-seg" id="segDev"></div>
+    </div>
+    <div class="demo-grp" role="group" aria-label="Thème">
+      <span class="demo-lbl">Thème</span>
+      <div class="demo-seg" id="segTheme"></div>
+    </div>
+  </div>
+</div>
+<p class="demo-hint">Tout est cliquable : changez de profil, ouvrez les groupes du menu, cherchez avec <kbd>Ctrl</kbd> <kbd>K</kbd>, sélectionnez des élèves, encaissez un paiement, scannez au portail. Données inventées — aucun élève réel.</p>
+
+<div class="stage" id="stage">
+  <div class="app-root" id="app" data-t="light" data-dev="desk"></div>
+</div>
+
+<div class="after" id="after"></div>
+
+<style>
+/* ══════════════════════════════════════════════════════════════
+   JETONS DU DOCUMENT (la page autour du prototype)
+   ══════════════════════════════════════════════════════════════ */
+:root{
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --d-bg:#EEF1F8; --d-surf:#FFFFFF; --d-line:#D9E0EE; --d-t1:#0C1220; --d-t2:#525E78; --d-t3:#6A7590;
+  --d-blue:#1B45B8; --d-blue-w:#E8EEFC;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --d-bg:#05080F; --d-surf:#0E1523; --d-line:rgba(255,255,255,.11); --d-t1:#EAEEF8; --d-t2:#9BA7C2; --d-t3:#7B879F;
+  --d-blue:#7D9CF7; --d-blue-w:rgba(125,156,247,.13);
+}}
+:root[data-theme="dark"]{
+  --d-bg:#05080F; --d-surf:#0E1523; --d-line:rgba(255,255,255,.11); --d-t1:#EAEEF8; --d-t2:#9BA7C2; --d-t3:#7B879F;
+  --d-blue:#7D9CF7; --d-blue-w:rgba(125,156,247,.13);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--d-bg);color:var(--d-t1);font:400 15px/1.55 var(--ui);-webkit-font-smoothing:antialiased}
+:where(a,button,input,select,[tabindex]):focus-visible{outline:2px solid var(--d-blue);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ── barre de démonstration ── */
+.demo{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding:14px 20px;background:var(--d-surf);border-bottom:1px solid var(--d-line);position:sticky;top:0;z-index:200}
+.demo-brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+.demo-brand b{display:block;font:700 16px/1.2 var(--ui);letter-spacing:-.02em}
+.demo-brand span{display:block;font:400 11.5px/1.4 var(--ui);color:var(--d-t3)}
+.demo-mark{width:34px;height:38px;display:block;flex:none}
+.demo-mark svg{width:100%;height:100%;display:block}
+.demo-ctl{display:flex;gap:20px;flex-wrap:wrap}
+.demo-grp{display:flex;flex-direction:column;gap:5px}
+.demo-lbl{font:600 9.5px/1 var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--d-t3)}
+.demo-seg{display:flex;gap:2px;background:var(--d-bg);border:1px solid var(--d-line);border-radius:8px;padding:2px}
+.demo-seg button{border:none;background:none;padding:6px 10px;border-radius:6px;font:600 12px/1 var(--ui);color:var(--d-t2);cursor:pointer;white-space:nowrap}
+.demo-seg button:hover{color:var(--d-t1)}
+.demo-seg button[aria-pressed="true"]{background:var(--d-blue);color:#fff}
+:root[data-theme="dark"] .demo-seg button[aria-pressed="true"]{color:#05080F}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .demo-seg button[aria-pressed="true"]{color:#05080F}}
+@media (prefers-color-scheme:dark){:root[data-theme="light"] .demo-seg button[aria-pressed="true"]{color:#fff}}
+.demo-hint{max-width:1400px;margin:14px auto 0;padding:0 20px;font-size:13px;line-height:1.6;color:var(--d-t2)}
+.demo-hint kbd{font:600 11px/1 var(--ui);background:var(--d-surf);border:1px solid var(--d-line);border-bottom-width:2px;border-radius:4px;padding:3px 5px;color:var(--d-t1)}
+
+.stage{max-width:1400px;margin:16px auto 0;padding:0 20px}
+.app-root{border:1px solid var(--d-line);border-radius:16px;overflow:hidden;box-shadow:0 18px 50px rgba(8,14,30,.13);margin:0 auto;transition:max-width .3s ease}
+.app-root[data-dev="desk"]{max-width:100%}
+.app-root[data-dev="tab"]{max-width:900px}
+.app-root[data-dev="phone"]{max-width:390px;border-radius:26px}
+
+.after{max-width:1400px;margin:0 auto;padding:44px 20px 90px}
+.after h2{font:700 clamp(24px,3.4vw,34px)/1.15 var(--ui);letter-spacing:-.025em;margin:0 0 14px}
+.after h3{font:650 16px/1.3 var(--ui);margin:0 0 10px}
+.after p{max-width:74ch;color:var(--d-t2);font-size:14.5px;margin:0 0 12px}
+.after .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:30px;margin-top:26px}
+.after .box{background:var(--d-surf);border:1px solid var(--d-line);border-radius:12px;padding:22px 24px}
+.after ul{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.after li{font-size:13.5px;line-height:1.6;color:var(--d-t2);padding-left:17px;position:relative}
+.after li::before{content:"";position:absolute;left:0;top:.62em;width:7px;height:7px;background:var(--d-blue)}
+.after li b{color:var(--d-t1);font-weight:600}
+.after code{font:500 .88em var(--mono);background:var(--d-blue-w);padding:2px 5px;border-radius:4px}
+.after .flag{border-left:3px solid #B25A06;background:rgba(178,90,6,.08);padding:14px 18px;border-radius:0 10px 10px 0;font-size:14px;color:var(--d-t1);max-width:80ch}
+
+/* ══════════════════════════════════════════════════════════════
+   JETONS DU PROTOTYPE — tirés du logo
+   ══════════════════════════════════════════════════════════════ */
+.app-root[data-t="light"]{
+  --bleu:#1E4FCB; --bleu-t:#1B45B8; --bleu-deep:#12358F; --bleu-w:#E9EEFC; --bleu-b:#C6D5F7;
+  --or:#F5B21B; --or-t:#8A6206; --or-w:#FDF2D8; --or-b:#F4DCA0;
+  --rouge:#E0231D; --rouge-t:#C41A15; --rouge-w:#FCE7E6; --rouge-b:#F6C0BD;
+  --orange:#F07C0C; --orange-t:#A85405; --orange-w:#FDEDDC; --orange-b:#F7CFA4;
+  --vert:#0FA35C; --vert-t:#0A7A44; --vert-w:#E1F5EA; --vert-b:#A7E0C2;
+  --violet:#7B3FE4; --violet-t:#6B32C9; --violet-w:#F0E9FD; --violet-b:#D5C2F8;
+  --gris-t:#4A5568;
+  --canvas:#F5F7FC; --surf:#FFFFFF; --surf2:#EEF2FA; --line:#DCE3F0; --line2:#EAEFF8;
+  --t1:#0C1220; --t2:#525E78; --t3:#6A7590;
+  --rail:#12358F; --rail2:#0E2A73; --rail-t:#FFFFFF; --rail-t2:#A9BCEB; --rail-h:rgba(255,255,255,.11); --rail-b:rgba(255,255,255,.14);
+  --on-bleu:#FFFFFF; --on-or:#0C1220;
+  --sh:0 2px 10px rgba(12,22,52,.08); --sh2:0 16px 44px rgba(12,22,52,.20);
+}
+.app-root[data-t="dark"]{
+  --bleu:#6E93FA; --bleu-t:#6E93FA; --bleu-deep:#0B1A3E; --bleu-w:rgba(110,147,250,.14); --bleu-b:rgba(110,147,250,.32);
+  --or:#F5B21B; --or-t:#F5B21B; --or-w:rgba(245,178,27,.14); --or-b:rgba(245,178,27,.34);
+  --rouge:#F4757F; --rouge-t:#F4757F; --rouge-w:rgba(244,117,127,.14); --rouge-b:rgba(244,117,127,.32);
+  --orange:#F5A14A; --orange-t:#F5A14A; --orange-w:rgba(245,161,74,.13); --orange-b:rgba(245,161,74,.30);
+  --vert:#3FC98A; --vert-t:#3FC98A; --vert-w:rgba(63,201,138,.13); --vert-b:rgba(63,201,138,.30);
+  --violet:#A987F5; --violet-t:#A987F5; --violet-w:rgba(169,135,245,.14); --violet-b:rgba(169,135,245,.32);
+  --gris-t:#9BA7C2;
+  --canvas:#06090F; --surf:#101827; --surf2:#172034; --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.06);
+  --t1:#EAEEF8; --t2:#9BA7C2; --t3:#7B879F;
+  --rail:#0A1226; --rail2:#070D1C; --rail-t:#FFFFFF; --rail-t2:#8E9DC4; --rail-h:rgba(255,255,255,.08); --rail-b:rgba(255,255,255,.09);
+  --on-bleu:#06090F; --on-or:#0C1220;
+  --sh:0 2px 12px rgba(0,0,0,.45); --sh2:0 18px 48px rgba(0,0,0,.62);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COQUE
+   ══════════════════════════════════════════════════════════════ */
+.app{display:flex;background:var(--canvas);color:var(--t1);font:400 14px/1.5 var(--ui);font-variant-numeric:tabular-nums;height:min(84vh,860px);min-height:600px;position:relative}
+.app *{box-sizing:border-box}
+.app button,.app input,.app select,.app textarea{font-family:inherit;color:inherit}
+.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* arc arc-en-ciel — l'unique ornement, et il est fonctionnel */
+.arc{position:absolute;top:0;left:0;right:0;height:3px;z-index:60;background:linear-gradient(90deg,#E0231D,#F07C0C,#F5B21B,#0FA35C,#1E4FCB,#7B3FE4);opacity:0;transition:opacity .3s}
+.arc.on{opacity:1;background-size:220px 100%;animation:arcSlide 1.1s linear infinite}
+@keyframes arcSlide{to{background-position:220px 0}}
+
+/* ── repère QR : le motif signature, tiré du logo ── */
+.qr{width:34px;height:34px;flex:none;display:flex;align-items:center;justify-content:center;border:2px solid var(--c,var(--bleu));color:var(--c,var(--bleu));background:transparent}
+.qr > .ic{width:16px;height:16px}
+.qr.fill{background:var(--c);color:#fff;border-color:var(--c)}
+.qr.soft{background:color-mix(in srgb,var(--c) 13%,transparent)}
+.qr.lg{width:46px;height:46px}
+.qr.lg > .ic{width:22px;height:22px}
+.qr.sm{width:26px;height:26px;border-width:1.5px}
+.qr.sm > .ic{width:13px;height:13px}
+
+/* ── barre latérale ── */
+.rail{width:250px;flex:none;background:var(--rail);display:flex;flex-direction:column;padding:12px 9px;position:relative;overflow:hidden}
+.rail::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 60% at 50% -12%,rgba(255,255,255,.10),transparent 62%)}
+.rail > *{position:relative;z-index:1}
+.rail-brand{display:flex;align-items:center;gap:10px;padding:5px 6px 14px}
+.rail-brand .mk{width:32px;height:36px;flex:none}
+.rail-brand b{display:block;font:700 15px/1.15 var(--ui);letter-spacing:-.015em;color:#fff}
+.rail-brand b i{font-style:normal;color:var(--or)}
+.rail-brand em{display:flex;align-items:center;gap:6px;font:500 11px/1.4 var(--ui);font-style:normal;color:var(--rail-t2)}
+.rail-brand em s{width:7px;height:7px;background:var(--c);text-decoration:none;flex:none}
+.cmd{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 10px;margin-bottom:10px;background:var(--rail-h);border:1px solid var(--rail-b);border-radius:8px;color:var(--rail-t2);font:400 13px/1 var(--ui);cursor:pointer}
+.cmd .ic{width:16px;height:16px}
+.cmd kbd{margin-left:auto;font:600 9.5px/1 var(--ui);background:rgba(255,255,255,.12);border-radius:3px;padding:4px 5px}
+.nav{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:1px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+.nav::-webkit-scrollbar{width:6px}.nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
+.nv,.ng-h{display:flex;align-items:center;gap:10px;width:100%;min-height:34px;padding:0 9px;background:none;border:none;border-radius:7px;color:var(--rail-t2);font:500 12.5px/1.3 var(--ui);cursor:pointer;text-align:left}
+.nv:hover,.ng-h:hover{background:var(--rail-h);color:#fff}
+.nv .ic,.ng-h .ic{width:16px;height:16px}
+.nv.on{background:rgba(255,255,255,.13);color:#fff;font-weight:650;box-shadow:inset 3px 0 0 var(--c,var(--or))}
+.ng.open > .ng-h{color:#fff}
+.ng.open > .ng-h .cv{transform:rotate(180deg)}
+.cv{margin-left:auto;transition:transform .2s;width:15px!important;height:15px!important}
+.ng-s{display:flex;flex-direction:column;gap:1px;padding:2px 0 5px 22px;margin-left:8px;border-left:1px solid var(--rail-b)}
+.ng-s button{display:block;width:100%;text-align:left;padding:6px 9px;border:none;background:none;border-radius:6px;font:400 12px/1.3 var(--ui);color:var(--rail-t2);cursor:pointer}
+.ng-s button:hover{background:var(--rail-h);color:#fff}
+.ng-s button.on{background:rgba(255,255,255,.13);color:#fff;font-weight:650}
+.bdg{margin-left:auto;min-width:18px;height:18px;padding:0 5px;background:var(--rouge);color:#fff;font:700 10px/18px var(--ui);text-align:center;flex:none}
+.bdg.q{background:var(--rail-h);color:var(--rail-t2);border:1px solid var(--rail-b);line-height:16px;margin-right:6px}
+.rail-f{border-top:1px solid var(--rail-b);padding-top:9px;margin-top:8px}
+.me{display:flex;align-items:center;gap:9px;width:100%;padding:6px;background:none;border:none;border-radius:7px;cursor:pointer;text-align:left}
+.me:hover{background:var(--rail-h)}
+.me b{display:block;font:600 12px/1.3 var(--ui);color:#fff}
+.me span{display:block;font:400 10.5px/1.3 var(--ui);color:var(--rail-t2)}
+.me .qr{border-color:var(--rail-b);color:#fff;background:rgba(255,255,255,.1)}
+.me .ic{margin-left:auto;width:15px;height:15px;color:var(--rail-t2)}
+
+/* ── zone principale ── */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--canvas)}
+.top{display:flex;align-items:center;gap:12px;padding:0 20px;height:58px;flex:none;background:var(--rail);color:#fff}
+.top h1{font:700 18px/1.2 var(--ui);letter-spacing:-.02em;margin:0;flex:1;min-width:0;display:flex;align-items:center;gap:11px}
+.top h1 .qr{border-color:rgba(255,255,255,.42);color:#fff;background:rgba(255,255,255,.13)}
+.top-r{display:flex;align-items:center;gap:8px}
+.tb{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.10);border:1px solid var(--rail-b);color:#fff;cursor:pointer;position:relative;border-radius:7px}
+.tb:hover{background:rgba(255,255,255,.18)}
+.tb .ic{width:17px;height:17px}
+.tb i{position:absolute;top:5px;right:5px;width:7px;height:7px;background:var(--or)}
+.sync{display:inline-flex;align-items:center;gap:6px;font:600 10.5px/1 var(--ui);color:#fff;background:rgba(255,255,255,.13);border:1px solid var(--rail-b);padding:6px 9px;border-radius:999px}
+.sync s{width:6px;height:6px;background:var(--vert);text-decoration:none;border-radius:50%}
+.sync.off s{background:var(--or)}
+.page{flex:1;overflow-y:auto;padding:18px 20px 26px;display:flex;flex-direction:column;gap:14px}
+.page.full{padding:0;gap:0;overflow:hidden}
+
+/* ══════════════════════════════════════════════════════════════
+   COMPOSANTS
+   ══════════════════════════════════════════════════════════════ */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;padding:0 14px;border:1px solid var(--line);background:var(--surf);color:var(--t1);border-radius:8px;font:600 13px/1 var(--ui);cursor:pointer;white-space:nowrap;position:relative}
+.btn:hover{background:var(--surf2);border-color:color-mix(in srgb,var(--t3) 45%,transparent)}
+.btn .ic{width:16px;height:16px}
+.btn.pri{background:var(--bleu);border-color:var(--bleu);color:var(--on-bleu)}
+.btn.pri:hover{background:color-mix(in srgb,var(--bleu) 86%,#000);border-color:transparent}
+.btn.gold{background:var(--or);border-color:var(--or);color:var(--on-or)}
+.btn.gold:hover{background:color-mix(in srgb,var(--or) 88%,#000)}
+.btn.gh{background:transparent;border-color:transparent;color:var(--t2)}
+.btn.gh:hover{background:var(--surf2)}
+.btn.dgr{color:var(--rouge-t);border-color:var(--rouge-b)}
+.btn.dgr:hover{background:var(--rouge-w)}
+.btn[disabled]{opacity:.42;cursor:not-allowed}
+.btn.sm{height:30px;padding:0 9px;font-size:12px;border-radius:7px}
+.btn.lg{height:46px;padding:0 20px;font-size:14.5px}
+.btn.ico{width:38px;padding:0}
+.btn.ico.sm{width:30px}
+.btn.full{width:100%}
+.lnk{background:none;border:none;padding:0;color:var(--bleu-t);font:600 12.5px/1 var(--ui);cursor:pointer}
+.lnk:hover{text-decoration:underline}
+
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font:600 12px/1.3 var(--ui);color:var(--t1)}
+.in{height:38px;width:100%;padding:0 11px;border:1px solid var(--line);background:var(--surf);border-radius:8px;font:400 13.5px/1 var(--ui);color:var(--t1)}
+.in::placeholder{color:var(--t3)}
+.in:focus{outline:none;border-color:var(--bleu);box-shadow:0 0 0 3px var(--bleu-w)}
+textarea.in{height:auto;padding:9px 11px;line-height:1.5;resize:vertical}
+.inw{position:relative;display:flex;align-items:center}
+.inw > .ic{position:absolute;left:11px;color:var(--t3);pointer-events:none;width:17px;height:17px}
+.inw .in{padding-left:36px}
+.inw.grow{flex:1;min-width:150px}
+.selw{position:relative;display:flex;align-items:center}
+.selw select{appearance:none;padding-right:32px}
+.selw > .ic{position:absolute;right:9px;color:var(--t3);pointer-events:none;width:16px;height:16px}
+.hint{display:flex;align-items:center;gap:5px;font:400 11.5px/1.4 var(--ui);color:var(--t2)}
+.hint .ic{width:13px;height:13px;color:var(--vert-t)}
+.hint b{color:var(--t1)}
+
+.tag{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;font:650 11px/1 var(--ui);white-space:nowrap;background:var(--surf2);color:var(--t2);border:1px solid var(--line)}
+.tag s{width:6px;height:6px;background:currentColor;text-decoration:none;flex:none}
+.tag.ok{background:var(--vert-w);color:var(--vert-t);border-color:var(--vert-b)}
+.tag.wa{background:var(--or-w);color:var(--or-t);border-color:var(--or-b)}
+.tag.no{background:var(--rouge-w);color:var(--rouge-t);border-color:var(--rouge-b)}
+.tag.inf{background:var(--bleu-w);color:var(--bleu-t);border-color:var(--bleu-b)}
+
+.alert{display:flex;gap:11px;padding:12px 14px;border:1px solid var(--line);background:var(--surf2);align-items:flex-start;border-radius:10px}
+.alert .ic{width:18px;height:18px;margin-top:1px}
+.alert b{display:block;font:650 13px/1.4 var(--ui);color:var(--t1)}
+.alert span{display:block;font:400 12.5px/1.5 var(--ui);color:var(--t2);margin-top:2px}
+.alert.ok{background:var(--vert-w);border-color:var(--vert-b)} .alert.ok > .ic{color:var(--vert-t)}
+.alert.wa{background:var(--or-w);border-color:var(--or-b)} .alert.wa > .ic{color:var(--or-t)}
+.alert.no{background:var(--rouge-w);border-color:var(--rouge-b)} .alert.no > .ic{color:var(--rouge-t)}
+.alert.inf{background:var(--bleu-w);border-color:var(--bleu-b)} .alert.inf > .ic{color:var(--bleu-t)}
+
+/* ── modules (la mosaïque) ── */
+.card{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card.flush{padding:0;overflow:hidden}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:13px}
+.card-h h2{font:650 14px/1.3 var(--ui);margin:0;flex:1;display:flex;align-items:center;gap:9px}
+.cnt{font:700 11.5px/1 var(--ui);color:var(--bleu-t);background:var(--bleu-w);border:1px solid var(--bleu-b);padding:5px 8px}
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+.bento > *{grid-column:span 3;min-width:0}
+.w4{grid-column:span 4!important} .w6{grid-column:span 6!important} .w8{grid-column:span 8!important} .w12{grid-column:span 12!important}
+.mod{background:var(--surf);border:1px solid var(--line);border-radius:12px;padding:15px 16px;display:flex;flex-direction:column;gap:9px;position:relative;overflow:hidden;text-align:left;width:100%;cursor:pointer;font:inherit;color:inherit}
+button.mod:hover{border-color:var(--c);box-shadow:var(--sh)}
+.mod::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--c)}
+.mod-t{display:flex;align-items:flex-start;gap:10px}
+.mod-l{font:650 10.5px/1.3 var(--ui);letter-spacing:.07em;text-transform:uppercase;color:var(--t3);flex:1}
+.mod-n{font:800 27px/1 var(--ui);letter-spacing:-.03em;color:var(--t1)}
+.mod-n em{font:600 14px/1 var(--ui);font-style:normal;color:var(--t3)}
+.mod-s{font:400 11.5px/1.4 var(--ui);color:var(--t3)}
+.mod-s.up{color:var(--vert-t)} .mod-s.dn{color:var(--rouge-t)}
+
+.bars{display:flex;align-items:flex-end;gap:4px;height:52px}
+.bars i{flex:1;height:var(--h);background:var(--c,var(--bleu));opacity:.42;min-height:3px}
+.bars i.on{opacity:1}
+.barsx{display:flex;justify-content:space-between;font:400 10px/1 var(--ui);color:var(--t3);margin-top:6px}
+
+/* ── tableau ── */
+.tw{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font:650 10px/1 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--t3);padding:10px 11px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surf)}
+.tbl td{padding:9px 11px;border-bottom:1px solid var(--line2);color:var(--t2);vertical-align:middle}
+.tbl tbody tr:hover{background:var(--surf2)}
+.tbl tbody tr.sel{background:var(--bleu-w)}
+.tbl tbody tr:last-child td{border-bottom:none}
+.st{color:var(--t1);font-weight:650}
+.mn{font-family:var(--mono);font-size:12px}
+.rt{text-align:right}
+.no-t{color:var(--rouge-t);font-weight:700}
+.cb{display:block;width:16px;height:16px;border:1.5px solid color-mix(in srgb,var(--t3) 60%,transparent);background:var(--surf);cursor:pointer;position:relative}
+.cb.on{background:var(--bleu);border-color:var(--bleu)}
+.cb.on::after{content:"";position:absolute;left:4.5px;top:1px;width:4px;height:8px;border:solid var(--surf);border-width:0 2px 2px 0;transform:rotate(42deg)}
+.pers{display:flex;align-items:center;gap:10px}
+.pers b{display:block;font:650 13px/1.35 var(--ui);color:var(--t1)}
+.pers span{display:block;font:400 11px/1.35 var(--ui);color:var(--t3)}
+.cls{display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--ui);color:var(--t2);white-space:nowrap}
+.cls s{width:9px;height:9px;background:var(--c);text-decoration:none;flex:none}
+
+/* ── barres d'outils ── */
+.tabs{display:flex;gap:3px;border-bottom:1px solid var(--line)}
+.tabs button{background:none;border:none;padding:8px 13px 11px;font:650 13px/1 var(--ui);color:var(--t2);cursor:pointer;border-bottom:2px solid transparent;display:flex;align-items:center;gap:7px}
+.tabs button em{font:700 10.5px/1 var(--ui);font-style:normal;color:var(--t3);background:var(--surf2);padding:4px 6px}
+.tabs button.on{color:var(--bleu-t);border-bottom-color:var(--bleu)}
+.tabs button.on em{color:var(--bleu-t);background:var(--bleu-w)}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tools .selw{min-width:150px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{height:29px;padding:0 11px;border:1px solid var(--line);background:var(--surf);font:600 12px/1 var(--ui);color:var(--t2);cursor:pointer;white-space:nowrap;border-radius:999px}
+.chips button.on{background:var(--bleu);border-color:var(--bleu);color:var(--on-bleu)}
+.selbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 13px;background:var(--bleu-w);border:1px solid var(--bleu-b);border-radius:10px;font-size:13px}
+.selbar b{color:var(--bleu-t)}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 15px;border-top:1px solid var(--line);font-size:12px;color:var(--t3)}
+
+/* ── palette de commandes ── */
+.ov{position:absolute;inset:0;z-index:120;background:rgba(6,11,26,.55);display:flex;align-items:flex-start;justify-content:center;padding:70px 20px 20px;backdrop-filter:blur(3px)}
+.pal{width:min(560px,100%);background:var(--surf);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh2);overflow:hidden;display:flex;flex-direction:column;max-height:100%}
+.pal-in{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line);flex:none}
+.pal-in .ic{color:var(--t3)}
+.pal-in input{flex:1;border:none;background:none;font:400 15px/1 var(--ui);color:var(--t1);outline:none}
+.pal-in kbd{font:600 10px/1 var(--ui);background:var(--surf2);border:1px solid var(--line);border-radius:4px;padding:4px 6px;color:var(--t3)}
+.pal-l{overflow-y:auto;padding:6px}
+.pal-s{font:650 9.5px/1 var(--ui);letter-spacing:.09em;text-transform:uppercase;color:var(--t3);padding:11px 9px 6px}
+.pal-i{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:none;background:none;border-radius:8px;font:400 13.5px/1.3 var(--ui);color:var(--t1);cursor:pointer;text-align:left}
+.pal-i:hover,.pal-i.on{background:var(--bleu-w)}
+.pal-i .ic{width:16px;height:16px;color:var(--t3)}
+.pal-i em{margin-left:auto;font:400 11px/1 var(--ui);font-style:normal;color:var(--t3)}
+.pal-e{padding:26px 16px;text-align:center;color:var(--t3);font-size:13px}
+
+/* ── tiroir ── */
+.drw{position:absolute;top:0;right:0;bottom:0;width:min(430px,90%);background:var(--surf);border-left:1px solid var(--line);box-shadow:var(--sh2);z-index:130;display:flex;flex-direction:column;animation:drwIn .24s ease}
+@keyframes drwIn{from{transform:translateX(24px);opacity:0}}
+.drw-h{display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid var(--line);flex:none}
+.drw-h h3{font:700 15px/1.25 var(--ui);margin:0;flex:1}
+.drw-b{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:16px}
+.drw-f{padding:13px 18px;border-top:1px solid var(--line);display:flex;gap:8px;flex:none}
+.kv{list-style:none;margin:0;padding:0}
+.kv li{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:8px 0;border-bottom:1px solid var(--line2);font-size:13px;color:var(--t2)}
+.kv li:last-child{border-bottom:none}
+.kv b{color:var(--t1);font-weight:650;text-align:right}
+.sect-l{font:650 10px/1 var(--ui);letter-spacing:.09em;text-transform:uppercase;color:var(--t3);margin-bottom:9px;display:block}
+
+/* ── listes ── */
+.lst{list-style:none;margin:0;padding:0}
+.lst li{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--line2)}
+.lst li:first-child{border-top:none;padding-top:0}
+.lst li > div{flex:1;min-width:0}
+.lst b{display:block;font:650 13px/1.35 var(--ui);color:var(--t1)}
+.lst span{display:block;font:400 11.5px/1.4 var(--ui);color:var(--t3);margin-top:2px}
+.lst .ic{color:var(--t3);width:16px;height:16px}
+
+/* ── connexion ── */
+.login{display:flex;height:100%;background:var(--surf)}
+.login-l{width:46%;background:linear-gradient(165deg,#0B1A44 0%,#12358F 52%,#1E4FCB 100%);color:#fff;padding:38px;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.login-l::before{content:"";position:absolute;inset:0;opacity:.55;background-image:linear-gradient(rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.055) 1px,transparent 1px);background-size:26px 26px}
+.login-l > *{position:relative;z-index:1}
+.login-mk{width:104px;height:118px;margin-bottom:auto}
+.login-cl{font:800 clamp(23px,2.5vw,32px)/1.2 var(--ui);letter-spacing:-.03em;margin:26px 0 6px;max-width:15ch}
+.login-cl i{font-style:normal;color:var(--or)}
+.login-sl{font:400 13px/1.5 var(--ui);color:#A9BCEB;margin:0 0 28px}
+.login-pt{list-style:none;margin:0 0 auto;padding:0;display:grid;gap:13px}
+.login-pt li{display:flex;gap:11px;align-items:center}
+.login-pt .qr{border-color:rgba(255,255,255,.36);color:#fff;background:rgba(255,255,255,.11)}
+.login-pt b{display:block;font:650 13px/1.35 var(--ui);color:#fff}
+.login-pt span{display:block;font:400 11.5px/1.4 var(--ui);color:#A9BCEB}
+.login-ft{font:400 11px/1.5 var(--ui);color:#8FA5DC;margin:28px 0 0}
+.login-r{flex:1;display:flex;align-items:center;justify-content:center;padding:36px 30px;overflow-y:auto}
+.login-c{width:100%;max-width:340px;display:flex;flex-direction:column;gap:15px}
+.login-c h1{font:800 25px/1.2 var(--ui);letter-spacing:-.03em;margin:0}
+.login-c > p{font:400 13.5px/1.5 var(--ui);color:var(--t2);margin:-8px 0 4px}
+.login-lk{display:flex;align-items:center;justify-content:center;gap:9px;color:var(--t3);font-size:11.5px}
+
+/* ── portail / scanner ── */
+.scan{display:flex;flex:1;min-height:0;background:#05080F;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
+.scan-in{width:min(620px,100%);display:flex;flex-direction:column;gap:14px}
+.scan-v{position:relative;height:284px;border-radius:12px;overflow:hidden;background:radial-gradient(72% 78% at 50% 50%,#152340,#05080F);border:1px solid rgba(255,255,255,.09)}
+/* Le cadre a les proportions d'une CARTE d'élève — paysage — parce que c'est
+   ce que le gardien présente. Un cadre portrait lui ferait tourner la carte. */
+.scan-c i{position:absolute;width:32px;height:32px;border:3px solid var(--or)}
+.scan-c i:nth-child(1){top:66px;left:calc(50% - 120px);border-right:none;border-bottom:none}
+.scan-c i:nth-child(2){top:66px;right:calc(50% - 120px);border-left:none;border-bottom:none}
+.scan-c i:nth-child(3){bottom:66px;left:calc(50% - 120px);border-right:none;border-top:none}
+.scan-c i:nth-child(4){bottom:66px;right:calc(50% - 120px);border-left:none;border-top:none}
+.scan-ln{position:absolute;left:calc(50% - 120px);top:68px;width:240px;height:2px;background:linear-gradient(90deg,transparent,var(--or),transparent);box-shadow:0 0 16px rgba(245,178,27,.85);animation:sc 2.6s ease-in-out infinite}
+@keyframes sc{0%,100%{transform:translateY(0)}50%{transform:translateY(146px)}}
+.scan-hint{text-align:center;font:500 11.5px/1.4 var(--ui);color:#8FA5DC;margin-top:-4px}
+.scan-r{background:#0E1523;border:1px solid rgba(255,255,255,.10);border-top:3px solid var(--c);border-radius:12px;padding:16px 17px;color:#EAEEF8}
+.scan-r-h{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.scan-r-h b{display:block;font:700 15px/1.3 var(--ui);color:#fff}
+.scan-r-h span{display:block;font:400 12px/1.4 var(--ui);color:#9BA7C2}
+.scan-r-v{display:flex;gap:11px;align-items:flex-start;padding:12px 13px;border-radius:10px;background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 38%,transparent)}
+.scan-r-v .ic{color:var(--c);width:19px;height:19px;margin-top:1px}
+.scan-r-v b{display:block;font:700 13.5px/1.4 var(--ui);color:var(--c)}
+.scan-r-v span{display:block;font:400 12.5px/1.5 var(--ui);color:#C6CFE2;margin-top:3px}
+.scan-r .tag{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.18);color:#EAEEF8}
+.scan-r .tag.ok{background:rgba(63,201,138,.16);border-color:rgba(63,201,138,.4);color:#3FC98A}
+.scan-r .tag.wa{background:rgba(245,178,27,.16);border-color:rgba(245,178,27,.4);color:#F5B21B}
+.scan-r .tag.no{background:rgba(244,117,127,.16);border-color:rgba(244,117,127,.4);color:#F4757F}
+.scan-a{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+.scan-a .btn{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.17);color:#EAEEF8;flex:1;min-width:150px}
+.scan-a .btn.gold{background:var(--or);border-color:var(--or);color:#0C1220}
+
+/* ── barre du bas (téléphone) ── */
+.bn{display:none;background:var(--rail);border-top:1px solid var(--rail-b);flex:none;padding-bottom:6px}
+.bn button{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 2px;background:none;border:none;color:var(--rail-t2);cursor:pointer;min-height:52px}
+.bn button.on{color:#fff}
+.bn button.on::before{content:"";position:absolute;top:0;left:26%;right:26%;height:3px;background:var(--or)}
+.bn small{font:600 9.5px/1.2 var(--ui);text-align:center}
+.bn .bdg{position:absolute;top:4px;right:calc(50% - 20px);margin:0;min-width:15px;height:15px;font-size:9px;line-height:15px}
+
+/* ── toast ── */
+.toasts{position:absolute;left:0;right:0;bottom:14px;z-index:200;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none;padding:0 14px}
+.toast{display:flex;align-items:center;gap:9px;background:var(--rail);color:#fff;border:1px solid var(--rail-b);padding:10px 15px;border-radius:999px;font:600 12.5px/1.35 var(--ui);box-shadow:var(--sh2);animation:tIn .25s ease;max-width:100%}
+.toast .ic{width:16px;height:16px;color:var(--or)}
+@keyframes tIn{from{transform:translateY(10px);opacity:0}}
+
+/* ── page système ── */
+.sysgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.swat{border:1px solid var(--line);background:var(--surf);border-radius:10px;overflow:hidden}
+.swat b{display:block;height:56px;background:var(--c)}
+.swat div{padding:10px 12px}
+.swat code{display:block;font:650 11.5px/1.5 var(--ui);color:var(--t1)}
+.swat span{display:block;font:400 11px/1.5 var(--mono);color:var(--t3)}
+.swat em{display:block;font:400 11px/1.5 var(--ui);font-style:normal;color:var(--t2);margin-top:3px}
+.demo-row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+
+/* ══════════════════════════════════════════════════════════════
+   APPAREILS
+   ══════════════════════════════════════════════════════════════ */
+.app-root[data-dev="tab"] .rail{width:74px;padding:12px 6px}
+.app-root[data-dev="tab"] .rail-brand{justify-content:center;padding:5px 0 12px}
+.app-root[data-dev="tab"] .rail-brand > div,
+.app-root[data-dev="tab"] .cmd span,
+.app-root[data-dev="tab"] .cmd kbd,
+.app-root[data-dev="tab"] .ng-s,
+.app-root[data-dev="tab"] .cv,
+.app-root[data-dev="tab"] .me > div,
+.app-root[data-dev="tab"] .me > .ic{display:none}
+.app-root[data-dev="tab"] .cmd{justify-content:center;padding:0}
+.app-root[data-dev="tab"] .nv,.app-root[data-dev="tab"] .ng-h{flex-direction:column;gap:4px;padding:8px 2px;font-size:9.5px;text-align:center;line-height:1.15;min-height:50px}
+.app-root[data-dev="tab"] .bdg{position:absolute;margin:0}
+.app-root[data-dev="tab"] .nv,.app-root[data-dev="tab"] .ng{position:relative}
+.app-root[data-dev="tab"] .me{justify-content:center}
+
+.app-root[data-dev="phone"] .rail{display:none}
+.app-root[data-dev="phone"] .bn{display:flex}
+.app-root[data-dev="phone"] .app{height:min(80vh,760px)}
+.app-root[data-dev="phone"] .top{padding:0 12px;height:54px}
+.app-root[data-dev="phone"] .top h1{font-size:16px}
+.app-root[data-dev="phone"] .sync{display:none}
+.app-root[data-dev="phone"] .page{padding:13px 12px 20px;gap:11px}
+.app-root[data-dev="phone"] .bento > *{grid-column:span 6}
+.app-root[data-dev="phone"] .bento > .w8,.app-root[data-dev="phone"] .bento > .w12,.app-root[data-dev="phone"] .bento > .w6{grid-column:span 12!important}
+.app-root[data-dev="phone"] .login{flex-direction:column;overflow-y:auto}
+.app-root[data-dev="phone"] .login-l{width:100%;padding:26px 22px}
+.app-root[data-dev="phone"] .login-mk{width:76px;height:86px;margin-bottom:14px}
+.app-root[data-dev="phone"] .login-pt{display:none}
+.app-root[data-dev="phone"] .drw{width:100%;border-left:none}
+.app-root[data-dev="phone"] .tbl-hide{display:none}
+.app-root[data-dev="phone"] .btn{min-height:38px}
+
+@media(max-width:1000px){
+  .bento > *{grid-column:span 6}
+  .bento > .w8,.bento > .w12{grid-column:span 12!important}
+}
+@media(max-width:720px){
+  .demo{gap:14px;padding:12px 14px}
+  .stage,.after,.demo-hint{padding-left:12px;padding-right:12px}
+  .app{height:auto;min-height:0}
+  .rail{display:none}
+  .bn{display:flex}
+  .page{padding:13px 12px 20px}
+  .bento > *{grid-column:span 12!important}
+  .login{flex-direction:column}.login-l{width:100%}
+}
+</style>
+
+<script>
+(function(){
+"use strict";
+
+/* ═══════════ ICÔNES ═══════════ */
+const P={
+home:'M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z',
+students:'M12 4 3 8.5l9 4.5 9-4.5z|M7 11v4.5c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5V11|M21 8.5V14',
+cls:'M4 20V6a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v14|M3 20h18|M17 9h3a1 1 0 0 1 1 1v10|M8 8h5M8 12h5',
+teacher:'M12 4.8a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z|M5.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5',
+shield:'M12 3.5 5 6v6c0 4 3 7 7 8.5 4-1.5 7-4.5 7-8.5V6z|m9.2 12.2 2 2 3.6-3.8',
+family:'M8 5.9a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z|M16.5 7.3a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z|M3 19c0-2.7 2.2-4.5 5-4.5s5 1.8 5 4.5|M14 19c0-2.2 1.5-3.6 3.5-3.6S21 16.8 21 19',
+key:'M8 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z|M11.5 12H21|M17.5 12v3M20 12v2.2',
+card:'M5.2 5.5h13.6A2.2 2.2 0 0 1 21 7.7v8.6a2.2 2.2 0 0 1-2.2 2.2H5.2A2.2 2.2 0 0 1 3 16.3V7.7a2.2 2.2 0 0 1 2.2-2.2z|M8.5 9.6a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8z|M5.5 16c.5-1.3 1.7-2 3-2s2.5.7 3 2|M14.5 10.5H19M14.5 13.5H19',
+door:'M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8|M11 12h9m0 0-3-3m3 3-3 3',
+search:'M11 4.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z|m16 16 4 4',
+money:'M5 6h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z|M12 9.4a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z|M6.5 9.5h.01M17.5 14.5h.01',
+chart:'M4 20V4|M4 20h16|M8 16v-4M12.5 16V8M17 16v-6',
+book:'M4 5.5A1.5 1.5 0 0 1 5.5 4H19v14H5.5A1.5 1.5 0 0 0 4 19.5z|M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3',
+msg:'M20 15a2 2 0 0 1-2 2H8l-4 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z',
+bell:'M18 9a6 6 0 1 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 15 18 9|M13.7 20a2 2 0 0 1-3.4 0',
+cal:'M5.5 5h13a2 2 0 0 1 2 2v11.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z|M3.5 10h17M8 3.5V6.5M16 3.5V6.5',
+gear:'M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z|M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6',
+scan:'M4 8.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3|M4 12h16',
+check:'m5 12.5 4.5 4.5L19 7.5',
+alert:'M12 4.5 3 20h18z|M12 10v4.5M12 17.3h.01',
+chev:'m7 10 5 5 5-5', chevr:'m10 7 5 5-5 5', chevl:'m14 7-5 5 5 5',
+more:'M6 10.8a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z|M12 10.8a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z|M18 10.8a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z',
+plus:'M12 5v14M5 12h14', menu:'M4 7h16M4 12h16M4 17h16', x:'M6 6l12 12M18 6 6 18',
+out:'M14 20H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h8|M11 12h10m0 0-3-3m3 3-3 3',
+clock:'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16z|M12 7.5V12l3 2',
+lock:'M6.5 10.5h11a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-5.5a2 2 0 0 1 2-2z|M8 10.5V7.5a4 4 0 0 1 8 0v3',
+user:'M12 5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z|M5 20c0-3.4 3.1-5.5 7-5.5s7 2.1 7 5.5',
+eye:'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12|M12 9.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6z',
+doc:'M13 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V8z|M13 3v5h5|M9 13h6M9 16.5h4',
+grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+send:'M21 3 3 10.5l7.5 3L14 21z', sun:'M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8z|M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+flag:'M5 21V4h12l-2 4 2 4H5', heart:'M12 20s-7-4.5-7-9.2A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.8C19 15.5 12 20 12 20z',
+food:'M6 3v8a3 3 0 0 0 6 0V3M9 11v10M18 3c-1.5 1.5-2 3.5-2 6s.5 3 2 3v9',
+};
+function ic(n,cl){const d=P[n]||P.grid;return '<svg class="ic '+(cl||'')+'" viewBox="0 0 24 24" aria-hidden="true">'+d.split('|').map(x=>'<path d="'+x+'"/>').join('')+'</svg>';}
+
+/* ═══════════ LA MARQUE — bouclier + modules QR + arc ═══════════ */
+function mark(withArc){
+  const M=[ // x,y,w,h,couleur
+    [15,25,13,13,'F','#E0231D'],[18.5,28.5,6,6,'S','#E0231D'],
+    [36,25,13,13,'F','#7B3FE4'],[39.5,28.5,6,6,'S','#7B3FE4'],
+    [15,45,13,13,'F','#FFFFFF'],[18.5,48.5,6,6,'S','#FFFFFF'],
+    [30,25,5,5,'S','#F07C0C'],[36.5,25,0,0,'X',''],
+    [30,32,5,5,'S','#4A4A4A'],[36,45,5,5,'S','#F5B21B'],
+    [15,40,10,3.4,'S','#F5B21B'],[30,40,9,3.4,'S','#FFFFFF'],[42,40,7,3.4,'S','#E0231D'],
+    [30,52,5,5,'S','#E0231D'],[38,52,5,5,'S','#F5B21B'],[44,58,5,5,'S','#7B3FE4'],[36,58,5,5,'S','#F5B21B'],
+  ];
+  let mods='';
+  M.forEach(m=>{ if(m[4]==='X')return;
+    if(m[4]==='F') mods+='<rect x="'+m[0]+'" y="'+m[1]+'" width="'+m[2]+'" height="'+m[3]+'" fill="none" stroke="'+m[5]+'" stroke-width="2"/>';
+    else mods+='<rect x="'+m[0]+'" y="'+m[1]+'" width="'+m[2]+'" height="'+m[3]+'" fill="'+m[5]+'"/>';
+  });
+  const arcs=withArc?['#E0231D','#F07C0C','#F5B21B','#0FA35C','#7B3FE4'].map((c,i)=>
+    '<path d="M'+(13-i*2.2)+' '+(19-i*1.6)+' Q32 '+(1-i*2.6)+' '+(51+i*2.2)+' '+(19-i*1.6)+'" fill="none" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round" opacity=".95"/>').join(''):'';
+  return '<svg viewBox="0 0 64 '+(withArc?80:76)+'" aria-label="SchoolSafe">'+
+    '<g transform="translate(0,'+(withArc?8:2)+')">'+
+    '<path d="M32 1 L61 11 V37 C61 53 48 66 32 71 C16 66 3 53 3 37 V11 Z" fill="#1E4FCB"/>'+
+    '<path d="M32 1 L61 11 V37 C61 53 48 66 32 71 C16 66 3 53 3 37 V11 Z" fill="none" stroke="#F5B21B" stroke-width="1.6"/>'+
+    '<path d="M32 6 L56 14 V37 C56 50 45 61 32 65.5 C19 61 8 50 8 37 V14 Z" fill="#173FAE"/>'+
+    mods+'</g>'+arcs+'</svg>';
+}
+
+/* ═══════════ DONNÉES — entièrement inventées ═══════════ */
+const CL={'1re primaire A':'#1E4FCB','2e primaire B':'#F07C0C','3e primaire A':'#0FA35C','3e primaire B':'#7B3FE4','5e primaire A':'#E0231D','6e primaire A':'#F5B21B','Maternelle 2':'#4A4A4A'};
+const EL=[
+ {n:1,nom:'Kabeya Ilunga Bénédicte',cls:'3e primaire A',mat:'LS-2026-0117',age:9,tut:'Kabeya Muteba Alphonse',lien:'père',tel:'+243 81 000 00 01',aut:1,f:'ok',solde:0,ent:'07:48',sor:'12:34'},
+ {n:2,nom:'Mbuyi Nsimba Josué',cls:'3e primaire A',mat:'LS-2026-0118',age:8,tut:'Nsimba Kavira Béatrice',lien:'mère',tel:'+243 82 000 00 02',aut:0,f:'part',solde:85000,ent:'07:52',sor:'12:34'},
+ {n:3,nom:'Lukusa Tshiala Merveille',cls:'3e primaire B',mat:'LS-2026-0119',age:9,tut:'Tshiala Mwamba Rachel',lien:'mère',tel:'+243 89 000 00 03',aut:2,f:'no',solde:240000,ent:'08:06',sor:'—'},
+ {n:4,nom:'Ngoy Kalonda Christian',cls:'5e primaire A',mat:'LS-2026-0121',age:11,tut:'Kalonda Ebondo Patrick',lien:'père',tel:'+243 81 000 00 04',aut:1,f:'ok',solde:0,ent:'08:11',sor:'16:02'},
+ {n:5,nom:'Bofunda Lisala Nathalie',cls:'2e primaire B',mat:'LS-2026-0124',age:7,tut:'',lien:'',tel:'',aut:0,f:'no',solde:240000,ent:'08:19',sor:'—'},
+ {n:6,nom:'Mukendi Ekofo Divine',cls:'5e primaire A',mat:'LS-2026-0126',age:10,tut:'Ekofo Bosange Judith',lien:'mère',tel:'+243 84 000 00 06',aut:1,f:'part',solde:120000,ent:'07:41',sor:'16:02'},
+ {n:7,nom:'Tshimanga Sefu Emmanuel',cls:'6e primaire A',mat:'LS-2026-0131',age:12,tut:'Sefu Ilunga Georgine',lien:'mère',tel:'+243 85 000 00 07',aut:1,f:'ok',solde:0,ent:'07:36',sor:'16:05'},
+ {n:8,nom:'Ilunga Kasongo Providence',cls:'1re primaire A',mat:'LS-2026-0133',age:6,tut:'Kasongo Mwilambwe Léon',lien:'père',tel:'+243 81 000 00 08',aut:2,f:'ok',solde:0,ent:'07:55',sor:'12:30'},
+ {n:9,nom:'Bosenge Lokombe Espérance',cls:'2e primaire B',mat:'LS-2026-0136',age:7,tut:'Lokombe Ayana Sylvie',lien:'mère',tel:'+243 82 000 00 09',aut:0,f:'part',solde:60000,ent:'08:02',sor:'12:31'},
+ {n:10,nom:'Kalonji Muteba Gloire',cls:'6e primaire A',mat:'LS-2026-0140',age:12,tut:'Muteba Nkulu Antoine',lien:'père',tel:'+243 89 000 00 10',aut:1,f:'ok',solde:0,ent:'07:29',sor:'16:05'},
+ {n:11,nom:'Nkulu Banza Grâce',cls:'1re primaire A',mat:'LS-2026-0142',age:6,tut:'Banza Kabongo Thérèse',lien:'mère',tel:'+243 84 000 00 11',aut:1,f:'no',solde:180000,ent:'—',sor:'—'},
+ {n:12,nom:'Ayila Mongo Bénédict',cls:'Maternelle 2',mat:'LS-2026-0145',age:5,tut:'Mongo Ilunga Pascal',lien:'père',tel:'+243 81 000 00 12',aut:2,f:'ok',solde:0,ent:'08:10',sor:'11:45'},
+];
+const RECUS=[
+ {no:'0412',h:'11:24',el:'Tshimanga Sefu Emmanuel',t:'Minerval — 3e tranche',m:120000,mode:'Espèces'},
+ {no:'0411',h:'10:52',el:'Ilunga Kasongo Providence',t:'Cantine — août',m:45000,mode:'Mobile money'},
+ {no:'0410',h:'10:18',el:'Kalonji Muteba Gloire',t:'Minerval — 3e tranche',m:120000,mode:'Espèces'},
+ {no:'0409',h:'09:40',el:'Kabeya Ilunga Bénédicte',t:'Uniforme',m:35000,mode:'Espèces'},
+ {no:'0408',h:'08:57',el:'Mukendi Ekofo Divine',t:'Minerval — 2e tranche',m:120000,mode:'Mobile money'},
+];
+const MSGS=[
+ {de:'Nsimba Kavira Béatrice',rl:'Parent · Josué, 3e A',ap:'il y a 12 min',txt:"Bonjour, mon fils sera absent lundi matin pour un rendez-vous médical. Je fournirai le justificatif mardi.",nl:1},
+ {de:'Kalonda Ebondo Patrick',rl:'Parent · Christian, 5e A',ap:'il y a 1 h',txt:"Est-ce que la sortie éducative de septembre est confirmée ? Je dois organiser le transport.",nl:1},
+ {de:'M. Kabongo',rl:'Enseignant · 6e A',ap:'hier, 16:40',txt:"Le cahier de préparation du trimestre est déposé. J'attends votre visa avant lundi.",nl:0},
+ {de:'Ekofo Bosange Judith',rl:'Parent · Divine, 5e A',ap:'hier, 09:12',txt:"Merci pour le reçu, bien reçu. Je passerai régler la dernière tranche vendredi.",nl:0},
+];
+const PROF={
+ direction:{nom:'L. Mukendi',ini:'LM',lbl:'Direction 1',c:'#1E4FCB'},
+ direction2:{nom:'A. Kabongo',ini:'AK',lbl:'Direction 2',c:'#1E4FCB'},
+ direction3:{nom:'S. Ilunga',ini:'SI',lbl:'Caisse',c:'#F5B21B'},
+ enseignant:{nom:'J. Mbaya',ini:'JM',lbl:'Enseignant · 3e A',c:'#7B3FE4'},
+ gardien:{nom:'P. Nzita',ini:'PN',lbl:'Gardien',c:'#0FA35C'},
+ parent:{nom:'B. Nsimba',ini:'BN',lbl:'Parent',c:'#F07C0C'},
+};
+const DOM={personnes:'#1E4FCB',finances:'#F5B21B',portail:'#0FA35C',pedago:'#7B3FE4',comm:'#F07C0C',urgence:'#E0231D',systeme:'#4A5568'};
+const DOMT={personnes:'var(--bleu-t)',finances:'var(--or-t)',portail:'var(--vert-t)',pedago:'var(--violet-t)',comm:'var(--orange-t)',urgence:'var(--rouge-t)',systeme:'var(--gris-t)'};
+
+/* ═══════════ MENUS — les vraies entrées de l'application ═══════════ */
+const G=(t,i,d,items,b)=>({t:t,i:i,d:d,items:items,b:b});
+const NAV={
+ direction:{top:[{id:'dashboard',i:'home',l:'Tableau de bord',d:'personnes'},{id:'approbations',i:'check',l:'Approbations',d:'personnes',b:7}],
+  groups:[
+   G('Personnes','students','personnes',[['students','Élèves'],['classes','Classes'],['teachers','Enseignants'],['guardians','Gardiens'],['parents','Parents'],['authorized','Personnes autorisées'],['acces_parents','Accès parents'],['cards',"Cartes d'élèves"],['preinscriptions','Préinscriptions'],['inscriptions','Inscriptions']]),
+   G('Finances & RH','money','finances',[['caisse','Caisse — encaisser'],['controle_frais','Contrôle des frais'],['payments','Paiements élèves'],['etat_financier','État financier'],['tresorerie','Trésorerie'],['comptabilite','Comptabilité générale'],['paie','Paie du personnel'],['registre_presence','Registre de présence']]),
+   G('Pédagogie','book','pedago',[['palmares','Palmarès'],['attendance','Présences'],['timetable','Emploi du temps'],['cantine','Cantine scolaire'],['activites','Activités extrascolaires'],['sante','Santé / Infirmerie'],['cahier_texte','Cahier de texte'],['cahier_prep','Cahier de préparation'],['prevision','Prévision matière']]),
+   G('Communication','msg','comm',[['messages','Messages'],['convocations','Convocations'],['sanctions','Sanctions disciplinaires'],['absences','Justifications'],['calendar','Calendrier'],['notifications','Notifications'],['mon_site','Mon site web']],3),
+   G('Sécurité portail','shield','portail',[['scanner','Scanner entrée'],['scanner_exit','Sortie au portail'],['preparer_sortie','Préparer la sortie'],['scan_log','Historique des scans'],['alert_urgent','Alerte urgence']]),
+   G('Rapports officiels','doc','systeme',[['tenafep','TENAFEP 6e primaire'],['exetat','EXETAT finalistes'],['evaluations','Évaluations profs'],['secope','Rapport SECOPE']]),
+   G('Système','gear','systeme',[['systeme','Système de design'],['statistiques','Statistiques'],['teacher_activity','Activité profs'],['audit_log',"Journal d'audit"],['year_mgmt','Année scolaire'],['export','Export données'],['accounts','Comptes accès'],['settings','Paramètres']]),
+  ],
+  bn:[['dashboard','home','Accueil'],['approbations','check','Approuver',7],['students','students','Élèves'],['caisse','money','Caisse'],['menu','menu','Menu']]},
+ direction2:{top:[{id:'dashboard',i:'home',l:'Tableau de bord',d:'personnes'},{id:'approbations',i:'check',l:'Approbations',d:'personnes',b:4}],
+  groups:[
+   G('Personnes','students','personnes',[['students','Élèves'],['classes','Classes'],['teachers','Enseignants'],['guardians','Gardiens'],['parents','Parents'],['authorized','Personnes autorisées'],['cards',"Cartes d'élèves"],['accounts','Comptes accès']]),
+   G('Pédagogie','book','pedago',[['palmares','Palmarès'],['attendance','Présences'],['timetable','Emploi du temps'],['cantine','Cantine scolaire'],['sante','Santé / Infirmerie'],['cahier_prep','Cahier de préparation']]),
+   G('Communication','msg','comm',[['messages','Messages'],['convocations','Convocations'],['sanctions','Sanctions disciplinaires'],['absences','Justifications'],['notifications','Notifications']],2),
+   G('Sécurité portail','shield','portail',[['scanner_exit','Sortie au portail'],['preparer_sortie','Préparer la sortie'],['scan_log','Historique des scans']]),
+   G('Système','gear','systeme',[['systeme','Système de design'],['statistiques','Statistiques'],['audit_log',"Journal d'audit"],['export','Export données'],['settings','Paramètres']]),
+  ],
+  bn:[['dashboard','home','Accueil'],['approbations','check','Approuver',4],['students','students','Élèves'],['attendance','book','Présences'],['menu','menu','Menu']]},
+ direction3:{top:[{id:'dashboard',i:'home',l:'Tableau de bord',d:'finances'},{id:'caisse',i:'money',l:'Encaisser',d:'finances'}],
+  groups:[
+   G('Caisse du jour','money','finances',[['controle_frais','Contrôle des frais'],['caisse_depense','Enregistrer une dépense'],['caisse_rapport','Rapport du jour'],['fee_types','Types de frais']]),
+   G('Comptabilité','chart','finances',[['etat_financier','État financier'],['tresorerie','Trésorerie'],['comptabilite','Comptabilité générale'],['paie','Paie du personnel']]),
+   G('Infos','msg','comm',[['notifications','Notifications'],['ma_paie','Ma paie'],['mes_absences','Mes absences'],['cantine','Cantine scolaire']]),
+   G('Système','gear','systeme',[['systeme','Système de design'],['settings','Paramètres']]),
+  ],
+  bn:[['dashboard','home','Accueil'],['caisse','money','Encaisser'],['controle_frais','search','Contrôle'],['caisse_rapport','chart','Rapport'],['menu','menu','Menu']]},
+ enseignant:{top:[{id:'dashboard',i:'home',l:'Tableau de bord',d:'pedago'},{id:'attendance',i:'check',l:'Faire l\'appel',d:'pedago'}],
+  groups:[
+   G('Ma classe','book','pedago',[['palmares','Palmarès'],['devoirs','Devoirs'],['matieres','Matières'],['cahier_texte','Cahier de texte'],['cahier_prep','Cahier de préparation'],['prevision','Prévision matière'],['timetable','Emploi du temps']]),
+   G('Portail scolaire','shield','portail',[['scanner','Scanner entrée'],['preparer_sortie','Préparer la sortie'],['scanner_exit','Scanner sortie'],['scan_log','Historique portail']]),
+   G('Mon compte','user','systeme',[['ma_paie','Ma paie'],['mes_primes','Mes primes'],['mes_absences','Mes absences'],['profil','Mon profil']]),
+   G('Infos','msg','comm',[['messages','Messages'],['calendar','Calendrier'],['notifications','Notifications']],2),
+  ],
+  bn:[['dashboard','home','Accueil'],['attendance','check','Appel'],['devoirs','book','Devoirs'],['messages','msg','Messages',2],['menu','menu','Menu']]},
+ gardien:{top:[{id:'scanner',i:'scan',l:'Scanner entrée',d:'portail'},{id:'scanner_exit',i:'door',l:'Scanner sortie',d:'portail'}],
+  groups:[
+   G('Portail','shield','portail',[['dashboard','Tableau de bord'],['scan_log','Historique'],['authorized','Personnes autorisées']]),
+   G('Sécurité','alert','urgence',[['alert_urgent','Alerte urgence'],['notifications','Alertes reçues']]),
+   G('Mon compte','user','systeme',[['ma_paie','Ma paie'],['mes_absences','Mes absences'],['profil','Mon profil']]),
+  ],
+  bn:[['scanner','scan','Entrée'],['scanner_exit','door','Sortie'],['scan_log','clock','Historique'],['alert_urgent','alert','Alerte'],['menu','menu','Menu']]},
+ parent:{top:[{id:'dashboard',i:'home',l:'Tableau de bord',d:'comm'},{id:'enfants',i:'family',l:'Mes enfants',d:'comm'}],
+  groups:[
+   G('Scolarité','book','pedago',[['attendance','Présences'],['cahier_texte','Cahier de texte'],['timetable','Emploi du temps'],['devoirs','Devoirs'],['palmares','Palmarès']]),
+   G('Paiements & services','money','finances',[['frais','Frais scolaires'],['recus','Mes reçus'],['cantine','Cantine'],['activites','Activités']]),
+   G('Communication','msg','comm',[['messages','Messages'],['convocations','Convocations'],['absences','Justifier une absence'],['notifications','Notifications']],1),
+   G('Sécurité','shield','portail',[['authorized','Personnes autorisées'],['scan_history','Entrées / sorties']]),
+   G('Mon compte','user','systeme',[['calendar','Calendrier'],['profil','Mon profil']]),
+  ],
+  bn:[['dashboard','home','Accueil'],['enfants','family','Enfants'],['devoirs','book','Devoirs'],['messages','msg','Messages',1],['menu','menu','Menu']]},
+};
+const TITRES={dashboard:'Tableau de bord',students:'Élèves',caisse:'Caisse — encaisser',scanner:'Portail — entrée',scanner_exit:'Portail — sortie',messages:'Messages',attendance:'Présences',enfants:'Mes enfants',systeme:'Système de design',menu:'Menu'};
+const IMPL={dashboard:1,students:1,caisse:1,scanner:1,scanner_exit:1,messages:1,attendance:1,enfants:1,systeme:1,menu:1};
+
+/* ═══════════ ÉTAT ═══════════ */
+const S={role:'direction',page:'dashboard',dev:'desk',theme:'light',open:null,pal:false,palq:'',drawer:null,sel:{},tab:'actifs',q:'',cf:'',scan:0,msg:0,toasts:[],logged:true,pres:{},sync:true};
+const app=document.getElementById('app');
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fc=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+const ini=n=>n.split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+function toast(t,i){S.toasts.push({t:t,i:i||'check',k:Math.random()});draw();setTimeout(()=>{S.toasts.shift();draw();},2600);}
+
+/* ═══════════ FRAGMENTS ═══════════ */
+function qr(icon,color,cl){return '<span class="qr '+(cl||'')+'" style="--c:'+color+'">'+ic(icon)+'</span>';}
+function tagFrais(f,solde){
+  if(f==='ok')return '<span class="tag ok"><s></s>Payé</span>';
+  if(f==='part')return '<span class="tag wa"><s></s>Partiel · '+fc(solde)+' FC</span>';
+  return '<span class="tag no"><s></s>Impayé · '+fc(solde)+' FC</span>';
+}
+function mod(o){
+  return '<'+(o.go?'button':'div')+' class="mod '+(o.w||'')+'" style="--c:'+o.c+'"'+(o.go?' data-go="'+o.go+'"':'')+'>'+
+    '<div class="mod-t">'+qr(o.i,o.c,'soft')+'<span class="mod-l">'+esc(o.l)+'</span></div>'+
+    '<div class="mod-n">'+o.n+'</div>'+
+    (o.s?'<div class="mod-s '+(o.k||'')+'">'+o.s+'</div>':'')+
+  '</'+(o.go?'button':'div')+'>';
+}
+function bars(vals,c,x){
+  const mx=Math.max.apply(null,vals);
+  return '<div class="bars" style="--c:'+c+'">'+vals.map((v,i)=>'<i style="--h:'+Math.round(v/mx*100)+'%"'+(i===vals.length-1?' class="on"':'')+'></i>').join('')+'</div>'+
+   (x?'<div class="barsx">'+x.map(t=>'<span>'+t+'</span>').join('')+'</div>':'');
+}
+
+/* ═══════════ VUES ═══════════ */
+const V={};
+
+V.dashboard=function(){
+  const r=S.role;
+  if(r==='direction'||r==='direction2'){
+    return '<div class="bento">'+
+     '<div class="card w8"><div class="card-h">'+qr('shield',DOM.portail,'soft')+'<h2>Ce matin au portail</h2><button class="lnk" data-go="scan_log">Historique</button></div>'+
+      '<div style="display:flex;gap:26px;align-items:flex-end;flex-wrap:wrap">'+
+       '<div style="display:flex;gap:20px"><div><div class="mod-n">1 118</div><div class="mod-s">entrés</div></div>'+
+       '<div><div class="mod-n">1 247</div><div class="mod-s">attendus</div></div>'+
+       '<div><div class="mod-n" style="color:var(--rouge-t)">129</div><div class="mod-s">non signalés</div></div></div>'+
+       '<div style="flex:1;min-width:190px">'+bars([9,19,34,52,71,96,88,63,41,22,9],'var(--vert)',['6h30','7h15','8h00'])+'</div>'+
+      '</div></div>'+
+     mod({l:'Élèves inscrits',n:'1 247',s:'+18 cette semaine',k:'up',i:'students',c:DOM.personnes,w:'w4',go:'students'})+
+     mod({l:"Encaissé aujourd'hui",n:'4 380 000 <em>FC</em>',s:'31 reçus émis',i:'money',c:DOM.finances,w:'w4',go:'caisse'})+
+     mod({l:'Impayés',n:'62',s:'élèves · 14 800 000 FC',k:'dn',i:'alert',c:DOM.urgence,w:'w4'})+
+     mod({l:'Personnel présent',n:'38 <em>/ 41</em>',s:'2 absences justifiées',i:'teacher',c:DOM.pedago,w:'w4'})+
+     '<div class="card w6"><div class="card-h">'+qr('check',DOM.personnes,'soft')+'<h2>À traiter</h2><span class="cnt">12</span></div>'+
+      '<ul class="lst">'+
+       '<li><div><b>7 approbations en attente</b><span>Inscriptions, sanctions, décaissements</span></div><button class="btn sm pri" data-todo="approbations">Ouvrir</button></li>'+
+       '<li><div><b>3 préinscriptions reçues</b><span>Depuis le site de l\'école</span></div><button class="btn sm" data-todo="préinscriptions">Ouvrir</button></li>'+
+       '<li><div><b>2 justifications d\'absence</b><span>Déposées par des parents ce matin</span></div><button class="btn sm" data-todo="justifications">Ouvrir</button></li>'+
+      '</ul></div>'+
+     '<div class="card w6"><div class="card-h">'+qr('money',DOM.finances,'soft')+'<h2>Caisse du jour</h2><button class="lnk" data-go="caisse">Encaisser</button></div>'+
+      '<ul class="kv"><li><span>Encaissements</span><b>4 380 000 FC</b></li><li><span>Dépenses</span><b>612 000 FC</b></li>'+
+      '<li style="border-top:1px solid var(--line);padding-top:11px"><span style="font-weight:650;color:var(--t1)">Solde de caisse</span><b style="font-size:16px">3 768 000 FC</b></li></ul>'+
+      '<div class="alert wa" style="margin-top:11px">'+ic('clock')+'<div><b>Journée non clôturée</b><span>La clôture verrouille les écritures du jour.</span></div></div></div>'+
+     '<div class="card flush w12"><div style="padding:15px 18px 0"><div class="card-h">'+qr('door',DOM.portail,'soft')+'<h2>Derniers passages au portail</h2><button class="lnk" data-go="scan_log">Tout voir</button></div></div>'+
+      tbl(['Heure','Élève','Classe','Portail','État'],EL.slice(0,6).map(e=>[
+        '<span class="mn">'+(e.ent==='—'?'—':e.ent)+'</span>',
+        '<span class="st">'+esc(e.nom)+'</span>',
+        '<span class="cls" style="--c:'+CL[e.cls]+'"><s></s>'+esc(e.cls)+'</span>',
+        'Entrée principale',
+        e.ent==='—'?'<span class="tag no"><s></s>Non signalé</span>':(e.ent>'08:00'?(e.f==='no'?'<span class="tag no"><s></s>Refus · frais</span>':'<span class="tag wa"><s></s>Retard</span>'):'<span class="tag ok"><s></s>À l\'heure</span>')
+      ]))+'</div>'+
+    '</div>';
+  }
+  if(r==='direction3'){
+    const tot=RECUS.reduce((a,b)=>a+b.m,0);
+    return '<div class="bento">'+
+     mod({l:"Encaissé aujourd'hui",n:fc(4380000)+' <em>FC</em>',s:'31 reçus émis',i:'money',c:DOM.finances,w:'w4'})+
+     mod({l:'Dépenses du jour',n:fc(612000)+' <em>FC</em>',s:'4 pièces',i:'out',c:DOM.comm,w:'w4'})+
+     mod({l:'Solde de caisse',n:fc(3768000)+' <em>FC</em>',s:'non clôturé',i:'lock',c:DOM.personnes,w:'w4'})+
+     '<div class="card w6"><div class="card-h">'+qr('plus',DOM.finances,'soft')+'<h2>Geste du jour</h2></div>'+
+      '<p style="font-size:13px;color:var(--t2);margin:0 0 13px">Reçu, recette et écriture comptable partent ensemble, ou rien ne part.</p>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn gold lg" data-go="caisse">'+ic('money')+'Encaisser un paiement</button>'+
+      '<button class="btn lg" data-todo="dépense">Enregistrer une dépense</button></div></div>'+
+     '<div class="card w6"><div class="card-h">'+qr('alert',DOM.urgence,'soft')+'<h2>À surveiller</h2></div>'+
+      '<ul class="lst"><li><div><b>62 élèves en impayé</b><span>14 800 000 FC · 3 relances à envoyer</span></div><button class="btn sm" data-todo="relances">Voir</button></li>'+
+      '<li><div><b>Journée non clôturée</b><span>La clôture verrouille les écritures</span></div><button class="btn sm pri" data-todo="clôture">Clôturer</button></li></ul></div>'+
+     '<div class="card flush w12"><div style="padding:15px 18px 0"><div class="card-h">'+qr('doc',DOM.finances,'soft')+'<h2>Derniers reçus émis</h2><span class="cnt">'+RECUS.length+'</span></div></div>'+
+      tbl(['N°','Heure','Élève','Objet','Mode','Montant FC'],RECUS.map(x=>[
+        '<span class="mn">'+x.no+'</span>','<span class="mn">'+x.h+'</span>','<span class="st">'+esc(x.el)+'</span>',esc(x.t),esc(x.mode),
+        '<span class="mn rt" style="display:block">'+fc(x.m)+'</span>'
+      ]),[0,0,0,0,0,1])+
+      '<div class="pager"><span>Total affiché</span><span class="mn" style="font-weight:700;color:var(--t1)">'+fc(tot)+' FC</span></div></div>'+
+    '</div>';
+  }
+  if(r==='enseignant'){
+    const cls='3e primaire A', mine=EL.filter(e=>e.cls===cls);
+    return '<div class="bento">'+
+     mod({l:'Ma classe',n:String(mine.length*3),s:cls,i:'cls',c:DOM.pedago,w:'w4'})+
+     mod({l:"Présents aujourd'hui",n:'34 <em>/ 36</em>',s:'2 absences · 1 justifiée',i:'check',c:DOM.portail,w:'w4',go:'attendance'})+
+     mod({l:'Devoirs à corriger',n:'18',s:'Mathématiques — fractions',i:'book',c:DOM.comm,w:'w4'})+
+     '<div class="card w6"><div class="card-h">'+qr('clock',DOM.pedago,'soft')+'<h2>Ma journée</h2></div>'+
+      '<ul class="lst">'+
+      '<li>'+qr('book','var(--violet)','sm soft')+'<div><b>07:30 — Mathématiques</b><span>Fractions · salle 3</span></div><span class="tag ok"><s></s>Fait</span></li>'+
+      '<li>'+qr('book','var(--violet)','sm soft')+'<div><b>09:15 — Français</b><span>Dictée préparée · salle 3</span></div><span class="tag inf"><s></s>En cours</span></li>'+
+      '<li>'+qr('food','var(--orange)','sm soft')+'<div><b>11:30 — Surveillance cantine</b><span>Réfectoire</span></div><span class="tag"><s></s>À venir</span></li>'+
+      '</ul></div>'+
+     '<div class="card w6"><div class="card-h">'+qr('check',DOM.portail,'soft')+'<h2>Appel du jour</h2><button class="lnk" data-go="attendance">Ouvrir</button></div>'+
+      '<div class="alert wa">'+ic('clock')+'<div><b>L\'appel de l\'après-midi n\'est pas fait</b><span>Il ferme automatiquement à 15h00.</span></div></div>'+
+      '<button class="btn pri full lg" style="margin-top:11px" data-go="attendance">'+ic('check')+'Faire l\'appel</button></div>'+
+     '<div class="card w12"><div class="card-h">'+qr('msg',DOM.comm,'soft')+'<h2>Messages</h2><span class="cnt">2</span><button class="lnk" data-go="messages">Ouvrir</button></div>'+
+      '<ul class="lst">'+MSGS.slice(0,2).map(m=>'<li>'+qr('user','var(--orange)','sm soft')+'<div><b>'+esc(m.de)+'</b><span>'+esc(m.txt.slice(0,86))+'…</span></div><span style="font-size:11px;color:var(--t3);white-space:nowrap">'+esc(m.ap)+'</span></li>').join('')+'</ul></div>'+
+    '</div>';
+  }
+  if(r==='gardien'){
+    return '<div class="bento">'+
+     mod({l:'Entrées ce matin',n:'1 118',s:'sur 1 247 attendus',i:'scan',c:DOM.portail,w:'w4'})+
+     mod({l:'Sorties enregistrées',n:'0',s:'la sortie ouvre à 11h30',i:'door',c:DOM.personnes,w:'w4'})+
+     mod({l:'Refus ce matin',n:'3',s:'frais impayés · carte périmée',i:'alert',c:DOM.urgence,w:'w4'})+
+     '<div class="card w12" style="text-align:center;padding:26px 18px">'+
+      '<div style="display:flex;justify-content:center;margin-bottom:13px">'+qr('scan',DOM.portail,'lg soft')+'</div>'+
+      '<div style="font:700 17px/1.3 var(--ui);margin-bottom:5px">Le portail est ouvert</div>'+
+      '<div style="font-size:13px;color:var(--t2);margin-bottom:15px">Présentez la carte de l\'élève devant l\'appareil.</div>'+
+      '<button class="btn gold lg" data-go="scanner">'+ic('scan')+'Ouvrir le scanner</button></div>'+
+     '<div class="card flush w12"><div style="padding:15px 18px 0"><div class="card-h">'+qr('clock',DOM.portail,'soft')+'<h2>Derniers passages</h2></div></div>'+
+      tbl(['Heure','Élève','Classe','État'],EL.slice(0,6).filter(e=>e.ent!=='—').map(e=>[
+        '<span class="mn">'+e.ent+'</span>','<span class="st">'+esc(e.nom)+'</span>',
+        '<span class="cls" style="--c:'+CL[e.cls]+'"><s></s>'+esc(e.cls)+'</span>',
+        e.f==='no'?'<span class="tag no"><s></s>Refus · frais</span>':(e.ent>'08:00'?'<span class="tag wa"><s></s>Retard</span>':'<span class="tag ok"><s></s>À l\'heure</span>')
+      ]))+'</div>'+
+    '</div>';
+  }
+  // parent
+  const kid=EL[1];
+  return '<div class="bento">'+
+   '<div class="card w12" style="background:linear-gradient(150deg,#12358F,#1E4FCB);border-color:transparent;color:#fff">'+
+    '<div style="display:flex;align-items:center;gap:13px;margin-bottom:13px">'+
+     '<span class="qr lg" style="--c:#fff;background:rgba(255,255,255,.14)">'+ic('user')+'</span>'+
+     '<div><div style="font:700 17px/1.25 var(--ui)">'+esc(kid.nom)+'</div><div style="font-size:12.5px;color:#A9BCEB">'+esc(kid.cls)+' · '+esc(kid.mat)+'</div></div></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+     '<span class="tag ok"><s></s>Entré à '+kid.ent+'</span><span class="tag ok"><s></s>Sorti à '+kid.sor+'</span><span class="tag wa"><s></s>2e tranche à régler</span></div></div>'+
+   '<div class="card w6"><div class="card-h">'+qr('book',DOM.pedago,'soft')+'<h2>Devoirs à rendre</h2><span class="cnt">2</span></div>'+
+    '<ul class="lst"><li><div><b>Mathématiques — fractions</b><span>À rendre lundi 17 août</span></div>'+ic('chevr')+'</li>'+
+    '<li><div><b>Français — dictée préparée</b><span>À rendre mardi 18 août</span></div>'+ic('chevr')+'</li></ul></div>'+
+   '<div class="card w6"><div class="card-h">'+qr('money',DOM.finances,'soft')+'<h2>Frais scolaires</h2></div>'+
+    '<div style="display:flex;align-items:flex-start;gap:11px;margin-bottom:11px"><div style="flex:1"><div style="font:800 21px/1.15 var(--ui);letter-spacing:-.02em">85 000 FC</div>'+
+    '<div style="font-size:11.5px;color:var(--t3);margin-top:3px">2e tranche — à régler avant le 31 août</div></div><span class="tag wa"><s></s>En attente</span></div>'+
+    '<div style="height:7px;background:var(--surf2);overflow:hidden"><i style="display:block;height:100%;width:64%;background:var(--or)"></i></div>'+
+    '<div style="font-size:11px;color:var(--t3);margin-top:6px">155 000 FC réglés sur 240 000 FC</div></div>'+
+   '<div class="card w12"><div class="card-h">'+qr('msg',DOM.comm,'soft')+'<h2>Messages de l\'école</h2><span class="cnt">1</span><button class="lnk" data-go="messages">Ouvrir</button></div>'+
+    '<ul class="lst"><li>'+qr('shield','var(--bleu)','sm soft')+'<div><b>Direction</b><span>Réunion des parents — samedi 22 août à 9h00</span></div><span class="tag inf"><s></s>Non lu</span></li></ul></div>'+
+  '</div>';
+};
+
+function tbl(head,rows,rt){
+  return '<div class="tw"><table class="tbl"><thead><tr>'+head.map((h,i)=>'<th'+((rt&&rt[i])?' class="rt"':'')+'>'+h+'</th>').join('')+'</tr></thead><tbody>'+
+   rows.map(r=>'<tr>'+r.map((c,i)=>'<td'+((rt&&rt[i])?' class="rt"':'')+'>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+}
+
+V.students=function(){
+  if(S.tab==='archives'){
+    return '<div class="tabs"><button data-tab="actifs">Actifs <em>1 247</em></button>'+
+     '<button class="on" data-tab="archives">Archivés <em>318</em></button></div>'+
+     '<div class="card" style="text-align:center;padding:52px 24px">'+
+      '<div style="display:flex;justify-content:center;margin-bottom:14px">'+qr('doc',DOM.systeme,'lg soft')+'</div>'+
+      '<div style="font:700 17px/1.3 var(--ui);margin-bottom:6px">318 élèves archivés</div>'+
+      '<p style="font-size:13.5px;color:var(--t2);max-width:56ch;margin:0 auto 16px">Rien n\'est supprimé : paiements, présences et notes sont conservés. Un élève archivé sort des listes de l\'année en cours, pas de l\'histoire de l\'école.</p>'+
+      '<button class="btn" data-tab="actifs">Revenir aux élèves actifs</button></div>';
+  }
+  let list=EL.slice();
+  if(S.q){const q=S.q.toLowerCase();list=list.filter(e=>e.nom.toLowerCase().includes(q)||e.mat.toLowerCase().includes(q)||(e.tut||'').toLowerCase().includes(q));}
+  if(S.cf)list=list.filter(e=>e.cls===S.cf);
+  const nsel=Object.keys(S.sel).filter(k=>S.sel[k]).length;
+  const clsList=Object.keys(CL);
+  return '<div class="tabs"><button class="'+(S.tab==='actifs'?'on':'')+'" data-tab="actifs">Actifs <em>1 247</em></button>'+
+   '<button class="'+(S.tab==='archives'?'on':'')+'" data-tab="archives">Archivés <em>318</em></button></div>'+
+   '<div class="tools"><div class="inw grow">'+ic('search')+'<input class="in" id="q" placeholder="Nom, matricule ou nom d\'un tuteur…" value="'+esc(S.q)+'"></div>'+
+   '<button class="btn" data-todo="filtres avancés">'+ic('grid')+'Filtres</button>'+
+   '<button class="btn" data-todo="import CSV">Import CSV</button>'+
+   '<button class="btn pri" data-todo="inscription d\'un élève">'+ic('plus')+'Inscrire</button></div>'+
+   '<div class="chips"><button class="'+(S.cf===''?'on':'')+'" data-cf="">Toutes les classes</button>'+
+   clsList.map(c=>'<button class="'+(S.cf===c?'on':'')+'" data-cf="'+esc(c)+'">'+esc(c)+'</button>').join('')+'</div>'+
+   (nsel?'<div class="selbar"><b>'+nsel+' élève'+(nsel>1?'s':'')+' sélectionné'+(nsel>1?'s':'')+'</b>'+
+     '<span style="display:flex;gap:7px;flex-wrap:wrap;margin-left:auto"><button class="btn sm" data-todo="changement de classe">Changer de classe</button>'+
+     '<button class="btn sm" data-todo="édition de cartes">Éditer les cartes</button><button class="btn sm" data-todo="export">Exporter</button>'+
+     '<button class="lnk" data-clear="1">Tout désélectionner</button></span></div>':'')+
+   '<div class="card flush">'+
+    '<div class="tw"><table class="tbl"><thead><tr><th style="width:36px"></th><th style="width:40px">N°</th><th>Élève</th><th class="tbl-hide">Classe</th><th class="tbl-hide">Matricule</th><th class="tbl-hide">Tuteur principal</th><th>Frais</th><th></th></tr></thead><tbody>'+
+    (list.length?list.map(e=>'<tr class="'+(S.sel[e.n]?'sel':'')+'">'+
+      '<td><span class="cb '+(S.sel[e.n]?'on':'')+'" data-sel="'+e.n+'" role="checkbox" tabindex="0" aria-checked="'+(S.sel[e.n]?'true':'false')+'"></span></td>'+
+      '<td><span class="mn" style="color:var(--t3)">'+String(e.n).padStart(3,'0')+'</span></td>'+
+      '<td><div class="pers">'+qr('user',CL[e.cls],'sm soft')+'<div><b>'+esc(e.nom)+'</b><span>'+e.age+' ans</span></div></div></td>'+
+      '<td class="tbl-hide"><span class="cls" style="--c:'+CL[e.cls]+'"><s></s>'+esc(e.cls)+'</span></td>'+
+      '<td class="tbl-hide"><span class="mn">'+esc(e.mat)+'</span></td>'+
+      '<td class="tbl-hide">'+(e.tut?'<div><b style="font:500 12.5px/1.35 var(--ui);color:var(--t1);display:block">'+esc(e.tut)+'</b><span style="font-size:11px;color:var(--t3)">'+esc(e.lien)+' · '+esc(e.tel)+'</span>'+(e.aut?'<span style="display:block;font-size:10.5px;color:var(--bleu-t);font-weight:600">+'+e.aut+' personne'+(e.aut>1?'s':'')+' autorisée'+(e.aut>1?'s':'')+'</span>':'')+'</div>'
+        :'<div><b style="font:650 12.5px/1.35 var(--ui);color:var(--or-t);display:block">Aucun tuteur enregistré</b><span style="font-size:11px;color:var(--t3)">Information manquante à l\'école</span></div>')+'</td>'+
+      '<td>'+tagFrais(e.f,e.solde)+'</td>'+
+      '<td class="rt" style="white-space:nowrap"><button class="btn sm" data-drawer="'+e.n+'">Ouvrir</button></td>'+
+    '</tr>').join('')
+     :'<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--t3)">Aucun élève ne correspond à « '+esc(S.q)+' »</td></tr>')+
+    '</tbody></table></div>'+
+    '<div class="pager"><span>'+list.length+' élève'+(list.length>1?'s':'')+' affiché'+(list.length>1?'s':'')+' sur 1 247</span>'+
+    '<span style="display:flex;gap:7px"><button class="btn sm" disabled>Précédent</button><button class="btn sm" data-todo="page suivante">Suivant</button></span></div></div>';
+};
+
+V.caisse=function(){
+  return '<div class="bento">'+
+   '<div class="card w8"><div class="card-h">'+qr('money',DOM.finances,'soft')+'<h2>Encaisser un paiement</h2></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">'+
+     '<div class="fld" style="grid-column:span 2"><label for="cEl">Élève</label><div class="inw">'+ic('search')+'<input class="in" id="cEl" value="Tshimanga Sefu Emmanuel — LS-2026-0131"></div>'+
+      '<span class="hint">'+ic('check')+'6e primaire A · solde actuel <b>0 FC</b></span></div>'+
+     '<div class="fld"><label for="cT">Objet du paiement</label><div class="selw"><select class="in" id="cT"><option>Minerval — 3e tranche</option><option>Cantine — mois d\'août</option><option>Uniforme</option><option>Activités extrascolaires</option></select>'+ic('chev')+'</div></div>'+
+     '<div class="fld"><label for="cM">Montant</label><input class="in" id="cM" value="120 000" inputmode="decimal">'+
+      '<span class="hint">'+ic('check')+'Lu comme <b>120 000 FC</b> — la virgule est décimale</span></div>'+
+     '<div class="fld"><label for="cMo">Mode</label><div class="selw"><select class="in" id="cMo"><option>Espèces</option><option>Mobile money</option><option>Virement bancaire</option></select>'+ic('chev')+'</div></div>'+
+     '<div class="fld"><label for="cR">Référence (facultatif)</label><input class="in" id="cR" placeholder="N° de transaction"></div>'+
+    '</div>'+
+    '<div class="alert inf" style="margin-top:14px">'+ic('lock')+'<div><b>Reçu, recette et écriture partent ensemble</b><span>Un encaissement qui contournerait cette porte n\'apparaîtrait dans aucun total.</span></div></div>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn gold lg" data-pay="1">'+ic('check')+'Enregistrer et imprimer le reçu</button>'+
+    '<button class="btn lg gh" data-todo="annulation">Annuler</button></div></div>'+
+   '<div class="card w4"><div class="card-h">'+qr('doc',DOM.finances,'soft')+'<h2>Aperçu du reçu</h2></div>'+
+    '<div style="border:1px solid #cfd6dc;border-radius:8px;padding:0 0 15px;background:#ffffff;color:#1a2228;overflow:hidden">'+
+     '<div style="background:#6b7d8b;color:#fff;padding:9px 15px;font:650 9px/1.4 var(--ui);letter-spacing:.09em;text-transform:uppercase;text-align:center">Complexe Scolaire Le Sage</div>'+
+     '<div style="padding:13px 15px 0">'+
+     '<div style="text-align:center;font:600 8.5px/1.5 var(--ui);letter-spacing:.05em;color:#5e6c78;text-transform:uppercase;border-bottom:1px solid #dadee2;padding-bottom:9px;margin-bottom:10px">République Démocratique du Congo<br>Ministère de l\'Éducation Nationale<br>et Nouvelle Citoyenneté</div>'+
+     '<div style="font:700 13px/1.3 var(--ui);text-align:center;color:#1a2228">The Wise School International</div>'+
+     '<div style="font:400 10px/1.4 var(--ui);color:#5e6c78;text-align:center;margin-bottom:11px">Kabambare 4367 · Barumbu · Kinshasa</div>'+
+     '<div style="display:flex;justify-content:space-between;font-size:11px;color:#5e6c78;border-top:1px dashed #dadee2;padding-top:9px"><span>Reçu n°</span><b class="mn" style="color:#1a2228">0413</b></div>'+
+     '<div style="display:flex;justify-content:space-between;font-size:11px;color:#5e6c78;padding-top:5px"><span>Élève</span><b style="color:#1a2228;font-size:11px">Tshimanga S. E.</b></div>'+
+     '<div style="display:flex;justify-content:space-between;font-size:11px;color:#5e6c78;padding-top:5px"><span>Objet</span><b style="color:#1a2228;font-size:11px">Minerval — 3e tr.</b></div>'+
+     '<div style="margin-top:11px;padding:11px;background:#fae6b8;border:1px solid #c09018;text-align:center"><div style="font:650 9px/1 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:#7a5a0d">Montant reçu</div><div style="font:800 19px/1.2 var(--ui);color:#1a2228;margin-top:4px">120 000 FC</div></div>'+
+     '<div style="display:flex;gap:9px;margin-top:12px;font-size:9.5px;color:#5e6c78;text-align:center">'+
+      '<div style="flex:1;border-top:1px solid #6b7d8b;padding-top:4px">Le parent</div>'+
+      '<div style="flex:1;border-top:1px solid #6b7d8b;padding-top:4px">La caissière</div>'+
+      '<div style="flex:1;border-top:1px solid #6b7d8b;padding-top:4px">La Direction</div></div>'+
+    '</div></div>'+
+    '<p style="font-size:11.5px;line-height:1.55;color:var(--t2);margin:11px 0 0"><b style="color:var(--t1)">Regardez cet encadré : il ne ressemble pas au reste.</b> C\'est voulu. Le document porte la charte de l\'ÉCOLE — gris bleuté et or — et l\'interface porte celle du LOGICIEL. Deux mondes, deux chartes. Trois signatures : bénéficiaire, acteur, autorité.</p></div>'+
+  '</div>';
+};
+
+const SCANS=[
+ {c:'var(--vert)',ic:'check',t:'Entrée enregistrée — à l\'heure',s:'Le parent a été prévenu. Aucun frais en attente.',el:0,tag:'ok'},
+ {c:'var(--or)',ic:'clock',t:'Entrée enregistrée — retard de 11 minutes',s:'Le retard est consigné. Le parent a été prévenu.',el:3,tag:'wa'},
+ {c:'var(--rouge)',ic:'alert',t:'Entrée refusée — frais impayés',s:'240 000 FC dus. Dirigez la famille vers la caisse.',el:4,tag:'no'},
+ {c:'var(--rouge)',ic:'lock',t:'Carte déclarée perdue',s:'Cette carte a été invalidée le 12 août. Une carte de remplacement a été émise.',el:2,tag:'no'},
+];
+V.scanner=function(){
+  const r=SCANS[S.scan%SCANS.length], e=EL[r.el];
+  return '<div class="scan"><div class="scan-in">'+
+   '<div class="scan-v"><div class="scan-c"><i></i><i></i><i></i><i></i></div><div class="scan-ln"></div></div>'+
+   '<div class="scan-hint">Présentez la carte de l\'élève dans le cadre</div>'+
+   '<div class="scan-r" style="--c:'+r.c+'">'+
+    '<div class="scan-r-h"><span class="qr lg" style="--c:'+r.c+';background:color-mix(in srgb,'+r.c+' 18%,transparent)">'+ic('user')+'</span>'+
+     '<div style="flex:1;min-width:0"><b>'+esc(e.nom)+'</b><span>'+esc(e.cls)+' · '+esc(e.mat)+'</span></div>'+
+     '<span class="tag '+r.tag+'"><s></s>'+(r.tag==='ok'?'Autorisé':(r.tag==='wa'?'Retard':'Refusé'))+'</span></div>'+
+    '<div class="scan-r-v">'+ic(r.ic)+'<div><b>'+esc(r.t)+'</b><span>'+esc(r.s)+'</span></div></div>'+
+    '<div class="scan-a">'+(r.tag==='no'
+      ?'<button class="btn" data-todo="dérogation">Laisser entrer quand même</button><button class="btn gold" data-scan="1">Scan suivant</button>'
+      :'<button class="btn gold" data-scan="1">Scan suivant</button>')+'</div>'+
+    (r.tag==='no'?'<div style="font-size:11px;color:#7B879F;text-align:center;margin-top:9px">Une dérogation est consignée avec son motif, et la Direction en est avertie.</div>':'')+
+   '</div></div></div>';
+};
+V.scanner_exit=V.scanner;
+
+V.messages=function(){
+  const m=MSGS[S.msg];
+  return '<div class="bento">'+
+   '<div class="card flush w4" style="display:flex;flex-direction:column;max-height:520px">'+
+    '<div style="padding:14px 16px;border-bottom:1px solid var(--line)"><div class="inw">'+ic('search')+'<input class="in" placeholder="Chercher un message…"></div></div>'+
+    '<div style="overflow-y:auto">'+MSGS.map((x,i)=>'<button style="display:flex;gap:10px;width:100%;text-align:left;padding:12px 15px;border:none;border-bottom:1px solid var(--line2);background:'+(i===S.msg?'var(--bleu-w)':'transparent')+';cursor:pointer" data-msg="'+i+'">'+
+      qr('user',x.nl?'var(--orange)':'var(--gris-t)','sm soft')+
+      '<span style="flex:1;min-width:0"><b style="display:block;font:650 12.5px/1.35 var(--ui);color:var(--t1)">'+esc(x.de)+'</b>'+
+      '<span style="display:block;font:400 10.5px/1.35 var(--ui);color:var(--t3)">'+esc(x.rl)+'</span>'+
+      '<span style="display:block;font:400 11.5px/1.4 var(--ui);color:var(--t2);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.txt)+'</span></span>'+
+      (x.nl?'<s style="width:8px;height:8px;background:var(--bleu);flex:none;margin-top:5px"></s>':'')+'</button>').join('')+'</div></div>'+
+   '<div class="card w8" style="display:flex;flex-direction:column;max-height:520px">'+
+    '<div class="card-h" style="padding-bottom:13px;border-bottom:1px solid var(--line);margin-bottom:14px">'+qr('user','var(--orange)','soft')+
+     '<h2 style="flex-direction:column;align-items:flex-start;gap:1px"><span>'+esc(m.de)+'</span><span style="font:400 11px/1.3 var(--ui);color:var(--t3)">'+esc(m.rl)+'</span></h2>'+
+     '<button class="btn sm" data-todo="transfert à l\'enseignant">Transférer</button></div>'+
+    '<div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:11px">'+
+     '<div style="max-width:80%;background:var(--surf2);border:1px solid var(--line);border-radius:12px 12px 12px 3px;padding:12px 14px">'+
+      '<div style="font-size:13px;line-height:1.55;color:var(--t1)">'+esc(m.txt)+'</div>'+
+      '<div style="font-size:10.5px;color:var(--t3);margin-top:6px">'+esc(m.ap)+'</div></div>'+
+     '<div style="max-width:80%;align-self:flex-end;background:var(--bleu);color:var(--on-bleu);border-radius:12px 12px 3px 12px;padding:12px 14px">'+
+      '<div style="font-size:13px;line-height:1.55">Bien reçu, merci de nous avoir prévenus. Je transmets à l\'enseignant de la classe.</div>'+
+      '<div style="font-size:10.5px;opacity:.75;margin-top:6px">il y a 4 min · <span>Remis</span></div></div>'+
+    '</div>'+
+    '<div style="border-top:1px solid var(--line);padding-top:13px;margin-top:13px;display:flex;gap:8px;align-items:flex-end">'+
+     '<textarea class="in" rows="2" placeholder="Écrire une réponse…" style="flex:1"></textarea>'+
+     '<button class="btn pri lg" data-send="1">'+ic('send')+'Envoyer</button></div>'+
+    '<div style="font-size:11px;color:var(--t3);margin-top:8px">Hors ligne, le message est mis en file d\'attente — et l\'écran le dit ainsi, il n\'annonce pas un envoi.</div></div>'+
+  '</div>';
+};
+
+V.attendance=function(){
+  const cls='3e primaire A';
+  const roster=EL.concat(EL.slice(0,4)).slice(0,10).map((e,i)=>({n:i+1,nom:e.nom,mat:e.mat}));
+  const st=k=>S.pres[k]||'p';
+  const bt=(k,v,lbl,cl)=>'<button class="btn sm" data-pres="'+k+':'+v+'" style="'+(st(k)===v?'background:var(--'+cl+');border-color:var(--'+cl+');color:#fff':'')+'">'+lbl+'</button>';
+  const np=roster.filter(r=>st(r.n)==='p').length, na=roster.filter(r=>st(r.n)==='a').length, nr=roster.filter(r=>st(r.n)==='r').length;
+  return '<div class="bento">'+
+   mod({l:'Présents',n:String(np),s:'sur '+roster.length,i:'check',c:DOM.portail,w:'w4'})+
+   mod({l:'Absents',n:String(na),s:na?'à justifier':'aucun',i:'alert',c:DOM.urgence,w:'w4'})+
+   mod({l:'Retards',n:String(nr),s:'consignés',i:'clock',c:DOM.finances,w:'w4'})+
+   '<div class="card flush w12"><div style="padding:15px 18px 0"><div class="card-h">'+qr('cls',DOM.pedago,'soft')+
+    '<h2>Appel du matin — '+cls+'</h2><span class="tag wa"><s></s>Non validé</span></div></div>'+
+    '<div class="tw"><table class="tbl"><thead><tr><th style="width:40px">N°</th><th>Élève</th><th class="tbl-hide">Matricule</th><th class="rt">État</th></tr></thead><tbody>'+
+    roster.map(r=>'<tr><td><span class="mn" style="color:var(--t3)">'+String(r.n).padStart(2,'0')+'</span></td>'+
+     '<td><span class="st">'+esc(r.nom)+'</span></td><td class="tbl-hide"><span class="mn">'+esc(r.mat)+'</span></td>'+
+     '<td class="rt"><span style="display:inline-flex;gap:5px">'+bt(r.n,'p','Présent','vert')+bt(r.n,'r','Retard','or')+bt(r.n,'a','Absent','rouge')+'</span></td></tr>').join('')+
+    '</tbody></table></div>'+
+    '<div class="pager"><span>L\'appel se ferme automatiquement à 09h30</span><button class="btn pri sm" data-todo="validation de l\'appel">Valider l\'appel</button></div></div>'+
+  '</div>';
+};
+
+V.enfants=function(){
+  const k=[EL[1],EL[8]];
+  return '<div class="bento">'+k.map(e=>
+   '<div class="card w6"><div style="display:flex;align-items:center;gap:12px;margin-bottom:13px">'+
+    qr('user',CL[e.cls],'lg soft')+'<div style="flex:1"><div style="font:700 15px/1.3 var(--ui)">'+esc(e.nom)+'</div>'+
+    '<div style="font-size:12px;color:var(--t3)">'+esc(e.cls)+' · '+esc(e.mat)+'</div></div></div>'+
+   '<ul class="kv"><li><span>Entrée aujourd\'hui</span><b>'+(e.ent==='—'?'—':e.ent)+'</b></li>'+
+   '<li><span>Sortie</span><b>'+(e.sor==='—'?'pas encore':e.sor)+'</b></li>'+
+   '<li><span>Frais</span><b>'+tagFrais(e.f,e.solde)+'</b></li>'+
+   '<li><span>Moyenne du trimestre</span><b>'+(e.n===2?'13,4 / 20':'14,8 / 20')+'</b></li>'+
+   '<li><span>Personnes autorisées</span><b>'+(e.aut||0)+'</b></li></ul>'+
+   '<div style="display:flex;gap:7px;margin-top:13px;flex-wrap:wrap"><button class="btn sm" data-todo="bulletin">Bulletin</button>'+
+   '<button class="btn sm" data-todo="reçus">Mes reçus</button><button class="btn sm" data-todo="justification">Justifier une absence</button></div></div>').join('')+
+  '</div>';
+};
+
+V.menu=function(){
+  const n=NAV[S.role];
+  return '<div style="display:grid;gap:12px">'+
+   n.groups.map(g=>'<div class="card"><div class="card-h">'+qr(g.i,DOM[g.d],'soft')+'<h2>'+esc(g.t)+'</h2></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'+
+    g.items.map(it=>'<button class="btn" style="justify-content:flex-start" data-go="'+it[0]+'">'+esc(it[1])+'</button>').join('')+'</div></div>').join('')+
+   '<button class="btn full lg dgr" data-todo="déconnexion">'+ic('out')+'Déconnexion</button></div>';
+};
+
+V.systeme=function(){
+  const sw=(c,n,h,e)=>'<div class="swat"><b style="--c:'+h+'"></b><div><code>'+n+'</code><span>'+h+'</span><em>'+e+'</em></div></div>';
+  return '<div style="display:grid;gap:16px">'+
+   '<div class="card"><div class="card-h">'+qr('grid',DOM.personnes,'soft')+'<h2>La couleur vient du logo, et elle dit un DOMAINE</h2></div>'+
+    '<p style="font-size:13.5px;color:var(--t2);margin:0 0 14px;max-width:74ch">C\'est la différence avec la proposition n° 1, où la couleur disait un <em>état</em>. Ici les six couleurs du bouclier nomment les six domaines de l\'école. Elles vivent dans le décor — menu, bandeau, tuiles, icônes — <b style="color:var(--t1)">et jamais dans une donnée</b>. Dans un tableau, on ne voit donc que les couleurs d\'état.</p>'+
+    '<div class="sysgrid">'+
+     sw(0,'--bleu · Personnes','#1E4FCB','Blanc dessus : 6,92:1')+
+     sw(0,'--or · Finances','#F5B21B','Aplat seulement. Encre dessus : 10,16:1')+
+     sw(0,'--vert · Portail','#0FA35C','Texte : #0A7A44 → 5,41:1')+
+     sw(0,'--violet · Pédagogie','#7B3FE4','Texte : #6B32C9 → 7,18:1')+
+     sw(0,'--orange · Communication','#F07C0C','Texte : #A85405 → 5,34:1')+
+     sw(0,'--rouge · Urgences','#E0231D','Texte : #C41A15 → 5,99:1')+
+    '</div>'+
+    '<div class="alert wa" style="margin-top:14px">'+ic('alert')+'<div><b>L\'or ne s\'écrit pas, il se remplit</b><span>#F5B21B sur blanc donne 1,86:1 — illisible. Mais l\'encre sur l\'or donne 10,16:1. C\'est la même leçon que l\'or de l\'école, retrouvée sur celui du logiciel.</span></div></div></div>'+
+   '<div class="card"><div class="card-h">'+qr('scan',DOM.portail,'soft')+'<h2>Le repère — le motif signature</h2></div>'+
+    '<p style="font-size:13.5px;color:var(--t2);margin:0 0 14px;max-width:74ch">Les trois grands carrés du QR, dans le bouclier, sont un carré dans un carré. Ce motif devient le porte-icône de toute l\'application : en-têtes de tuiles, avatars, titres de page, listes. Angles vifs — c\'est un module de QR, pas un bouton.</p>'+
+    '<div class="demo-row">'+qr('students',DOM.personnes,'lg soft')+qr('money',DOM.finances,'lg soft')+qr('shield',DOM.portail,'lg soft')+qr('book',DOM.pedago,'lg soft')+qr('msg',DOM.comm,'lg soft')+qr('alert',DOM.urgence,'lg soft')+
+    qr('user',DOM.personnes,'soft')+qr('user',DOM.personnes,'sm soft')+'</div></div>'+
+   '<div class="card"><div class="card-h">'+qr('doc',DOM.systeme,'soft')+'<h2>Boutons, champs, états</h2></div>'+
+    '<div class="demo-row" style="margin-bottom:13px"><button class="btn gold">Action principale</button><button class="btn pri">Action bleue</button><button class="btn">Secondaire</button><button class="btn gh">Discret</button><button class="btn dgr">Destructif</button><button class="btn" disabled>Indisponible</button></div>'+
+    '<div class="demo-row" style="margin-bottom:13px"><span class="tag ok"><s></s>Payé</span><span class="tag wa"><s></s>En attente</span><span class="tag no"><s></s>Impayé</span><span class="tag inf"><s></s>Différé</span><span class="tag"><s></s>Archivé</span></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:13px">'+
+     '<div class="fld"><label>Nom complet</label><input class="in" value="Kalala Mutombo Espérance"></div>'+
+     '<div class="fld"><label>Téléphone</label><input class="in" value="+243 81 000 00 00"><span class="hint">'+ic('check')+'Enregistré : <b>+243810000000</b></span></div>'+
+    '</div>'+
+    '<div style="display:grid;gap:9px;margin-top:14px">'+
+     '<div class="alert ok">'+ic('check')+'<div><b>Paiement enregistré — reçu n° 0413</b><span>Le reçu est disponible dans « Mes reçus » du parent.</span></div></div>'+
+     '<div class="alert wa">'+ic('clock')+'<div><b>Message en file d\'attente</b><span>L\'appareil est hors ligne. Il n\'est pas encore arrivé à la Direction.</span></div></div>'+
+     '<div class="alert no">'+ic('alert')+'<div><b>Le serveur a refusé la modification du numéro</b><span>Changer un numéro change une identité de connexion. Passez par « Corriger les coordonnées ».</span></div></div>'+
+    '</div></div>'+
+   '<div class="card"><div class="card-h">'+qr('menu',DOM.systeme,'soft')+'<h2>Navigation à trois niveaux</h2></div>'+
+    '<ul class="lst">'+
+    '<li>'+qr('menu','var(--bleu)','sm soft')+'<div><b>Les groupes, un seul ouvert à la fois</b><span>Direction 1 a 53 destinations. Le menu tient sur la hauteur de l\'écran parce qu\'un groupe qui s\'ouvre referme l\'autre.</span></div></li>'+
+    '<li>'+qr('search','var(--bleu)','sm soft')+'<div><b>La palette — Ctrl K</b><span>Au-delà de trente destinations, personne ne parcourt : on cherche. Elle atteint aussi des actions, pas seulement des pages.</span></div></li>'+
+    '<li>'+qr('scan','var(--bleu)','sm soft')+'<div><b>Le rail et la barre du bas</b><span>Tablette : 74 px d\'icônes. Téléphone : cinq entrées choisies par rôle — le gardien a « Entrée » et « Sortie » en premier.</span></div></li>'+
+    '</ul></div>'+
+  '</div>';
+};
+
+function drawer(){
+  if(!S.drawer)return '';
+  const e=EL.find(x=>x.n===S.drawer); if(!e)return '';
+  return '<div class="drw" role="dialog" aria-label="Fiche élève">'+
+   '<div class="drw-h">'+qr('user',CL[e.cls],'lg soft')+'<h3>'+esc(e.nom)+'</h3><button class="btn ico sm" data-drawer="close" aria-label="Fermer">'+ic('x')+'</button></div>'+
+   '<div class="drw-b">'+
+    '<div><span class="sect-l">Identité</span><ul class="kv">'+
+     '<li><span>Matricule</span><b class="mn">'+esc(e.mat)+'</b></li>'+
+     '<li><span>Classe</span><b><span class="cls" style="--c:'+CL[e.cls]+'"><s></s>'+esc(e.cls)+'</span></b></li>'+
+     '<li><span>Âge</span><b>'+e.age+' ans</b></li>'+
+     '<li><span>N° d\'ordre au registre</span><b class="mn">'+String(e.n).padStart(3,'0')+'</b></li></ul></div>'+
+    '<div><span class="sect-l">Tuteurs et personnes autorisées</span>'+
+     (e.tut?'<ul class="kv"><li><span>'+esc(e.lien)+'</span><b>'+esc(e.tut)+'</b></li><li><span>Téléphone</span><b class="mn">'+esc(e.tel)+'</b></li>'+
+      '<li><span>Personnes autorisées</span><b>'+e.aut+' active'+(e.aut>1?'s':'')+'</b></li></ul>'
+      :'<div class="alert wa">'+ic('alert')+'<div><b>Aucun tuteur enregistré</b><span>C\'est une information qui manque à l\'école, pas un enfant sans famille. À compléter au bureau, avec une pièce d\'identité.</span></div></div>')+'</div>'+
+    '<div><span class="sect-l">Frais scolaires</span><ul class="kv">'+
+     '<li><span>État</span><b>'+tagFrais(e.f,e.solde)+'</b></li>'+
+     '<li><span>Solde restant</span><b class="'+(e.solde?'no-t':'')+'">'+fc(e.solde)+' FC</b></li></ul></div>'+
+    '<div><span class="sect-l">Portail — aujourd\'hui</span><ul class="kv">'+
+     '<li><span>Entrée</span><b>'+(e.ent==='—'?'non signalé':e.ent)+'</b></li>'+
+     '<li><span>Sortie</span><b>'+(e.sor==='—'?'pas encore':e.sor)+'</b></li></ul></div>'+
+    '<div><span class="sect-l">Documents à délivrer</span>'+
+     '<div style="display:grid;gap:6px">'+
+     ['Attestation de scolarité','Certificat de passage','Certificat de bonne conduite','Fiche d\'inscription'].map(d=>
+      '<button class="btn" style="justify-content:flex-start" data-todo="'+esc(d)+'">'+ic('doc')+esc(d)+'</button>').join('')+'</div>'+
+     '<p style="font-size:11.5px;color:var(--t2);margin:9px 0 0">Un certificat engage l\'école : il se délivre et se trace, il ne se télécharge pas.</p></div>'+
+   '</div>'+
+   '<div class="drw-f"><button class="btn pri" style="flex:1" data-todo="modification de la fiche">Modifier la fiche</button>'+
+   '<button class="btn" data-todo="émission de carte">Émettre une carte</button></div></div>';
+}
+
+function palette(){
+  if(!S.pal)return '';
+  const n=NAV[S.role], q=S.palq.toLowerCase().trim();
+  let dest=[];
+  n.top.forEach(t=>dest.push({id:t.id,l:t.l,g:'Principal',i:t.i}));
+  n.groups.forEach(g=>g.items.forEach(it=>dest.push({id:it[0],l:it[1],g:g.t,i:g.i})));
+  const acts=[{id:'caisse',l:'Encaisser un paiement',g:'Action',i:'plus'},{id:'students',l:'Chercher un élève',g:'Action',i:'search'},{id:'scanner',l:'Ouvrir le scanner du portail',g:'Action',i:'scan'},{id:'systeme',l:'Voir le système de design',g:'Action',i:'grid'}];
+  const hit=x=>!q||x.l.toLowerCase().includes(q)||x.g.toLowerCase().includes(q);
+  const fd=dest.filter(hit), fa=acts.filter(hit);
+  const hl=l=>{if(!q)return esc(l);const i=l.toLowerCase().indexOf(q);if(i<0)return esc(l);return esc(l.slice(0,i))+'<b style="color:var(--bleu-t);font-weight:800">'+esc(l.slice(i,i+q.length))+'</b>'+esc(l.slice(i+q.length));};
+  return '<div class="ov" data-pal="close"><div class="pal" role="dialog" aria-label="Recherche">'+
+   '<div class="pal-in">'+ic('search')+'<input id="palq" placeholder="Aller à un écran, ou faire une action…" value="'+esc(S.palq)+'" autocomplete="off"><kbd>Échap</kbd></div>'+
+   '<div class="pal-l">'+
+    (fd.length?'<div class="pal-s">Aller à — '+fd.length+' destination'+(fd.length>1?'s':'')+'</div>'+fd.slice(0,14).map(x=>
+      '<button class="pal-i" data-go="'+x.id+'">'+ic(x.i)+'<span>'+hl(x.l)+'</span><em>'+esc(x.g)+'</em></button>').join(''):'')+
+    (fa.length?'<div class="pal-s">Faire</div>'+fa.map(x=>'<button class="pal-i" data-go="'+x.id+'">'+ic(x.i)+'<span>'+hl(x.l)+'</span><em>'+esc(x.g)+'</em></button>').join(''):'')+
+    (!fd.length&&!fa.length?'<div class="pal-e">Rien ne correspond à « '+esc(S.palq)+' ».<br>Essayez « élève », « caisse », « portail ».</div>':'')+
+   '</div></div></div>';
+}
+
+/* ═══════════ RENDU ═══════════ */
+function railHTML(){
+  const n=NAV[S.role], p=PROF[S.role];
+  let h='<aside class="rail"><div class="rail-brand"><span class="mk">'+mark(false)+'</span>'+
+   '<div><b>School<i>Safe</i></b><em><s style="--c:'+p.c+'"></s>'+esc(p.lbl)+'</em></div></div>'+
+   '<button class="cmd" data-pal="open">'+ic('search')+'<span>Rechercher…</span><kbd>Ctrl K</kbd></button><nav class="nav">';
+  n.top.forEach(t=>{h+='<button class="nv '+(S.page===t.id?'on':'')+'" style="--c:'+DOM[t.d]+'" data-go="'+t.id+'">'+ic(t.i)+'<span>'+esc(t.l)+'</span>'+(t.b?'<span class="bdg">'+t.b+'</span>':'')+'</button>';});
+  n.groups.forEach((g,gi)=>{
+    const open=S.open===gi, act=g.items.some(it=>it[0]===S.page);
+    h+='<div class="ng '+(open?'open':'')+'"><button class="ng-h" style="color:'+(act?'#fff':'')+'" data-grp="'+gi+'">'+ic(g.i)+'<span>'+esc(g.t)+'</span>'+
+      (g.b?'<span class="bdg q">'+g.b+'</span>':'')+ic('chev','cv')+'</button>'+
+      (open?'<div class="ng-s">'+g.items.map(it=>'<button class="'+(S.page===it[0]?'on':'')+'" data-go="'+it[0]+'">'+esc(it[1])+'</button>').join('')+'</div>':'')+'</div>';
+  });
+  h+='</nav><div class="rail-f"><button class="me" data-todo="mon profil">'+
+   '<span class="qr sm">'+ic('user')+'</span><div><b>'+esc(p.nom)+'</b><span>'+esc(p.lbl)+'</span></div>'+ic('chevr')+'</button></div></aside>';
+  return h;
+}
+function bnHTML(){
+  const n=NAV[S.role];
+  return '<nav class="bn">'+n.bn.map(b=>'<button class="'+(S.page===b[0]?'on':'')+'" data-go="'+b[0]+'">'+ic(b[1])+
+   (b[3]?'<span class="bdg">'+b[3]+'</span>':'')+'<small>'+esc(b[2])+'</small></button>').join('')+'</nav>';
+}
+function pageHTML(){
+  if(V[S.page])return V[S.page]();
+  const n=NAV[S.role]; let grp='', dom='systeme';
+  n.groups.forEach(g=>g.items.forEach(it=>{if(it[0]===S.page){grp=g.t;dom=g.d;}}));
+  return '<div class="card" style="text-align:center;padding:52px 24px">'+
+   '<div style="display:flex;justify-content:center;margin-bottom:14px">'+qr('doc',DOM[dom],'lg soft')+'</div>'+
+   '<div style="font:700 17px/1.3 var(--ui);margin-bottom:6px">'+esc(titre())+'</div>'+
+   '<p style="font-size:13.5px;color:var(--t2);max-width:52ch;margin:0 auto 16px">Cet écran existe dans l\'application'+(grp?' — groupe « '+esc(grp)+' »':'')+
+   '. Il n\'est pas dessiné dans ce prototype : les neuf écrans détaillés suffisent à juger la direction visuelle.</p>'+
+   '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'+
+   '<button class="btn pri" data-go="dashboard">Retour au tableau de bord</button>'+
+   '<button class="btn" data-go="systeme">Voir le système</button></div></div>';
+}
+function titre(){
+  if(TITRES[S.page])return TITRES[S.page];
+  const n=NAV[S.role]; let t=S.page;
+  n.top.forEach(x=>{if(x.id===S.page)t=x.l;});
+  n.groups.forEach(g=>g.items.forEach(it=>{if(it[0]===S.page)t=it[1];}));
+  return t;
+}
+function pageDom(){
+  const n=NAV[S.role]; let d='personnes';
+  n.top.forEach(x=>{if(x.id===S.page)d=x.d;});
+  n.groups.forEach(g=>g.items.forEach(it=>{if(it[0]===S.page)d=g.d;}));
+  return d;
+}
+
+function draw(){
+  if(!S.logged){app.innerHTML=loginHTML();bind();return;}
+  const d=pageDom();
+  app.innerHTML='<div class="app">'+
+   '<div class="arc '+(S.sync?'':'on')+'"></div>'+
+   railHTML()+
+   '<div class="main">'+
+    '<header class="top"><h1>'+qr(navIcon(),'#fff','sm')+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(titre())+'</span></h1>'+
+     '<div class="top-r">'+
+      '<span class="sync '+(S.sync?'':'off')+'"><s></s><span>'+(S.sync?'Synchronisé':'Hors ligne')+'</span></span>'+
+      '<button class="tb" data-sync="1" title="Simuler la perte de réseau">'+ic(S.sync?'check':'clock')+'</button>'+
+      '<button class="tb" data-go="messages" title="Notifications">'+ic('bell')+'<i></i></button>'+
+      '<button class="tb" data-todo="mon profil" title="Mon profil">'+ic('user')+'</button>'+
+     '</div></header>'+
+    '<div class="page'+((S.page==='scanner'||S.page==='scanner_exit')?' full':'')+'">'+pageHTML()+'</div>'+
+    bnHTML()+
+   '</div>'+
+   drawer()+palette()+
+   '<div class="toasts">'+S.toasts.map(t=>'<div class="toast">'+ic(t.i)+esc(t.t)+'</div>').join('')+'</div>'+
+  '</div>';
+  bind();
+}
+function navIcon(){
+  const n=NAV[S.role]; let i='home';
+  n.top.forEach(x=>{if(x.id===S.page)i=x.i;});
+  n.groups.forEach(g=>g.items.forEach(it=>{if(it[0]===S.page)i=g.i;}));
+  if(S.page==='systeme')i='grid';
+  return i;
+}
+function loginHTML(){
+  return '<div class="app"><div class="login">'+
+   '<div class="login-l"><span class="login-mk">'+mark(true)+'</span>'+
+    '<h2 class="login-cl">Chaque enfant protégé,<br><i>chaque parent informé.</i></h2>'+
+    '<p class="login-sl">Complexe Scolaire Le Sage · Kinshasa</p>'+
+    '<ul class="login-pt">'+
+     '<li>'+qr('scan','#fff','sm')+'<div><b>Portail par QR</b><span>Entrées et sorties enregistrées, parents prévenus.</span></div></li>'+
+     '<li>'+qr('lock','#fff','sm')+'<div><b>Fonctionne hors ligne</b><span>Le portail n\'attend jamais le réseau.</span></div></li>'+
+     '<li>'+qr('doc','#fff','sm')+'<div><b>Documents officiels</b><span>Bulletins, reçus et attestations aux normes.</span></div></li>'+
+    '</ul><p class="login-ft">Année scolaire 2025 – 2026</p></div>'+
+   '<div class="login-r"><div class="login-c">'+
+    '<h1>Connexion</h1><p>Entrez votre numéro ou votre adresse e-mail.</p>'+
+    '<div class="fld"><label for="lid">Numéro ou adresse e-mail</label><div class="inw">'+ic('user')+'<input class="in" id="lid" value="+243 81 000 00 00"></div>'+
+     '<span class="hint">'+ic('check')+'Connexion avec le numéro <b>+243810000000</b></span></div>'+
+    '<div class="fld"><label for="lpw">Mot de passe</label><div class="inw">'+ic('lock')+'<input class="in" id="lpw" type="password" value="............"></div></div>'+
+    '<button class="btn gold lg full" data-login="1">Se connecter</button>'+
+    '<div class="login-lk"><button class="lnk" data-todo="mot de passe oublié">Mot de passe oublié</button><span>·</span><button class="lnk" data-todo="première connexion">Première connexion</button></div>'+
+   '</div></div></div></div>';
+}
+
+/* ═══════════ ÉVÉNEMENTS ═══════════ */
+function bind(){
+  app.querySelectorAll('[data-go]').forEach(el=>el.onclick=e=>{e.stopPropagation();go(el.dataset.go);});
+  app.querySelectorAll('[data-grp]').forEach(el=>el.onclick=()=>{const i=+el.dataset.grp;S.open=(S.open===i?null:i);draw();});
+  app.querySelectorAll('[data-todo]').forEach(el=>el.onclick=e=>{e.stopPropagation();toast('« '+el.dataset.todo+' » n\'est pas dans le prototype','alert');});
+  app.querySelectorAll('[data-tab]').forEach(el=>el.onclick=()=>{S.tab=el.dataset.tab;draw();});
+  app.querySelectorAll('[data-cf]').forEach(el=>el.onclick=()=>{S.cf=el.dataset.cf;draw();});
+  app.querySelectorAll('[data-sel]').forEach(el=>{const f=()=>{const k=el.dataset.sel;S.sel[k]=!S.sel[k];draw();};el.onclick=f;el.onkeydown=e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();f();}};});
+  app.querySelectorAll('[data-clear]').forEach(el=>el.onclick=()=>{S.sel={};draw();});
+  app.querySelectorAll('[data-drawer]').forEach(el=>el.onclick=e=>{e.stopPropagation();const v=el.dataset.drawer;S.drawer=(v==='close'?null:+v);draw();});
+  app.querySelectorAll('[data-msg]').forEach(el=>el.onclick=()=>{S.msg=+el.dataset.msg;MSGS[S.msg].nl=0;draw();});
+  app.querySelectorAll('[data-scan]').forEach(el=>el.onclick=()=>{S.scan++;draw();});
+  app.querySelectorAll('[data-pres]').forEach(el=>el.onclick=()=>{const p=el.dataset.pres.split(':');S.pres[p[0]]=p[1];draw();});
+  app.querySelectorAll('[data-sync]').forEach(el=>el.onclick=()=>{S.sync=!S.sync;draw();toast(S.sync?'Réseau rétabli — la file est repartie':'Hors ligne — les gestes sont mis en file','clock');});
+  app.querySelectorAll('[data-login]').forEach(el=>el.onclick=()=>{S.logged=true;S.page=(S.role==='gardien'?'scanner':'dashboard');draw();});
+  app.querySelectorAll('[data-pay]').forEach(el=>el.onclick=()=>{toast('Paiement enregistré — reçu n° 0413','check');S.page='dashboard';draw();});
+  app.querySelectorAll('[data-send]').forEach(el=>el.onclick=()=>{toast(S.sync?'Réponse envoyée à la famille':'Hors ligne — la réponse partira au retour du réseau',S.sync?'check':'clock');});
+  const q=app.querySelector('#q');
+  if(q){q.oninput=()=>{S.q=q.value;draw();const n=app.querySelector('#q');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};}
+  app.querySelectorAll('[data-pal]').forEach(el=>el.onclick=e=>{
+    if(el.dataset.pal==='open'){S.pal=true;S.palq='';draw();const i=app.querySelector('#palq');if(i)i.focus();}
+    else if(e.target===el){S.pal=false;draw();}
+  });
+  const pq=app.querySelector('#palq');
+  if(pq){pq.oninput=()=>{S.palq=pq.value;draw();const n=app.querySelector('#palq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};
+    pq.onkeydown=e=>{if(e.key==='Escape'){S.pal=false;draw();}
+      if(e.key==='Enter'){const f=app.querySelector('.pal-l .pal-i');if(f)f.click();}};}
+}
+function go(id){
+  if(id==='menu'&&S.dev!=='phone'){S.pal=true;S.palq='';draw();const i=app.querySelector('#palq');if(i)i.focus();return;}
+  S.page=id;S.pal=false;S.drawer=null;
+  const n=NAV[S.role];
+  n.groups.forEach((g,gi)=>{if(g.items.some(it=>it[0]===id))S.open=gi;});
+  draw();
+  const pc=app.querySelector('.page'); if(pc)pc.scrollTop=0;
+  if(!IMPL[id]&&!V[id]){/* l'écran de remplacement est affiché, rien de muet */}
+}
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();S.pal=true;S.palq='';draw();const i=app.querySelector('#palq');if(i)i.focus();}
+  if(e.key==='Escape'){if(S.pal){S.pal=false;draw();}else if(S.drawer){S.drawer=null;draw();}}
+});
+
+/* ═══════════ BARRE DE DÉMONSTRATION ═══════════ */
+const ROLES=[['direction','Direction 1'],['direction2','Direction 2'],['direction3','Caisse'],['enseignant','Enseignant'],['gardien','Gardien'],['parent','Parent']];
+const DEVS=[['desk','Ordinateur'],['tab','Tablette'],['phone','Téléphone']];
+const THEMES=[['light','Clair'],['dark','Sombre']];
+function seg(el,items,cur,fn){
+  el.innerHTML=items.map(i=>'<button aria-pressed="'+(i[0]===cur?'true':'false')+'" data-v="'+i[0]+'">'+i[1]+'</button>').join('');
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>fn(b.dataset.v));
+}
+function drawDemo(){
+  seg(document.getElementById('segRole'),ROLES,S.role,v=>{
+    S.role=v;S.open=null;S.drawer=null;S.pal=false;S.sel={};S.q='';S.cf='';
+    S.page=(v==='gardien'?'scanner':'dashboard');
+    drawDemo();draw();
+  });
+  seg(document.getElementById('segDev'),DEVS,S.dev,v=>{S.dev=v;app.dataset.dev=v;drawDemo();draw();});
+  seg(document.getElementById('segTheme'),THEMES,S.theme,v=>{S.theme=v;app.dataset.t=v;drawDemo();});
+}
+document.getElementById('demoMark').innerHTML=mark(true);
+
+/* thème initial : celui du lecteur */
+(function(){
+  const t=document.documentElement.getAttribute('data-theme');
+  S.theme=t?t:(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+  app.dataset.t=S.theme;
+})();
+
+/* ═══════════ NOTE SOUS LE PROTOTYPE ═══════════ */
+document.getElementById('after').innerHTML=
+ '<h2>Deux directions, un choix</h2>'+
+ '<p>Ces deux propositions ne diffèrent pas par leur palette : elles répondent différemment à une seule question — <b>que veut dire une couleur ?</b> Choisir l\'une, c\'est choisir une réponse, et tout le reste en découle.</p>'+
+ '<div class="cols">'+
+  '<div class="box"><h3>N° 1 — Registre</h3>'+
+   '<p style="font-size:13.5px">Encre et papier, un seul bleu. <b>La couleur dit un ÉTAT</b> : vert payé, ambre en attente, rouge impayé. Le reste est en noir et blanc, comme un registre d\'école. Le tableau est le composant principal ; les cartes sont réservées au téléphone.</p>'+
+   '<ul><li><b>Pour</b> — sobre, très lisible, imprimable tel quel, ne vieillit pas, léger.</li>'+
+   '<li><b>Contre</b> — l\'identité du logo ne se voit presque pas. On navigue en lisant, pas en reconnaissant.</li></ul></div>'+
+  '<div class="box"><h3>N° 2 — Mosaïque</h3>'+
+   '<p style="font-size:13.5px">Le bouclier et ses modules QR. <b>La couleur dit un DOMAINE</b> : bleu les personnes, or les finances, vert le portail, violet la pédagogie, orange la communication, rouge l\'urgence. Les états gardent leur trio, et la règle qui tient l\'ensemble : <b>la couleur vit dans le décor, jamais dans une donnée</b>.</p>'+
+   '<ul><li><b>Pour</b> — l\'application ressemble à son logo. On se repère par la couleur avant de lire, ce qui aide quand on lit peu.</li>'+
+   '<li><b>Contre</b> — plus de couleurs à tenir. La discipline « jamais dans une donnée » doit être respectée partout, sinon ça devient bruyant.</li></ul></div>'+
+ '</div>'+
+ '<div class="cols">'+
+  '<div class="box"><h3>Ce que ce prototype fait vraiment</h3>'+
+   '<ul><li>Les <b>six profils</b> ont leur menu réel — 53 destinations pour Direction 1 — et leur propre tableau de bord.</li>'+
+   '<li><b>Ctrl K</b> ouvre la recherche et filtre les destinations en direct.</li>'+
+   '<li>La liste des élèves <b>cherche, filtre, sélectionne</b>, et « Ouvrir » déploie la fiche complète.</li>'+
+   '<li>La <b>caisse</b> encaisse et émet le reçu ; le <b>portail</b> enchaîne quatre résultats de scan, dont deux refus.</li>'+
+   '<li>Le bouton <b>réseau</b>, en haut, coupe la connexion : les messages changent alors de ton — « mis en file », pas « envoyé ».</li>'+
+   '<li><b>Aucun bouton muet</b> : ce qui n\'est pas dessiné le dit, au lieu de ne rien faire.</li></ul></div>'+
+  '<div class="box"><h3>Ce que je n\'ai pas décidé à ta place</h3>'+
+   '<ul><li><b>Le cycle secondaire.</b> L\'application porte encore <code>secondaire</code>, <code>humanités</code>, EXETAT et SECOPE alors que l\'école s\'arrête à la 6e primaire. Je n\'ai rien retiré — une école peut ouvrir un secondaire.</li>'+
+   '<li><b>Le rôle du fond sombre.</b> Ici il est offert partout. Le gardien en a vraiment besoin ; pour les autres, c\'est un confort.</li>'+
+   '<li><b>La densité du tableau.</b> 48 px par ligne. Une variante compacte tiendrait un tiers de lignes en plus.</li>'+
+   '<li><b>Le mélange des deux.</b> Rien n\'oblige à choisir en bloc : la mosaïque pour la navigation, le registre pour les tableaux, c\'est une troisième voie tenable.</li></ul></div>'+
+ '</div>'+
+ '<div class="flag" style="margin-top:26px"><b>Un point à te signaler, et il n\'est pas dans l\'application.</b> La devise gravée sous le logo se lit « <b>une</b> enfant protégé <b>un</b> parent informé ». Dans l\'application elle est écrite « Chaque enfant protégé, chaque parent informé ». Si le logo doit être imprimé ou affiché à l\'école, c\'est la version du fichier qui sera lue. Je ne touche pas au logo — c\'est à toi de décider.</div>'+
+ '<p style="margin-top:26px"><b>Rien n\'a été modifié dans le dépôt</b> : pas de commit, pas de branche, pas de fusion, aucun octet de l\'application en ligne changé. Les deux prototypes sont des fichiers séparés.</p>';
+
+drawDemo();
+draw();
+})();
+</script>

@@ -1,0 +1,1355 @@
+<title>SchoolSafe Registre</title>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="i-students" viewBox="0 0 24 24"><path d="M12 4 3 8.5l9 4.5 9-4.5z"/><path d="M7 11v4.5c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5V11"/><path d="M21 8.5V14"/></symbol>
+<symbol id="i-class" viewBox="0 0 24 24"><path d="M4 20V6a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v14"/><path d="M3 20h18"/><path d="M17 9h3a1 1 0 0 1 1 1v10"/><path d="M8 8h5M8 12h5"/></symbol>
+<symbol id="i-teacher" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 5 6v6c0 4 3 7 7 8.5 4-1.5 7-4.5 7-8.5V6z"/><path d="m9.2 12.2 2 2 3.6-3.8"/></symbol>
+<symbol id="i-family" viewBox="0 0 24 24"><circle cx="8" cy="8.5" r="2.6"/><circle cx="16.5" cy="9.5" r="2.2"/><path d="M3 19c0-2.7 2.2-4.5 5-4.5s5 1.8 5 4.5"/><path d="M14 19c0-2.2 1.5-3.6 3.5-3.6S21 16.8 21 19"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.5"/><path d="M11.5 12H21"/><path d="M17.5 12v3M20 12v2.2"/></symbol>
+<symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2.2"/><circle cx="8.5" cy="11.5" r="1.9"/><path d="M5.5 16c.5-1.3 1.7-2 3-2s2.5.7 3 2"/><path d="M14.5 10.5H19M14.5 13.5H19"/></symbol>
+<symbol id="i-door" viewBox="0 0 24 24"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8"/><path d="M11 12h9m0 0-3-3m3 3-3 3"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+<symbol id="i-money" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6.5 9.5h.01M17.5 14.5h.01"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 16v-4M12.5 16V8M17 16v-6"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H19v14H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3"/></symbol>
+<symbol id="i-msg" viewBox="0 0 24 24"><path d="M20 15a2 2 0 0 1-2 2H8l-4 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 1 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 15 18 9"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3.5V6.5M16 3.5V6.5"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"/></symbol>
+<symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3"/><path d="M4 12h16"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4.5 3 20h18z"/><path d="M12 10v4.5M12 17.3h.01"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+<symbol id="i-chevr" viewBox="0 0 24 24"><path d="m10 7 5 5-5 5"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+<symbol id="i-out" viewBox="0 0 24 24"><path d="M14 20H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h8"/><path d="M11 12h10m0 0-3-3m3 3-3 3"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c0-3.4 3.1-5.5 7-5.5s7 2.1 7 5.5"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12"/><circle cx="12" cy="12" r="2.8"/></symbol>
+<symbol id="i-doc" viewBox="0 0 24 24"><path d="M13 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V8z"/><path d="M13 3v5h5"/><path d="M9 13h6M9 16.5h4"/></symbol>
+<symbol id="i-cmd" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></symbol>
+</defs></svg>
+
+<div class="wrap">
+
+<header class="lede">
+  <p class="kicker">Proposition de direction visuelle · SchoolSafe · 15 août 2026</p>
+  <h1>Registre</h1>
+  <p class="stand">Une refonte de l'apparence, pas des fonctions. Même application, mêmes rôles, mêmes écrans — présentés comme une école présente ses registres&nbsp;: des filets fins, des chiffres alignés, une couleur qui ne parle que quand elle a quelque chose à dire.</p>
+  <p class="warn"><strong>Rien n'a été modifié dans le dépôt.</strong> Aucun commit, aucune branche touchée, aucun fichier de l'application changé. Ce document est un prototype séparé, lu à partir du code existant.</p>
+</header>
+
+<nav class="toc" aria-label="Sommaire">
+  <a href="#constat">Le constat</a>
+  <a href="#direction">La direction</a>
+  <a href="#systeme">Le système</a>
+  <a href="#connexion">Connexion</a>
+  <a href="#bord">Tableau de bord</a>
+  <a href="#navigation">Navigation</a>
+  <a href="#eleves">Élèves</a>
+  <a href="#mobile">Mobile</a>
+  <a href="#suite">La suite</a>
+</nav>
+
+<!-- ══════════════════ CONSTAT ══════════════════ -->
+<section id="constat">
+  <h2>Ce que j'ai relevé dans l'existant</h2>
+  <p class="intro">Relevé en lisant <code>dist/index.html</code>. Ce sont des observations d'apparence, signalées et <strong>non corrigées</strong> — l'application actuelle reste intacte.</p>
+
+  <div class="findings">
+    <div class="finding">
+      <span class="fnum">64</span>
+      <h3>destinations dans un menu plat</h3>
+      <p>Le menu de Direction 1 aligne 64 entrées sous 9 intertitres, toutes dépliées en permanence. Rien ne se replie, rien ne se cherche. Direction 2 en a 52, le Parent 19.</p>
+    </div>
+    <div class="finding">
+      <span class="fnum">2</span>
+      <h3>vocabulaires d'icônes</h3>
+      <p>Des émojis dans le menu (🏠 🎓 💳) et des dessins vectoriels dans la barre du bas et les champs. Deux alphabets côte à côte donnent l'impression d'assemblé.</p>
+    </div>
+    <div class="finding">
+      <span class="fnum">7</span>
+      <h3>boutons sur une carte d'élève</h3>
+      <p>Modifier · Dossier · 📦 · Fiche · Scolarité · Passage · Conduite. Aucun n'est plus important qu'un autre, donc aucun ne se voit. Le fichier note déjà qu'une rangée voisine débordait de 87&nbsp;px.</p>
+    </div>
+    <div class="finding">
+      <span class="fnum">4&nbsp;Mo</span>
+      <h3>de décor au démarrage</h3>
+      <p>24 photos d'arrière-plan, une vidéo de 2&nbsp;Mo, trois familles de polices Google. Sur un téléphone modeste à Kinshasa, le décor arrive avant l'application.</p>
+    </div>
+    <div class="finding">
+      <span class="fnum">6</span>
+      <h3>thèmes de rôle complets</h3>
+      <p>Chaque rôle repeint l'interface. Un gardien et une caissière ne voient pas le même logiciel — l'identité du produit se dilue au lieu de se renforcer.</p>
+    </div>
+    <div class="finding">
+      <span class="fnum">∞</span>
+      <h3>styles écrits à la main</h3>
+      <p>La plupart des écrans portent leurs couleurs et leurs tailles en attribut <code>style</code>. Changer un rayon ou une teinte demande alors de repasser partout — c'est ce qui a produit dix feuilles de style pour une seule caisse.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ DIRECTION ══════════════════ -->
+<section id="direction">
+  <h2>La direction</h2>
+  <p class="intro">Trois partis pris. Tout le reste en découle.</p>
+
+  <div class="tenets">
+    <article>
+      <h3>La couleur veut dire quelque chose</h3>
+      <p>Un seul accent — le bleu du logiciel. Le vert, l'ambre et le rouge sont réservés aux <em>états</em>&nbsp;: payé, en attente, impayé, présent, absent. Une pastille verte veut donc dire la même chose sur les six écrans où elle apparaît. Le rôle n'est plus un thème mais un point de couleur sous le nom du produit.</p>
+    </article>
+    <article>
+      <h3>Le tableau avant la carte</h3>
+      <p>Une école raisonne en registres&nbsp;: un numéro, une ligne, une colonne de noms. Sur ordinateur, la liste des élèves redevient un tableau réglé — 24 lignes visibles au lieu de 6 cartes. Les cartes restent, mais pour le téléphone, où elles sont la bonne réponse.</p>
+    </article>
+    <article>
+      <h3>Le décor ne passe jamais devant</h3>
+      <p>Aucune police téléchargée, aucune photo au démarrage, aucun écran qui attend un doigt. La personnalité vient de l'échelle typographique, des filets et de l'alignement des chiffres — des choses qui ne coûtent pas un octet de réseau.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ══════════════════ SYSTÈME ══════════════════ -->
+<section id="systeme">
+  <h2>Le système</h2>
+  <p class="intro">De quoi tenir toute l'application. Chaque valeur est un jeton&nbsp;: on la change à un endroit, elle change partout.</p>
+
+  <h3 class="sub">Couleur</h3>
+  <p>Le gris n'est pas neutre — il est biaisé vers le bleu de l'accent, ce qui fait tenir la page ensemble. Les rapports de contraste sont <strong>mesurés</strong>, pas estimés.</p>
+
+  <div class="swatches">
+    <div class="sw" style="--c:#0F1729"><b></b><code>--encre</code><span>#0F1729</span><em>17,9:1 sur blanc</em></div>
+    <div class="sw" style="--c:#5A6478"><b></b><code>--ardoise</code><span>#5A6478</span><em>5,95:1</em></div>
+    <div class="sw" style="--c:#626C82"><b></b><code>--ardoise-3</code><span>#626C82</span><em>5,27:1</em></div>
+    <div class="sw" style="--c:#F7F8FB"><b class="brd"></b><code>--papier</code><span>#F7F8FB</span><em>le fond</em></div>
+    <div class="sw" style="--c:#E3E7F0"><b class="brd"></b><code>--filet</code><span>#E3E7F0</span><em>1&nbsp;px partout</em></div>
+    <div class="sw" style="--c:#2B57D4"><b></b><code>--bleu</code><span>#2B57D4</span><em>6,15:1 · blanc dessus 6,15:1</em></div>
+  </div>
+
+  <p class="lbl">États — jamais une identité, toujours une information</p>
+  <div class="swatches">
+    <div class="sw" style="--c:#0E7C55"><b></b><code>--vert</code><span>#0E7C55</span><em>4,57:1 sur sa pastille</em></div>
+    <div class="sw" style="--c:#9A6206"><b></b><code>--ambre</code><span>#9A6206</span><em>4,51:1</em></div>
+    <div class="sw" style="--c:#C42A3F"><b></b><code>--rouge</code><span>#C42A3F</span><em>4,77:1</em></div>
+  </div>
+
+  <p class="lbl">Rôles — six points de couleur, plus six thèmes</p>
+  <div class="roledots">
+    <span class="rd" style="--c:#243A6B">Direction 1</span>
+    <span class="rd" style="--c:#2F7BD6">Direction 2</span>
+    <span class="rd" style="--c:#0E7C55">Caisse</span>
+    <span class="rd" style="--c:#0F7A6B">Enseignant</span>
+    <span class="rd" style="--c:#B4531F">Gardien</span>
+    <span class="rd" style="--c:#6B4BA8">Parent</span>
+  </div>
+  <p class="note">Les six teintes viennent de celles déjà en place, désaturées pour porter du texte. Elles ne servent plus qu'à trois choses&nbsp;: le point sous le nom du produit, l'avatar par défaut, la pastille de rôle dans les listes de comptes.</p>
+
+  <h3 class="sub">Typographie</h3>
+  <p>Aucune police téléchargée. L'application utilise la pile du système — celle qui est déjà sur l'appareil, donc disponible hors ligne et gratuite en réseau. La personnalité vient de l'échelle, des graisses et de l'interlettrage. <strong>Tous les chiffres sont tabulaires</strong>&nbsp;: dans un registre, les colonnes s'alignent.</p>
+
+  <div class="typescale">
+    <div><span class="tsl">Display · 32/1.15 · 700 · -0.02em</span><p style="font:700 32px/1.15 var(--ui);letter-spacing:-.02em">1 247 élèves inscrits</p></div>
+    <div><span class="tsl">Titre de page · 22/1.25 · 650 · -0.01em</span><p style="font:650 22px/1.25 var(--ui);letter-spacing:-.01em">Tableau de bord</p></div>
+    <div><span class="tsl">Titre de section · 15/1.3 · 600</span><p style="font:600 15px/1.3 var(--ui)">Dernières entrées au portail</p></div>
+    <div><span class="tsl">Texte · 14/1.5 · 400</span><p style="font:400 14px/1.5 var(--ui)">La carte est invalidée avant que la nouvelle soit émise.</p></div>
+    <div><span class="tsl">Étiquette · 11/1.3 · 600 · +0.06em · capitales</span><p style="font:600 11px/1.3 var(--ui);letter-spacing:.06em;text-transform:uppercase;color:var(--t3)">Matricule</p></div>
+    <div><span class="tsl">Chiffres tabulaires · partout</span><p style="font:600 15px/1.4 var(--ui);font-variant-numeric:tabular-nums">1 240 000 FC<br>  312 500 FC<br>   87 000 FC</p></div>
+  </div>
+
+  <h3 class="sub">Espacement, rayons, relief</h3>
+  <div class="specgrid">
+    <div class="spec">
+      <p class="lbl">Espacement — base 4</p>
+      <div class="spacers"><i style="--w:4px"></i><i style="--w:8px"></i><i style="--w:12px"></i><i style="--w:16px"></i><i style="--w:24px"></i><i style="--w:32px"></i><i style="--w:48px"></i></div>
+      <p class="note">4 · 8 · 12 · 16 · 24 · 32 · 48. Rien entre les deux. Les groupes se posent au <code>gap</code>, jamais à la marge.</p>
+    </div>
+    <div class="spec">
+      <p class="lbl">Rayons</p>
+      <div class="radii">
+        <span style="border-radius:6px">6<small>contrôle</small></span>
+        <span style="border-radius:10px">10<small>carte</small></span>
+        <span style="border-radius:14px">14<small>panneau</small></span>
+        <span style="border-radius:999px">∞<small>pastille</small></span>
+      </div>
+      <p class="note">Plus serré qu'aujourd'hui (8/12/16/24). Un rayon court se lit comme un outil, un rayon long comme un jouet.</p>
+    </div>
+    <div class="spec">
+      <p class="lbl">Relief</p>
+      <div class="elev"><span class="e0">Aucun<small>cartes, tableaux</small></span><span class="e1">Léger<small>menu, info-bulle</small></span><span class="e2">Marqué<small>modale, tiroir</small></span></div>
+      <p class="note">Une carte posée sur le papier n'a besoin que d'un filet. L'ombre est réservée à ce qui flotte réellement au-dessus.</p>
+    </div>
+  </div>
+
+  <h3 class="sub">Composants</h3>
+
+  <div class="cbox">
+    <p class="lbl">Boutons — une seule action principale par écran</p>
+    <div class="crow">
+      <button class="s-btn s-pri">Enregistrer le paiement</button>
+      <button class="s-btn">Modifier</button>
+      <button class="s-btn s-ghost">Annuler</button>
+      <button class="s-btn s-dgr">Retirer l'accès</button>
+      <button class="s-btn s-pri" disabled>Indisponible</button>
+      <button class="s-btn s-icon" aria-label="Autres actions"><svg class="ic"><use href="#i-more"/></svg></button>
+    </div>
+    <div class="crow">
+      <button class="s-btn s-sm">Petit · 32</button>
+      <button class="s-btn">Normal · 40</button>
+      <button class="s-btn s-lg s-pri">Grand · 48</button>
+    </div>
+    <p class="note">Sur téléphone, toute cible reçoit une zone tactile de 44&nbsp;px même quand le bouton en fait 36 — la zone déborde le dessin, elle ne l'agrandit pas. Un lien stylé à la main n'existe plus&nbsp;: tout ce qui se touche est un <code>.s-btn</code>, donc tout hérite de la règle.</p>
+  </div>
+
+  <div class="cbox">
+    <p class="lbl">Champs</p>
+    <div class="crow crow-form">
+      <div class="s-field"><label>Nom complet</label><input class="s-in" value="Kalala Mutombo Espérance"></div>
+      <div class="s-field"><label>Classe</label><div class="s-selw"><select class="s-in"><option>5e primaire A</option></select><svg class="ic"><use href="#i-chev"/></svg></div></div>
+      <div class="s-field"><label>Téléphone</label><input class="s-in" value="+243 81 000 00 00"><small class="s-hint">Enregistré ainsi : <b>+243810000000</b></small></div>
+      <div class="s-field"><label>Adresse e-mail</label><input class="s-in s-err" value="parent@"><small class="s-errm"><svg class="ic"><use href="#i-alert"/></svg>Il manque ce qui suit le @ — par exemple gmail.com</small></div>
+    </div>
+    <p class="note">Le champ confirme pendant la frappe et ne refuse qu'à la sortie. La transcription du numéro montre ce qui <em>sera enregistré</em>, avant l'envoi — pas un reproche, une information.</p>
+  </div>
+
+  <div class="cbox">
+    <p class="lbl">Pastilles d'état — une forme, une couleur, un mot</p>
+    <div class="crow">
+      <span class="s-tag s-ok"><i></i>Payé</span>
+      <span class="s-tag s-wa"><i></i>En attente</span>
+      <span class="s-tag s-no"><i></i>Impayé</span>
+      <span class="s-tag s-nu"><i></i>Archivé</span>
+      <span class="s-tag s-in"><i></i>Différé</span>
+      <span class="s-tag s-ok"><i></i>À l'heure</span>
+      <span class="s-tag s-wa"><i></i>Retard</span>
+      <span class="s-tag s-no"><i></i>Absent</span>
+    </div>
+    <p class="note">Le point <em>et</em> le mot. Une pastille qui ne dit son état que par sa couleur ne dit rien à qui ne distingue pas le vert du rouge, ni sur un document imprimé en noir.</p>
+  </div>
+
+  <div class="cbox">
+    <p class="lbl">Alertes — ce qui s'est passé, puis quoi faire</p>
+    <div class="crow crow-col">
+      <div class="s-alert s-a-ok"><svg class="ic"><use href="#i-check"/></svg><div><b>Paiement enregistré — reçu n° 0412</b><span>Le reçu est disponible dans « Mes reçus » du parent.</span></div></div>
+      <div class="s-alert s-a-wa"><svg class="ic"><use href="#i-clock"/></svg><div><b>Message en file d'attente</b><span>L'appareil est hors ligne. Le message partira dès le retour du réseau — il n'est pas encore arrivé à la Direction.</span></div></div>
+      <div class="s-alert s-a-no"><svg class="ic"><use href="#i-alert"/></svg><div><b>Le serveur a refusé la modification du numéro</b><span>Changer un numéro change une identité de connexion. Passez par « Corriger les coordonnées ». <i>Code&nbsp;: AUTH_PHONE_CHANGE_REQUIRED</i></span></div></div>
+      <div class="s-alert s-a-in"><svg class="ic"><use href="#i-bell"/></svg><div><b>Nouvelle version disponible</b><span>Rechargez quand vous le pourrez — un scan en cours ne sera pas interrompu.</span><button class="s-btn s-sm" style="margin-top:8px">Recharger</button></div></div>
+    </div>
+    <p class="note">L'alerte nomme ce qui a échoué et donne le geste qui marche. Le code du serveur reste, en petit&nbsp;: c'est lui qui permet le dépannage.</p>
+  </div>
+
+  <div class="cbox">
+    <p class="lbl">Tableau — le registre</p>
+    <div class="s-tablewrap">
+      <table class="s-table">
+        <thead><tr><th class="s-num">N°</th><th>Élève</th><th>Classe</th><th>Matricule</th><th>Frais</th><th class="s-r">Solde</th></tr></thead>
+        <tbody>
+          <tr><td class="s-num">001</td><td class="s-strong">Kabeya Ilunga Bénédicte</td><td>3e primaire A</td><td class="s-mono">LS-2026-0117</td><td><span class="s-tag s-ok"><i></i>Payé</span></td><td class="s-r s-mono">0</td></tr>
+          <tr><td class="s-num">002</td><td class="s-strong">Mbuyi Nsimba Josué</td><td>3e primaire A</td><td class="s-mono">LS-2026-0118</td><td><span class="s-tag s-wa"><i></i>2e tranche</span></td><td class="s-r s-mono">85 000</td></tr>
+          <tr><td class="s-num">003</td><td class="s-strong">Lukusa Tshiala Merveille</td><td>3e primaire B</td><td class="s-mono">LS-2026-0119</td><td><span class="s-tag s-no"><i></i>Impayé</span></td><td class="s-r s-mono s-bad">240 000</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Filets horizontaux seulement, pas de zébrures, pas de traits verticaux. Le numéro d'ordre à gauche, les montants à droite en chiffres tabulaires. L'en-tête se répète en haut de chaque page à l'impression.</p>
+  </div>
+
+  <div class="cbox">
+    <p class="lbl">Icônes — un seul alphabet</p>
+    <div class="iconwall">
+      <span><svg class="ic"><use href="#i-home"/></svg>Accueil</span>
+      <span><svg class="ic"><use href="#i-students"/></svg>Élèves</span>
+      <span><svg class="ic"><use href="#i-class"/></svg>Classes</span>
+      <span><svg class="ic"><use href="#i-teacher"/></svg>Enseignants</span>
+      <span><svg class="ic"><use href="#i-shield"/></svg>Gardiens</span>
+      <span><svg class="ic"><use href="#i-family"/></svg>Parents</span>
+      <span><svg class="ic"><use href="#i-key"/></svg>Autorisés</span>
+      <span><svg class="ic"><use href="#i-card"/></svg>Cartes</span>
+      <span><svg class="ic"><use href="#i-scan"/></svg>Scanner</span>
+      <span><svg class="ic"><use href="#i-door"/></svg>Sortie</span>
+      <span><svg class="ic"><use href="#i-money"/></svg>Caisse</span>
+      <span><svg class="ic"><use href="#i-chart"/></svg>Rapports</span>
+      <span><svg class="ic"><use href="#i-book"/></svg>Cahiers</span>
+      <span><svg class="ic"><use href="#i-msg"/></svg>Messages</span>
+      <span><svg class="ic"><use href="#i-bell"/></svg>Notifications</span>
+      <span><svg class="ic"><use href="#i-cal"/></svg>Calendrier</span>
+      <span><svg class="ic"><use href="#i-doc"/></svg>Documents</span>
+      <span><svg class="ic"><use href="#i-settings"/></svg>Paramètres</span>
+    </div>
+    <p class="note">Trait de 1,75&nbsp;px, 24&nbsp;px de côté, <code>currentColor</code>. Elles prennent la couleur du texte à côté d'elles, donc elles suivent le thème sans réglage. Les émojis disparaissent de l'interface — ils restent utilisables dans les contenus saisis par l'école (menus de cantine, par exemple).</p>
+  </div>
+</section>
+
+<!-- ══════════════════ ÉCRAN 1 — CONNEXION ══════════════════ -->
+<section id="connexion">
+  <div class="shead"><span class="sidx">Écran 1</span><h2>Connexion</h2></div>
+  <p class="intro">Ce que ça change&nbsp;: plus d'écran d'attente qui réclame un doigt, plus de carrousel de 24 photos décodé pendant la frappe, plus de refus affiché à la deuxième lettre tapée. Le panneau de gauche est dessiné, pas photographié — donc il pèse zéro octet et son contraste est connu d'avance.</p>
+
+  <figure class="frame">
+    <div class="chrome"><i></i><i></i><i></i><span>Ordinateur · 1280&nbsp;px</span></div>
+    <div class="s-app s-login">
+      <div class="s-login-side">
+        <div class="s-grid-motif" aria-hidden="true"></div>
+        <div class="s-brandmark"><span class="s-shield"><svg viewBox="0 0 24 24"><path d="M12 2.5 4 5.6v6.9c0 4.9 3.3 8.4 8 10 4.7-1.6 8-5.1 8-10V5.6z"/><path d="m8.8 12.2 2.3 2.3 4.3-4.6"/></svg></span><b>SchoolSafe</b></div>
+        <p class="s-login-claim">Chaque enfant protégé,<br>chaque parent informé.</p>
+        <ul class="s-login-pts">
+          <li><svg class="ic"><use href="#i-scan"/></svg><div><b>Portail par QR</b><span>Entrées et sorties enregistrées, parents prévenus.</span></div></li>
+          <li><svg class="ic"><use href="#i-lock"/></svg><div><b>Hors ligne</b><span>L'application continue de fonctionner sans réseau.</span></div></li>
+          <li><svg class="ic"><use href="#i-doc"/></svg><div><b>Documents officiels</b><span>Bulletins, reçus et attestations aux normes.</span></div></li>
+        </ul>
+        <p class="s-login-foot">Complexe Scolaire Le Sage · Kinshasa</p>
+      </div>
+      <div class="s-login-main">
+        <div class="s-login-card">
+          <h1>Connexion</h1>
+          <p class="s-login-sub">Entrez votre numéro ou votre adresse e-mail.</p>
+
+          <div class="s-field"><label for="p-id">Numéro ou adresse e-mail</label>
+            <div class="s-inw"><svg class="ic"><use href="#i-user"/></svg><input class="s-in" id="p-id" value="+243 81 000 00 00"></div>
+            <small class="s-hint"><svg class="ic"><use href="#i-check"/></svg>Connexion avec le numéro <b>+243810000000</b></small>
+          </div>
+
+          <div class="s-field"><label for="p-pw">Mot de passe</label>
+            <div class="s-inw"><svg class="ic"><use href="#i-lock"/></svg><input class="s-in" id="p-pw" type="password" value="............"><button class="s-reveal" aria-label="Afficher"><svg class="ic"><use href="#i-eye"/></svg></button></div>
+          </div>
+
+          <button class="s-btn s-pri s-lg s-full">Se connecter</button>
+
+          <div class="s-login-links">
+            <button class="s-link">Mot de passe oublié</button>
+            <span aria-hidden="true">·</span>
+            <button class="s-link">Première connexion</button>
+          </div>
+
+          <div class="s-login-bottom">
+            <button class="s-btn s-sm"><svg class="ic"><use href="#i-doc"/></svg>Site de l'école</button>
+            <button class="s-btn s-sm">Installer l'application</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <div class="twocol">
+    <div>
+      <p class="lbl">Les trois refus, dits comme ils sont</p>
+      <div class="crow crow-col">
+        <div class="s-alert s-a-no"><svg class="ic"><use href="#i-alert"/></svg><div><b>Mot de passe incorrect</b><span>Réessayez, ou utilisez « Mot de passe oublié ».</span></div></div>
+        <div class="s-alert s-a-wa"><svg class="ic"><use href="#i-clock"/></svg><div><b>Le serveur n'a pas répondu</b><span>Votre mot de passe n'est pas en cause. Vérifiez la connexion et réessayez.</span></div></div>
+        <div class="s-alert s-a-in"><svg class="ic"><use href="#i-key"/></svg><div><b>Votre mot de passe doit être remplacé</b><span>Le code reçu par WhatsApp ne sert qu'une fois. Choisissez le vôtre pour continuer.</span></div></div>
+      </div>
+    </div>
+    <div>
+      <p class="lbl">Contrastes mesurés — panneau encre <code>#0F1729</code></p>
+      <table class="mini">
+        <tr><td>Nom du produit, blanc</td><td class="s-r s-mono">17,87</td></tr>
+        <tr><td>Phrase d'accroche, blanc</td><td class="s-r s-mono">17,87</td></tr>
+        <tr><td>Sous-texte, <code>#9AA5BD</code></td><td class="s-r s-mono">7,23</td></tr>
+        <tr><td>Étiquette de champ sur blanc</td><td class="s-r s-mono">17,87</td></tr>
+        <tr><td>Blanc sur le bouton bleu</td><td class="s-r s-mono">6,15</td></tr>
+      </table>
+      <p class="note">Aucun texte ne repose sur une photographie&nbsp;: il n'y a plus de photographie. C'est ce qui rend ces chiffres définitifs plutôt qu'optimistes — un texte posé sur une image se mesure contre le pire cas, jamais contre la couleur déclarée.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ ÉCRAN 2 — TABLEAU DE BORD ══════════════════ -->
+<section id="bord">
+  <div class="shead"><span class="sidx">Écran 2</span><h2>Tableau de bord — Direction 1</h2></div>
+  <p class="intro">Ce que ça change&nbsp;: les quatre tuiles en dégradé saturé cèdent la place à une lecture en quatre temps — <em>ce qui se passe ce matin</em>, <em>les chiffres de l'école</em>, <em>ce qui attend une décision</em>, <em>ce qui vient de se passer au portail</em>. La couleur ne sert qu'à signaler ce qui va mal.</p>
+
+  <figure class="frame">
+    <div class="chrome"><i></i><i></i><i></i><span>Ordinateur · 1280&nbsp;px</span></div>
+    <div class="s-app">
+      <aside class="s-side">
+        <div class="s-side-brand"><span class="s-shield sm"><svg viewBox="0 0 24 24"><path d="M12 2.5 4 5.6v6.9c0 4.9 3.3 8.4 8 10 4.7-1.6 8-5.1 8-10V5.6z"/><path d="m8.8 12.2 2.3 2.3 4.3-4.6"/></svg></span><div><b>SchoolSafe</b><em><i style="--c:#243A6B"></i>Direction 1</em></div></div>
+        <button class="s-cmd"><svg class="ic"><use href="#i-search"/></svg>Rechercher…<kbd>Ctrl K</kbd></button>
+        <nav class="s-nav">
+          <a class="s-nav-i is-on"><svg class="ic"><use href="#i-home"/></svg>Tableau de bord</a>
+          <a class="s-nav-i"><svg class="ic"><use href="#i-check"/></svg>Approbations<span class="s-badge">7</span></a>
+          <div class="s-nav-g is-open"><button class="s-nav-h"><svg class="ic"><use href="#i-students"/></svg>Personnes<svg class="ic s-caret"><use href="#i-chev"/></svg></button>
+            <div class="s-nav-sub"><a>Élèves</a><a>Classes</a><a>Enseignants</a><a>Gardiens</a><a>Parents</a><a>Personnes autorisées</a><a>Cartes d'élèves</a></div>
+          </div>
+          <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-money"/></svg>Finances &amp; RH<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+          <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-book"/></svg>Pédagogie<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+          <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-msg"/></svg>Communication<span class="s-badge s-badge-q">3</span><svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+          <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-shield"/></svg>Sécurité portail<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+          <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-doc"/></svg>Rapports officiels<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+          <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-settings"/></svg>Système<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+        </nav>
+        <div class="s-side-foot">
+          <button class="s-me"><span class="s-av" style="--c:#243A6B">LM</span><div><b>L. Mukendi</b><span>Direction 1</span></div><svg class="ic"><use href="#i-chevr"/></svg></button>
+        </div>
+      </aside>
+
+      <div class="s-main">
+        <header class="s-top">
+          <h1>Tableau de bord</h1>
+          <div class="s-top-r">
+            <span class="s-sync"><i></i>Synchronisé</span>
+            <span class="s-date">Samedi 15 août 2026</span>
+            <button class="s-btn s-icon" aria-label="Notifications"><svg class="ic"><use href="#i-bell"/></svg><em class="s-dot"></em></button>
+            <button class="s-av" style="--c:#243A6B">LM</button>
+          </div>
+        </header>
+
+        <div class="s-page">
+
+          <section class="s-card s-morning">
+            <div class="s-card-h"><h2>Ce matin au portail</h2><button class="s-link">Ouvrir l'historique</button></div>
+            <div class="s-morning-b">
+              <div class="s-morning-n">
+                <div><b>1 118</b><span>entrés</span></div>
+                <div><b>1 247</b><span>attendus</span></div>
+                <div><b class="s-bad">129</b><span>non signalés</span></div>
+              </div>
+              <div class="s-bars" role="img" aria-label="Entrées par tranche de dix minutes, de 6h30 à 8h00">
+                <i style="--h:12%"></i><i style="--h:26%"></i><i style="--h:48%"></i><i style="--h:71%"></i><i style="--h:96%"></i><i style="--h:88%"></i><i style="--h:63%"></i><i style="--h:41%"></i><i style="--h:22%"></i><i style="--h:9%" class="on"></i>
+                <div class="s-bars-x"><span>6h30</span><span>7h15</span><span>8h00</span></div>
+              </div>
+            </div>
+          </section>
+
+          <div class="s-stats">
+            <div class="s-card s-stat"><span class="s-stat-l">Élèves inscrits</span><b>1 247</b><span class="s-stat-d s-up">+18 cette semaine</span></div>
+            <div class="s-card s-stat"><span class="s-stat-l">Encaissé aujourd'hui</span><b>4 380 000 <em>FC</em></b><span class="s-stat-d">31 reçus émis</span></div>
+            <div class="s-card s-stat"><span class="s-stat-l">Impayés</span><b class="s-bad">62</b><span class="s-stat-d s-dn">élèves · 14 800 000 FC</span></div>
+            <div class="s-card s-stat"><span class="s-stat-l">Personnel présent</span><b>38 <em>/ 41</em></b><span class="s-stat-d">2 absences justifiées</span></div>
+          </div>
+
+          <div class="s-cols">
+            <section class="s-card">
+              <div class="s-card-h"><h2>À traiter</h2><span class="s-count">12</span></div>
+              <ul class="s-todo">
+                <li><div><b>7 approbations en attente</b><span>Inscriptions, sanctions, décaissements</span></div><button class="s-btn s-sm s-pri">Ouvrir</button></li>
+                <li><div><b>3 préinscriptions reçues</b><span>Depuis le site de l'école, hier et avant-hier</span></div><button class="s-btn s-sm">Ouvrir</button></li>
+                <li><div><b>2 justifications d'absence</b><span>Déposées par des parents ce matin</span></div><button class="s-btn s-sm">Ouvrir</button></li>
+              </ul>
+            </section>
+
+            <section class="s-card">
+              <div class="s-card-h"><h2>Caisse du jour</h2><button class="s-link">Rapport</button></div>
+              <ul class="s-kv">
+                <li><span>Encaissements</span><b class="s-mono">4 380 000</b></li>
+                <li><span>Dépenses</span><b class="s-mono">  612 000</b></li>
+                <li class="s-kv-t"><span>Solde de caisse</span><b class="s-mono">3 768 000</b></li>
+              </ul>
+              <div class="s-alert s-a-wa" style="margin-top:12px"><svg class="ic"><use href="#i-clock"/></svg><div><b>Journée non clôturée</b><span>La clôture verrouille les écritures du jour.</span></div></div>
+            </section>
+          </div>
+
+          <section class="s-card">
+            <div class="s-card-h"><h2>Dernières entrées au portail</h2><button class="s-link">Tout voir</button></div>
+            <div class="s-tablewrap">
+              <table class="s-table">
+                <thead><tr><th>Heure</th><th>Élève</th><th>Classe</th><th>Portail</th><th>État</th></tr></thead>
+                <tbody>
+                  <tr><td class="s-mono">07:48</td><td class="s-strong">Kabeya Ilunga Bénédicte</td><td>3e primaire A</td><td>Entrée principale</td><td><span class="s-tag s-ok"><i></i>À l'heure</span></td></tr>
+                  <tr><td class="s-mono">07:52</td><td class="s-strong">Mbuyi Nsimba Josué</td><td>3e primaire A</td><td>Entrée principale</td><td><span class="s-tag s-ok"><i></i>À l'heure</span></td></tr>
+                  <tr><td class="s-mono">08:06</td><td class="s-strong">Lukusa Tshiala Merveille</td><td>3e primaire B</td><td>Entrée principale</td><td><span class="s-tag s-wa"><i></i>Retard · 6 min</span></td></tr>
+                  <tr><td class="s-mono">08:11</td><td class="s-strong">Ngoy Kalonda Christian</td><td>5e primaire A</td><td>Entrée principale</td><td><span class="s-tag s-wa"><i></i>Retard · 11 min</span></td></tr>
+                  <tr><td class="s-mono">08:19</td><td class="s-strong">Bofunda Lisala Nathalie</td><td>2e primaire B</td><td>Entrée latérale</td><td><span class="s-tag s-no"><i></i>Refus · frais</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <p class="note wide">Les données affichées sont <strong>inventées pour la démonstration</strong>. Aucun élève, parent ou paiement réel n'apparaît dans ce document.</p>
+</section>
+
+<!-- ══════════════════ ÉCRAN 3 — NAVIGATION ══════════════════ -->
+<section id="navigation">
+  <div class="shead"><span class="sidx">Écran 3</span><h2>Navigation</h2></div>
+  <p class="intro">Le problème n'est pas l'apparence du menu, c'est son nombre&nbsp;: 64 destinations pour Direction 1. Un menu plat de 64 lignes se parcourt à l'œil, une par une. La proposition tient en trois niveaux, choisis selon ce qu'on cherche.</p>
+
+  <div class="navgrid">
+
+    <figure class="navfig">
+      <figcaption><b>1 · Les groupes</b>Un seul ouvert à la fois. Ce qu'on utilise tous les jours reste en haut, hors groupe.</figcaption>
+      <div class="s-app s-app-mini">
+        <aside class="s-side">
+          <div class="s-side-brand"><span class="s-shield sm"><svg viewBox="0 0 24 24"><path d="M12 2.5 4 5.6v6.9c0 4.9 3.3 8.4 8 10 4.7-1.6 8-5.1 8-10V5.6z"/><path d="m8.8 12.2 2.3 2.3 4.3-4.6"/></svg></span><div><b>SchoolSafe</b><em><i style="--c:#243A6B"></i>Direction 1</em></div></div>
+          <button class="s-cmd"><svg class="ic"><use href="#i-search"/></svg>Rechercher…<kbd>Ctrl K</kbd></button>
+          <nav class="s-nav">
+            <a class="s-nav-i"><svg class="ic"><use href="#i-home"/></svg>Tableau de bord</a>
+            <a class="s-nav-i"><svg class="ic"><use href="#i-check"/></svg>Approbations<span class="s-badge">7</span></a>
+            <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-students"/></svg>Personnes<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+            <div class="s-nav-g is-open"><button class="s-nav-h"><svg class="ic"><use href="#i-money"/></svg>Finances &amp; RH<svg class="ic s-caret"><use href="#i-chev"/></svg></button>
+              <div class="s-nav-sub"><a>Contrôle des frais</a><a class="is-on">Paiements élèves</a><a>Caisse</a><a>État financier</a><a>Trésorerie</a><a>Comptabilité générale</a><a>Paie du personnel</a><a>Registre de présence</a></div>
+            </div>
+            <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-book"/></svg>Pédagogie<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+            <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-msg"/></svg>Communication<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+          </nav>
+        </aside>
+      </div>
+    </figure>
+
+    <figure class="navfig">
+      <figcaption><b>2 · La palette</b>Ctrl&nbsp;K, ou le champ en haut du menu. Les 64 destinations, atteintes en trois lettres.</figcaption>
+      <div class="s-pal">
+        <div class="s-pal-in"><svg class="ic"><use href="#i-search"/></svg><span>pai<em class="s-caret-t"></em></span><kbd>Échap</kbd></div>
+        <div class="s-pal-sec">Aller à</div>
+        <a class="s-pal-i is-on"><svg class="ic"><use href="#i-money"/></svg><b>Pai</b>ements élèves<em>Finances &amp; RH</em></a>
+        <a class="s-pal-i"><svg class="ic"><use href="#i-money"/></svg><b>Pai</b>e du personnel<em>Finances &amp; RH</em></a>
+        <a class="s-pal-i"><svg class="ic"><use href="#i-doc"/></svg>Fiches de <b>pai</b>e<em>Finances &amp; RH</em></a>
+        <div class="s-pal-sec">Faire</div>
+        <a class="s-pal-i"><svg class="ic"><use href="#i-plus"/></svg>Enregistrer un <b>pai</b>ement<em>Caisse</em></a>
+        <a class="s-pal-i"><svg class="ic"><use href="#i-search"/></svg>Chercher un élève par matricule<em>Élèves</em></a>
+      </div>
+    </figure>
+
+    <figure class="navfig">
+      <figcaption><b>3 · Le rail</b>Tablette et écran étroit. 72&nbsp;px, le groupe s'ouvre en surcouche.</figcaption>
+      <div class="s-railwrap">
+        <div class="s-rail">
+          <span class="s-shield sm"><svg viewBox="0 0 24 24"><path d="M12 2.5 4 5.6v6.9c0 4.9 3.3 8.4 8 10 4.7-1.6 8-5.1 8-10V5.6z"/><path d="m8.8 12.2 2.3 2.3 4.3-4.6"/></svg></span>
+          <a class="is-on"><svg class="ic"><use href="#i-home"/></svg><small>Accueil</small></a>
+          <a><svg class="ic"><use href="#i-check"/></svg><small>Approuver</small><span class="s-badge">7</span></a>
+          <a><svg class="ic"><use href="#i-students"/></svg><small>Personnes</small></a>
+          <a><svg class="ic"><use href="#i-money"/></svg><small>Finances</small></a>
+          <a><svg class="ic"><use href="#i-book"/></svg><small>Pédagogie</small></a>
+          <a><svg class="ic"><use href="#i-msg"/></svg><small>Messages</small></a>
+        </div>
+        <div class="s-flyout">
+          <b>Personnes</b>
+          <a>Élèves</a><a>Classes</a><a>Enseignants</a><a>Gardiens</a><a>Parents</a><a>Personnes autorisées</a><a>Cartes d'élèves</a>
+        </div>
+      </div>
+    </figure>
+
+    <figure class="navfig">
+      <figcaption><b>4 · La barre du bas</b>Téléphone. Cinq entrées, choisies par rôle. Le reste passe par « Menu ».</figcaption>
+      <div class="s-bnwrap">
+        <div class="s-bn">
+          <a class="is-on"><svg class="ic"><use href="#i-home"/></svg><small>Accueil</small></a>
+          <a><svg class="ic"><use href="#i-check"/></svg><small>Approuver</small><span class="s-badge">7</span></a>
+          <a><svg class="ic"><use href="#i-students"/></svg><small>Élèves</small></a>
+          <a><svg class="ic"><use href="#i-money"/></svg><small>Paiements</small></a>
+          <a><svg class="ic"><use href="#i-menu"/></svg><small>Menu</small></a>
+        </div>
+        <div class="s-bn">
+          <a class="is-on"><svg class="ic"><use href="#i-scan"/></svg><small>Entrée</small></a>
+          <a><svg class="ic"><use href="#i-door"/></svg><small>Sortie</small></a>
+          <a><svg class="ic"><use href="#i-clock"/></svg><small>Historique</small></a>
+          <a><svg class="ic"><use href="#i-alert"/></svg><small>Alerte</small></a>
+          <a><svg class="ic"><use href="#i-menu"/></svg><small>Menu</small></a>
+        </div>
+        <p class="note" style="margin:0">Gardien&nbsp;: les deux gestes du portail viennent en premier, et « Alerte » reste à portée de pouce.</p>
+      </div>
+    </figure>
+
+  </div>
+
+  <div class="rulebox">
+    <h3>Les règles de navigation</h3>
+    <ol>
+      <li><b>Ce qu'on fait tous les jours ne se range pas.</b> Tableau de bord et Approbations restent hors groupe, en haut. Un groupe replié coûte un clic&nbsp;; ce clic est acceptable pour la comptabilité générale, pas pour l'écran qu'on ouvre vingt fois par jour.</li>
+      <li><b>Un seul groupe ouvert.</b> Ouvrir « Pédagogie » referme « Finances ». Le menu tient donc toujours sur la hauteur de l'écran, sans défilement interne.</li>
+      <li><b>La pastille de compte remonte au groupe replié.</b> Trois messages non lus dans un groupe fermé, et le groupe le montre — sinon replier revient à cacher.</li>
+      <li><b>La recherche est le vrai menu.</b> Au-delà de trente destinations, personne ne parcourt&nbsp;: on cherche. Elle est donc en haut, permanente, et elle atteint aussi des <em>actions</em>, pas seulement des pages.</li>
+      <li><b>Le rôle se dit, il ne se peint pas.</b> Un point de couleur et un mot sous le nom du produit. Six thèmes complets faisaient six logiciels différents.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ══════════════════ ÉCRAN 4 — ÉLÈVES ══════════════════ -->
+<section id="eleves">
+  <div class="shead"><span class="sidx">Écran 4</span><h2>Gestion des élèves</h2></div>
+  <p class="intro">Ce que ça change&nbsp;: sur ordinateur, le registre remplace la grille de cartes — 6 élèves visibles deviennent 24. Les sept boutons par élève deviennent une action principale et un menu. Et la ligne nomme <em>les tuteurs</em>, au pluriel&nbsp;: le jour où on ouvre cette liste, c'est le jour où il faut joindre quelqu'un.</p>
+
+  <figure class="frame">
+    <div class="chrome"><i></i><i></i><i></i><span>Ordinateur · 1280&nbsp;px</span></div>
+    <div class="s-app">
+      <aside class="s-side">
+        <div class="s-side-brand"><span class="s-shield sm"><svg viewBox="0 0 24 24"><path d="M12 2.5 4 5.6v6.9c0 4.9 3.3 8.4 8 10 4.7-1.6 8-5.1 8-10V5.6z"/><path d="m8.8 12.2 2.3 2.3 4.3-4.6"/></svg></span><div><b>SchoolSafe</b><em><i style="--c:#243A6B"></i>Direction 1</em></div></div>
+        <button class="s-cmd"><svg class="ic"><use href="#i-search"/></svg>Rechercher…<kbd>Ctrl K</kbd></button>
+        <nav class="s-nav">
+          <a class="s-nav-i"><svg class="ic"><use href="#i-home"/></svg>Tableau de bord</a>
+          <a class="s-nav-i"><svg class="ic"><use href="#i-check"/></svg>Approbations<span class="s-badge">7</span></a>
+          <div class="s-nav-g is-open"><button class="s-nav-h"><svg class="ic"><use href="#i-students"/></svg>Personnes<svg class="ic s-caret"><use href="#i-chev"/></svg></button>
+            <div class="s-nav-sub"><a class="is-on">Élèves</a><a>Classes</a><a>Enseignants</a><a>Gardiens</a><a>Parents</a><a>Personnes autorisées</a><a>Cartes d'élèves</a></div>
+          </div>
+          <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-money"/></svg>Finances &amp; RH<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+          <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-book"/></svg>Pédagogie<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+          <div class="s-nav-g"><button class="s-nav-h"><svg class="ic"><use href="#i-msg"/></svg>Communication<svg class="ic s-caret"><use href="#i-chev"/></svg></button></div>
+        </nav>
+        <div class="s-side-foot"><button class="s-me"><span class="s-av" style="--c:#243A6B">LM</span><div><b>L. Mukendi</b><span>Direction 1</span></div><svg class="ic"><use href="#i-chevr"/></svg></button></div>
+      </aside>
+
+      <div class="s-main">
+        <header class="s-top">
+          <h1>Élèves</h1>
+          <div class="s-top-r">
+            <span class="s-sync"><i></i>Synchronisé</span>
+            <button class="s-btn s-sm">Import CSV</button>
+            <button class="s-btn s-pri s-sm"><svg class="ic"><use href="#i-plus"/></svg>Inscrire un élève</button>
+          </div>
+        </header>
+
+        <div class="s-page">
+          <div class="s-tabs" role="tablist">
+            <button class="is-on">Actifs <em>1 247</em></button>
+            <button>Archivés <em>318</em></button>
+          </div>
+
+          <div class="s-toolbar">
+            <div class="s-inw s-grow"><svg class="ic"><use href="#i-search"/></svg><input class="s-in" placeholder="Nom, matricule ou nom d'un tuteur…"></div>
+            <div class="s-selw"><select class="s-in"><option>Toutes les classes</option></select><svg class="ic"><use href="#i-chev"/></svg></div>
+            <div class="s-selw"><select class="s-in"><option>Tous les frais</option></select><svg class="ic"><use href="#i-chev"/></svg></div>
+            <div class="s-seg"><button class="is-on" aria-label="Tableau"><svg class="ic"><use href="#i-menu"/></svg></button><button aria-label="Cartes"><svg class="ic"><use href="#i-class"/></svg></button></div>
+          </div>
+
+          <div class="s-selbar"><b>3 élèves sélectionnés</b><span class="s-selbar-a"><button class="s-btn s-sm">Changer de classe</button><button class="s-btn s-sm">Éditer les cartes</button><button class="s-btn s-sm">Exporter</button><button class="s-link">Tout désélectionner</button></span></div>
+
+          <div class="s-card s-flush">
+            <div class="s-tablewrap">
+              <table class="s-table s-table-lg">
+                <thead><tr>
+                  <th class="s-chk"><span class="s-cb is-part"></span></th>
+                  <th class="s-num">N°</th><th>Élève</th><th>Classe</th><th>Matricule</th><th>Tuteurs</th><th>Frais</th><th class="s-r">Solde&nbsp;FC</th><th></th>
+                </tr></thead>
+                <tbody>
+                  <tr class="is-sel"><td class="s-chk"><span class="s-cb is-on"></span></td><td class="s-num">001</td>
+                    <td><div class="s-person"><span class="s-av" style="--c:#6B4BA8">KB</span><div><b>Kabeya Ilunga Bénédicte</b><span>9 ans · née le 4 mars 2017</span></div></div></td>
+                    <td><span class="s-cls" style="--c:#2F7BD6">3e primaire A</span></td><td class="s-mono">LS-2026-0117</td>
+                    <td><div class="s-tut"><b>Kabeya Muteba Alphonse</b><span>père · +243 81 000 00 01</span></div></td>
+                    <td><span class="s-tag s-ok"><i></i>Payé</span></td><td class="s-r s-mono">0</td>
+                    <td class="s-act"><button class="s-btn s-sm">Ouvrir</button><button class="s-btn s-icon s-sm" aria-label="Autres actions"><svg class="ic"><use href="#i-more"/></svg></button></td></tr>
+
+                  <tr class="is-sel"><td class="s-chk"><span class="s-cb is-on"></span></td><td class="s-num">002</td>
+                    <td><div class="s-person"><span class="s-av" style="--c:#0F7A6B">MN</span><div><b>Mbuyi Nsimba Josué</b><span>8 ans · né le 19 septembre 2017</span></div></div></td>
+                    <td><span class="s-cls" style="--c:#2F7BD6">3e primaire A</span></td><td class="s-mono">LS-2026-0118</td>
+                    <td><div class="s-tut"><b>Nsimba Kavira Béatrice</b><span>mère · +243 82 000 00 02</span></div></td>
+                    <td><span class="s-tag s-wa"><i></i>2e tranche</span></td><td class="s-r s-mono">85 000</td>
+                    <td class="s-act"><button class="s-btn s-sm">Ouvrir</button><button class="s-btn s-icon s-sm" aria-label="Autres actions"><svg class="ic"><use href="#i-more"/></svg></button></td></tr>
+
+                  <tr class="is-sel"><td class="s-chk"><span class="s-cb is-on"></span></td><td class="s-num">003</td>
+                    <td><div class="s-person"><span class="s-av" style="--c:#B4531F">LT</span><div><b>Lukusa Tshiala Merveille</b><span>9 ans · née le 2 janvier 2017</span></div></div></td>
+                    <td><span class="s-cls" style="--c:#6B4BA8">3e primaire B</span></td><td class="s-mono">LS-2026-0119</td>
+                    <td><div class="s-tut"><b>Tshiala Mwamba Rachel</b><span>mère · +243 89 000 00 03</span><em>+2 personnes autorisées</em></div></td>
+                    <td><span class="s-tag s-no"><i></i>Impayé</span></td><td class="s-r s-mono s-bad">240 000</td>
+                    <td class="s-act"><button class="s-btn s-sm">Ouvrir</button><button class="s-btn s-icon s-sm" aria-label="Autres actions"><svg class="ic"><use href="#i-more"/></svg></button></td></tr>
+
+                  <tr><td class="s-chk"><span class="s-cb"></span></td><td class="s-num">004</td>
+                    <td><div class="s-person"><span class="s-av" style="--c:#243A6B">NK</span><div><b>Ngoy Kalonda Christian</b><span>11 ans · né le 27 mai 2015</span></div></div></td>
+                    <td><span class="s-cls" style="--c:#0F7A6B">5e primaire A</span></td><td class="s-mono">LS-2026-0121</td>
+                    <td><div class="s-tut"><b>Kalonda Ebondo Patrick</b><span>père · +243 81 000 00 04</span></div></td>
+                    <td><span class="s-tag s-ok"><i></i>Payé</span></td><td class="s-r s-mono">0</td>
+                    <td class="s-act"><button class="s-btn s-sm">Ouvrir</button><button class="s-btn s-icon s-sm" aria-label="Autres actions"><svg class="ic"><use href="#i-more"/></svg></button></td></tr>
+
+                  <tr><td class="s-chk"><span class="s-cb"></span></td><td class="s-num">005</td>
+                    <td><div class="s-person"><span class="s-av" style="--c:#0E7C55">BL</span><div><b>Bofunda Lisala Nathalie</b><span>7 ans · née le 11 novembre 2018</span></div></div></td>
+                    <td><span class="s-cls" style="--c:#B4531F">2e primaire B</span></td><td class="s-mono">LS-2026-0124</td>
+                    <td><div class="s-tut s-tut-void"><b>Aucun tuteur enregistré</b><span>Information manquante à l'école</span></div></td>
+                    <td><span class="s-tag s-no"><i></i>Impayé</span></td><td class="s-r s-mono s-bad">240 000</td>
+                    <td class="s-act"><button class="s-btn s-sm">Ouvrir</button><button class="s-btn s-icon s-sm" aria-label="Autres actions"><svg class="ic"><use href="#i-more"/></svg></button></td></tr>
+
+                  <tr><td class="s-chk"><span class="s-cb"></span></td><td class="s-num">006</td>
+                    <td><div class="s-person"><span class="s-av" style="--c:#2F7BD6">ME</span><div><b>Mukendi Ekofo Divine</b><span>10 ans · née le 8 juillet 2016</span></div></div></td>
+                    <td><span class="s-cls" style="--c:#0F7A6B">5e primaire A</span></td><td class="s-mono">LS-2026-0126</td>
+                    <td><div class="s-tut"><b>Ekofo Bosange Judith</b><span>mère · +243 84 000 00 06</span></div></td>
+                    <td><span class="s-tag s-wa"><i></i>3e tranche</span></td><td class="s-r s-mono">120 000</td>
+                    <td class="s-act"><button class="s-btn s-sm">Ouvrir</button><button class="s-btn s-icon s-sm" aria-label="Autres actions"><svg class="ic"><use href="#i-more"/></svg></button></td></tr>
+
+                  <tr class="s-menuhost"><td class="s-chk"><span class="s-cb"></span></td><td class="s-num">007</td>
+                    <td><div class="s-person"><span class="s-av" style="--c:#6B4BA8">TS</span><div><b>Tshimanga Sefu Emmanuel</b><span>12 ans · né le 30 avril 2014</span></div></div></td>
+                    <td><span class="s-cls" style="--c:#C42A3F">6e primaire A</span></td><td class="s-mono">LS-2026-0131</td>
+                    <td><div class="s-tut"><b>Sefu Ilunga Georgine</b><span>mère · +243 85 000 00 07</span></div></td>
+                    <td><span class="s-tag s-ok"><i></i>Payé</span></td><td class="s-r s-mono">0</td>
+                    <td class="s-act"><button class="s-btn s-sm">Ouvrir</button><button class="s-btn s-icon s-sm is-on" aria-label="Autres actions"><svg class="ic"><use href="#i-more"/></svg></button>
+                      <div class="s-menu">
+                        <a><svg class="ic"><use href="#i-user"/></svg>Modifier la fiche</a>
+                        <a><svg class="ic"><use href="#i-doc"/></svg>Dossier médical</a>
+                        <a><svg class="ic"><use href="#i-card"/></svg>Émettre une carte</a>
+                        <div class="s-menu-s">Documents à délivrer</div>
+                        <a><svg class="ic"><use href="#i-doc"/></svg>Attestation de scolarité</a>
+                        <a><svg class="ic"><use href="#i-doc"/></svg>Certificat de passage</a>
+                        <a><svg class="ic"><use href="#i-doc"/></svg>Certificat de bonne conduite</a>
+                        <div class="s-menu-s"></div>
+                        <a class="s-menu-d"><svg class="ic"><use href="#i-out"/></svg>Archiver l'élève</a>
+                      </div>
+                    </td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="s-pager"><span>1 – 24 sur 1 247 élèves</span><span class="s-pager-b"><button class="s-btn s-sm" disabled>Précédent</button><button class="s-btn s-sm">Suivant</button></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <div class="twocol">
+    <div>
+      <p class="lbl">Ce que la ligne dit, et pourquoi</p>
+      <ul class="bullets">
+        <li><b>Le numéro d'ordre à gauche.</b> C'est ainsi qu'un registre se tient, et c'est ce qu'on cite au téléphone.</li>
+        <li><b>Les tuteurs, pas « le parent ».</b> L'école connaît le père, la mère et les personnes autorisées — la ligne montre le contact principal et compte les autres.</li>
+        <li><b>« Aucun tuteur enregistré » se dit.</b> Un blanc ressemble à un enfant sans famille&nbsp;; c'est une information qui manque à l'école, donc une ligne à compléter.</li>
+        <li><b>Le solde à droite, en chiffres tabulaires.</b> Les colonnes s'alignent, l'anomalie saute aux yeux sans qu'on ait à lire.</li>
+        <li><b>Une action principale, le reste au menu.</b> Les six documents que l'écran actuel étale en boutons deviennent une section nommée « Documents à délivrer » — parce qu'un certificat se délivre, il ne se télécharge pas.</li>
+      </ul>
+    </div>
+    <div>
+      <p class="lbl">Le même écran en cartes</p>
+      <p class="note">Le basculement tableau / cartes reste offert&nbsp;: sur un écran étroit, ou quand on cherche un visage plutôt qu'un chiffre, la carte est meilleure. C'est un choix de l'utilisateur, pas un choix imposé par la largeur.</p>
+      <div class="s-mini-cards">
+        <div class="s-card2"><span class="s-av" style="--c:#6B4BA8">KB</span><div><b>Kabeya Ilunga Bénédicte</b><span>3e primaire A · LS-2026-0117</span><span class="s-tag s-ok"><i></i>Payé</span></div></div>
+        <div class="s-card2"><span class="s-av" style="--c:#B4531F">LT</span><div><b>Lukusa Tshiala Merveille</b><span>3e primaire B · LS-2026-0119</span><span class="s-tag s-no"><i></i>Impayé · 240 000 FC</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ ÉCRAN 5 — MOBILE ══════════════════ -->
+<section id="mobile">
+  <div class="shead"><span class="sidx">Écran 5</span><h2>Téléphone</h2></div>
+  <p class="intro">Trois rôles, trois usages réels&nbsp;: le parent qui ouvre l'application le soir, le gardien debout au portail avec une main occupée, la Direction qui consulte la liste dans la cour. Largeur de référence&nbsp;: 390&nbsp;px.</p>
+
+  <div class="phones">
+
+    <figure class="phone">
+      <div class="ph">
+        <div class="ph-notch"></div>
+        <div class="ph-scr s-app-m">
+          <header class="s-mtop"><div><b>Bonsoir, Béatrice</b><span>Vendredi 14 août</span></div><button class="s-btn s-icon" aria-label="Notifications"><svg class="ic"><use href="#i-bell"/></svg><em class="s-dot"></em></button></header>
+          <div class="s-mpage">
+            <div class="s-kid">
+              <div class="s-kid-h"><span class="s-av" style="--c:#0F7A6B">MJ</span><div><b>Mbuyi Nsimba Josué</b><span>3e primaire A</span></div></div>
+              <div class="s-kid-row"><span class="s-tag s-ok"><i></i>Entré à 07:52</span><span class="s-tag s-ok"><i></i>Sorti à 12:34</span></div>
+            </div>
+
+            <div class="s-card s-msec">
+              <div class="s-card-h"><h2>Devoirs à rendre</h2><span class="s-count">2</span></div>
+              <ul class="s-todo s-todo-m">
+                <li><div><b>Mathématiques — fractions</b><span>À rendre lundi 17 août</span></div><svg class="ic"><use href="#i-chevr"/></svg></li>
+                <li><div><b>Français — dictée préparée</b><span>À rendre mardi 18 août</span></div><svg class="ic"><use href="#i-chevr"/></svg></li>
+              </ul>
+            </div>
+
+            <div class="s-card s-msec">
+              <div class="s-card-h"><h2>Frais scolaires</h2></div>
+              <div class="s-fee"><div><b class="s-mono">85 000 FC</b><span>2e tranche — à régler avant le 31 août</span></div><span class="s-tag s-wa"><i></i>En attente</span></div>
+              <div class="s-prog"><i style="--p:64%"></i></div>
+              <span class="s-prog-l">155 000 FC réglés sur 240 000 FC</span>
+            </div>
+
+            <div class="s-card s-msec">
+              <div class="s-card-h"><h2>Messages</h2><span class="s-count">1</span></div>
+              <ul class="s-todo s-todo-m"><li><div><b>Direction</b><span>Réunion des parents — samedi 22 août à 9h</span></div><em class="s-dot s-dot-s"></em></li></ul>
+            </div>
+          </div>
+          <nav class="s-bn"><a class="is-on"><svg class="ic"><use href="#i-home"/></svg><small>Accueil</small></a><a><svg class="ic"><use href="#i-family"/></svg><small>Enfants</small></a><a><svg class="ic"><use href="#i-book"/></svg><small>Devoirs</small></a><a><svg class="ic"><use href="#i-msg"/></svg><small>Messages</small><span class="s-badge">1</span></a><a><svg class="ic"><use href="#i-menu"/></svg><small>Menu</small></a></nav>
+        </div>
+      </div>
+      <figcaption><b>Parent</b>L'enfant d'abord, et la seule question qui compte le soir&nbsp;: est-il entré, est-il sorti, à quelle heure.</figcaption>
+    </figure>
+
+    <figure class="phone">
+      <div class="ph">
+        <div class="ph-notch"></div>
+        <div class="ph-scr s-app-m s-app-dark">
+          <header class="s-mtop s-mtop-d"><div><b>Entrée — portail principal</b><span>08:19 · 1 118 entrées ce matin</span></div><span class="s-sync s-sync-off"><i></i>Hors ligne</span></header>
+          <div class="s-viewport">
+            <div class="s-corners"><i></i><i></i><i></i><i></i></div>
+            <div class="s-scanline"></div>
+          </div>
+          <div class="s-result s-result-no">
+            <div class="s-result-h"><span class="s-av s-av-lg" style="--c:#B4531F">BL</span><div><b>Bofunda Lisala Nathalie</b><span>2e primaire B · LS-2026-0124</span></div></div>
+            <div class="s-result-v"><svg class="ic"><use href="#i-alert"/></svg><div><b>Entrée refusée — frais impayés</b><span>240 000 FC dus. Dirigez la famille vers la caisse.</span></div></div>
+            <div class="s-result-a"><button class="s-btn s-lg s-full">Enregistrer le passage quand même</button><small>Le motif sera consigné et la Direction prévenue.</small></div>
+          </div>
+          <nav class="s-bn s-bn-d"><a class="is-on"><svg class="ic"><use href="#i-scan"/></svg><small>Entrée</small></a><a><svg class="ic"><use href="#i-door"/></svg><small>Sortie</small></a><a><svg class="ic"><use href="#i-clock"/></svg><small>Historique</small></a><a><svg class="ic"><use href="#i-alert"/></svg><small>Alerte</small></a><a><svg class="ic"><use href="#i-menu"/></svg><small>Menu</small></a></nav>
+        </div>
+      </div>
+      <figcaption><b>Gardien</b>Fond sombre&nbsp;: on lit un écran en plein soleil, et l'appareil tient toute la journée. La décision se lit à deux mètres, l'action est à portée de pouce.</figcaption>
+    </figure>
+
+    <figure class="phone">
+      <div class="ph">
+        <div class="ph-notch"></div>
+        <div class="ph-scr s-app-m">
+          <header class="s-mtop"><button class="s-btn s-icon" aria-label="Menu"><svg class="ic"><use href="#i-menu"/></svg></button><div class="s-mtop-t"><b>Élèves</b><span>1 247 actifs</span></div><button class="s-btn s-icon" aria-label="Inscrire"><svg class="ic"><use href="#i-plus"/></svg></button></header>
+          <div class="s-msearch"><div class="s-inw"><svg class="ic"><use href="#i-search"/></svg><input class="s-in" placeholder="Nom ou matricule…"></div></div>
+          <div class="s-chips"><button class="is-on">Toutes</button><button>1re A</button><button>2e B</button><button>3e A</button><button>3e B</button><button>5e A</button></div>
+          <div class="s-mpage s-mpage-t">
+            <a class="s-mrow"><span class="s-av" style="--c:#6B4BA8">KB</span><div><b>Kabeya Ilunga Bénédicte</b><span>3e primaire A · LS-2026-0117</span><span class="s-tag s-ok"><i></i>Payé</span></div><svg class="ic"><use href="#i-chevr"/></svg></a>
+            <a class="s-mrow"><span class="s-av" style="--c:#0F7A6B">MN</span><div><b>Mbuyi Nsimba Josué</b><span>3e primaire A · LS-2026-0118</span><span class="s-tag s-wa"><i></i>2e tranche · 85 000 FC</span></div><svg class="ic"><use href="#i-chevr"/></svg></a>
+            <a class="s-mrow"><span class="s-av" style="--c:#B4531F">LT</span><div><b>Lukusa Tshiala Merveille</b><span>3e primaire B · LS-2026-0119</span><span class="s-tag s-no"><i></i>Impayé · 240 000 FC</span></div><svg class="ic"><use href="#i-chevr"/></svg></a>
+            <a class="s-mrow"><span class="s-av" style="--c:#243A6B">NK</span><div><b>Ngoy Kalonda Christian</b><span>5e primaire A · LS-2026-0121</span><span class="s-tag s-ok"><i></i>Payé</span></div><svg class="ic"><use href="#i-chevr"/></svg></a>
+            <a class="s-mrow"><span class="s-av" style="--c:#0E7C55">BL</span><div><b>Bofunda Lisala Nathalie</b><span>2e primaire B · LS-2026-0124</span><span class="s-tag s-no"><i></i>Impayé · 240 000 FC</span></div><svg class="ic"><use href="#i-chevr"/></svg></a>
+          </div>
+          <nav class="s-bn"><a><svg class="ic"><use href="#i-home"/></svg><small>Accueil</small></a><a><svg class="ic"><use href="#i-check"/></svg><small>Approuver</small><span class="s-badge">7</span></a><a class="is-on"><svg class="ic"><use href="#i-students"/></svg><small>Élèves</small></a><a><svg class="ic"><use href="#i-money"/></svg><small>Paiements</small></a><a><svg class="ic"><use href="#i-menu"/></svg><small>Menu</small></a></nav>
+        </div>
+      </div>
+      <figcaption><b>Direction — Élèves</b>Le tableau redevient une liste. Une ligne = un élève, une classe, un état de frais. Rien ne déborde, rien ne se coupe.</figcaption>
+    </figure>
+
+  </div>
+
+  <div class="rulebox">
+    <h3>Les règles du téléphone</h3>
+    <ol>
+      <li><b>Le budget de largeur se calcule.</b> Une rangée est dessinée pour 390&nbsp;px moins les marges, soit 358&nbsp;px utiles. Ce qui n'entre pas passe à la ligne — un bouton coupé est un défaut, une seconde ligne n'en est pas un.</li>
+      <li><b>44&nbsp;px de zone tactile, toujours.</b> La zone déborde le dessin&nbsp;; un bouton de 36&nbsp;px reste touchable sans être gros.</li>
+      <li><b>Une seule action principale visible.</b> Le reste va dans un menu ou une feuille qui monte du bas.</li>
+      <li><b>Le pouce d'abord.</b> Ce qu'on fait souvent vit dans le tiers bas de l'écran&nbsp;; le haut porte l'information, pas les commandes.</li>
+      <li><b>Trois points d'arrêt.</b> &lt;&nbsp;720&nbsp;px téléphone (barre du bas) · 720–1100&nbsp;px tablette (rail) · &gt;&nbsp;1100&nbsp;px ordinateur (menu complet). Pas d'autre variante à maintenir.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ══════════════════ SUITE ══════════════════ -->
+<section id="suite">
+  <h2>La suite</h2>
+
+  <div class="twocol">
+    <div>
+      <h3 class="sub">Si vous validez cette direction</h3>
+      <p>La reprise se ferait sans réécrire l'application, dans cet ordre — chaque étape étant visible et réversible&nbsp;:</p>
+      <ol class="steps">
+        <li><b>Les jetons.</b> Remplacer le bloc <code>:root</code> par celui-ci. Tout ce qui utilise déjà <code>var(--…)</code> change d'aspect sans qu'on y touche.</li>
+        <li><b>Les composants partagés.</b> Boutons, champs, pastilles, alertes, tableaux. Ce sont des classes déjà employées partout — <code>.btn</code>, <code>.form-input</code>, <code>.pill</code>.</li>
+        <li><b>La navigation.</b> Le menu, le rail, la barre du bas, la palette. C'est le changement qu'on ressent le plus, pour le moins de code.</li>
+        <li><b>Les icônes.</b> Un jeu unique remplace les émojis du menu.</li>
+        <li><b>Écran par écran.</b> Les styles écrits à la main dans les attributs <code>style</code>, repris au fur et à mesure. C'est la partie longue, et elle peut s'étaler.</li>
+      </ol>
+      <p class="note">Rien de tout cela ne touche Supabase, les rôles, les permissions, l'authentification ni les documents officiels — dont la charte reste celle de l'école, gris bleuté et or, indépendante de l'interface.</p>
+    </div>
+    <div>
+      <h3 class="sub">Ce que je n'ai pas tranché</h3>
+      <ul class="bullets">
+        <li><b>Le cycle secondaire.</b> L'application porte encore <code>secondaire</code>, <code>humanités</code>, l'écran EXETAT et le rapport SECOPE, alors que l'école s'arrête à la 6e primaire. Je les ai laissés hors de ce prototype — mais je n'ai rien retiré, parce qu'une école peut ouvrir un secondaire.</li>
+        <li><b>Le mode sombre général.</b> Je l'ai dessiné pour le gardien, où il est justifié. Faut-il l'offrir à tous les rôles, ou seulement à ceux qui travaillent dehors&nbsp;?</li>
+        <li><b>Les photographies.</b> Elles disparaissent du démarrage et de la connexion. Faut-il les garder ailleurs — une galerie dans « Mon site web », par exemple&nbsp;?</li>
+        <li><b>La densité.</b> Le tableau propose 48&nbsp;px par ligne. Une variante compacte à 36&nbsp;px tiendrait 32 élèves à l'écran. À décider en voyant l'écran réel de l'école.</li>
+      </ul>
+
+      <h3 class="sub">Trois questions</h3>
+      <ol class="qs">
+        <li>Cette direction — <b>encre, papier, un seul bleu</b> — est-elle celle que vous voulez, ou préférez-vous garder de la couleur dans l'interface&nbsp;?</li>
+        <li>Le <b>tableau</b> à la place des cartes sur ordinateur&nbsp;: est-ce la bonne lecture pour votre équipe&nbsp;?</li>
+        <li>Sur quel <b>appareil</b> l'école travaille-t-elle le plus — téléphone, tablette, ordinateur&nbsp;? Cela décide de ce qu'on reprend en premier.</li>
+      </ol>
+    </div>
+  </div>
+
+  <p class="warn final"><strong>Aucune modification n'a été apportée au dépôt.</strong> Ce document est un fichier séparé&nbsp;: pas de commit, pas de branche, pas de fusion, aucun octet de <code>dist/index.html</code> changé. SchoolSafe fonctionne exactement comme avant.</p>
+</section>
+
+</div>
+
+<style>
+/* ═══════════ JETONS ═══════════ */
+:root{
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --encre:#0F1729; --t1:#0F1729; --t2:#5A6478; --t3:#626C82;
+  --papier:#F7F8FB; --surf:#FFFFFF; --surf2:#F1F3F9; --filet:#E3E7F0; --filet2:#EDF0F6;
+  --bleu:#2B57D4; --bleu-w:#F0F4FE; --bleu-b:#D6E0FA; --on-bleu:#FFFFFF;
+  --vert:#0E7C55; --vert-w:#E4F4EC; --ambre:#9A6206; --ambre-w:#FCF0DA; --rouge:#C42A3F; --rouge-w:#FCE8EA;
+  --rail:#0F1729; --rail-t:#FFFFFF; --rail-t2:#9AA5BD; --rail-h:rgba(255,255,255,.07); --rail-b:rgba(255,255,255,.09);
+  --e1:0 2px 8px rgba(15,23,41,.07); --e2:0 12px 32px rgba(15,23,41,.16);
+  --r1:6px; --r2:10px; --r3:14px;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --t1:#E8ECF6; --t2:#9AA5BD; --t3:#7B879F;
+  --papier:#0B1020; --surf:#141C31; --surf2:#1B2440; --filet:rgba(255,255,255,.10); --filet2:rgba(255,255,255,.06);
+  --bleu:#7D9CF7; --bleu-w:rgba(125,156,247,.14); --bleu-b:rgba(125,156,247,.32); --on-bleu:#0B1020;
+  --vert:#4BC58E; --vert-w:rgba(75,197,142,.15); --ambre:#E0A93E; --ambre-w:rgba(224,169,62,.15); --rouge:#F5808F; --rouge-w:rgba(245,128,143,.15);
+  --rail:#141C31; --rail-b:rgba(255,255,255,.08);
+  --e1:0 2px 10px rgba(0,0,0,.4); --e2:0 14px 36px rgba(0,0,0,.55);
+}}
+:root[data-theme="dark"]{
+  --t1:#E8ECF6; --t2:#9AA5BD; --t3:#7B879F;
+  --papier:#0B1020; --surf:#141C31; --surf2:#1B2440; --filet:rgba(255,255,255,.10); --filet2:rgba(255,255,255,.06);
+  --bleu:#7D9CF7; --bleu-w:rgba(125,156,247,.14); --bleu-b:rgba(125,156,247,.32); --on-bleu:#0B1020;
+  --vert:#4BC58E; --vert-w:rgba(75,197,142,.15); --ambre:#E0A93E; --ambre-w:rgba(224,169,62,.15); --rouge:#F5808F; --rouge-w:rgba(245,128,143,.15);
+  --rail:#141C31; --rail-b:rgba(255,255,255,.08);
+  --e1:0 2px 10px rgba(0,0,0,.4); --e2:0 14px 36px rgba(0,0,0,.55);
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--papier);color:var(--t1);font:400 16px/1.6 var(--ui);-webkit-font-smoothing:antialiased}
+.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+:where(a,button,input,select,[tabindex]):focus-visible{outline:2px solid var(--bleu);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ═══════════ DOCUMENT ═══════════ */
+.wrap{max-width:1240px;margin:0 auto;padding:0 24px 96px}
+.lede{padding:72px 0 40px;max-width:760px}
+.kicker{font:600 11px/1.3 var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin:0 0 20px}
+.lede h1{font:700 clamp(48px,9vw,84px)/.95 var(--ui);letter-spacing:-.035em;margin:0 0 24px;text-wrap:balance}
+.stand{font:400 clamp(17px,2.2vw,21px)/1.55 var(--ui);color:var(--t2);margin:0 0 24px;text-wrap:pretty}
+.warn{border-left:3px solid var(--bleu);background:var(--bleu-w);padding:14px 18px;border-radius:0 var(--r2) var(--r2) 0;font-size:14.5px;color:var(--t1);margin:0}
+.warn.final{margin-top:48px;border-left-color:var(--vert);background:var(--vert-w)}
+
+.toc{display:flex;flex-wrap:wrap;gap:2px 0;position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--papier) 88%,transparent);backdrop-filter:blur(12px);border-top:1px solid var(--filet);border-bottom:1px solid var(--filet);margin-bottom:64px}
+.toc a{font:600 12.5px/1 var(--ui);letter-spacing:.01em;color:var(--t2);text-decoration:none;padding:14px 16px;border-bottom:2px solid transparent}
+.toc a:hover{color:var(--bleu);border-bottom-color:var(--bleu)}
+
+section{margin-bottom:88px;scroll-margin-top:60px}
+section > h2{font:650 clamp(28px,4vw,40px)/1.1 var(--ui);letter-spacing:-.025em;margin:0 0 16px}
+.shead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.shead h2{font:650 clamp(28px,4vw,40px)/1.1 var(--ui);letter-spacing:-.025em;margin:0}
+.sidx{font:600 11px/1 var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--bleu);background:var(--bleu-w);border:1px solid var(--bleu-b);padding:6px 10px;border-radius:999px}
+.intro{font-size:17px;line-height:1.6;color:var(--t2);max-width:74ch;margin:0 0 32px;text-wrap:pretty}
+h3.sub{font:650 20px/1.3 var(--ui);letter-spacing:-.01em;margin:44px 0 12px;padding-top:20px;border-top:1px solid var(--filet)}
+section p{max-width:74ch}
+.lbl{font:600 11px/1.3 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--t3);margin:28px 0 12px}
+.note{font-size:13.5px;line-height:1.6;color:var(--t2);margin:12px 0 0}
+.note.wide{max-width:none;padding:12px 0 0;border-top:1px solid var(--filet)}
+code{font:500 .88em/1 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--surf2);padding:2px 5px;border-radius:4px;color:var(--t1)}
+
+.findings{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:1px;background:var(--filet);border:1px solid var(--filet);border-radius:var(--r2);overflow:hidden}
+.finding{background:var(--surf);padding:22px 20px}
+.fnum{display:block;font:700 30px/1 var(--ui);letter-spacing:-.03em;color:var(--bleu);font-variant-numeric:tabular-nums;margin-bottom:8px}
+.finding h3{font:600 14.5px/1.3 var(--ui);margin:0 0 8px}
+.finding p{font-size:13.5px;line-height:1.55;color:var(--t2);margin:0}
+
+.tenets{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:28px}
+.tenets article{border-top:2px solid var(--encre);padding-top:16px}
+.tenets h3{font:650 18px/1.25 var(--ui);letter-spacing:-.01em;margin:0 0 10px}
+.tenets p{font-size:14.5px;line-height:1.6;color:var(--t2);margin:0}
+
+.swatches{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:12px}
+.sw{border:1px solid var(--filet);border-radius:var(--r2);padding:12px;background:var(--surf)}
+.sw b{display:block;height:46px;border-radius:var(--r1);background:var(--c);margin-bottom:10px}
+.sw b.brd{border:1px solid var(--filet)}
+.sw code{display:block;background:none;padding:0;font-size:12px;color:var(--t1);font-weight:600}
+.sw span{display:block;font:500 11.5px/1.5 ui-monospace,monospace;color:var(--t3)}
+.sw em{display:block;font:400 11.5px/1.5 var(--ui);color:var(--t2);font-style:normal;margin-top:4px}
+.roledots{display:flex;flex-wrap:wrap;gap:8px}
+.rd{display:inline-flex;align-items:center;gap:8px;font:500 13px/1 var(--ui);border:1px solid var(--filet);background:var(--surf);padding:9px 14px;border-radius:999px}
+.rd::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--c)}
+
+.typescale{display:grid;gap:2px;background:var(--filet);border:1px solid var(--filet);border-radius:var(--r2);overflow:hidden}
+.typescale > div{background:var(--surf);padding:18px 20px;display:grid;grid-template-columns:220px 1fr;gap:20px;align-items:baseline}
+.tsl{font:500 11.5px/1.5 ui-monospace,monospace;color:var(--t3)}
+.typescale p{margin:0;color:var(--t1)}
+@media(max-width:700px){.typescale > div{grid-template-columns:1fr;gap:8px}}
+
+.specgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:28px}
+.spec .lbl{margin-top:0}
+.spacers{display:flex;align-items:flex-end;gap:8px}
+.spacers i{width:var(--w);height:var(--w);background:var(--bleu);border-radius:2px;opacity:.85}
+.radii{display:flex;gap:10px;flex-wrap:wrap}
+.radii span{display:flex;flex-direction:column;align-items:center;justify-content:center;width:74px;height:74px;background:var(--surf);border:1px solid var(--filet);font:600 15px/1 var(--ui);color:var(--t1)}
+.radii small{font:400 10px/1.4 var(--ui);color:var(--t3);margin-top:5px}
+.elev{display:flex;gap:12px;flex-wrap:wrap}
+.elev span{display:flex;flex-direction:column;align-items:center;justify-content:center;width:104px;height:74px;background:var(--surf);border-radius:var(--r2);font:600 13px/1 var(--ui)}
+.elev .e0{border:1px solid var(--filet)}
+.elev .e1{border:1px solid var(--filet);box-shadow:var(--e1)}
+.elev .e2{border:1px solid var(--filet);box-shadow:var(--e2)}
+.elev small{font:400 10px/1.4 var(--ui);color:var(--t3);margin-top:5px}
+
+.cbox{margin-top:36px}
+.cbox .lbl{margin-top:0}
+.crow{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin-bottom:12px}
+.crow-col{flex-direction:column;align-items:stretch;max-width:640px}
+.crow-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+.iconwall{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:1px;background:var(--filet);border:1px solid var(--filet);border-radius:var(--r2);overflow:hidden}
+.iconwall span{background:var(--surf);display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 6px;font:500 11px/1.3 var(--ui);color:var(--t2);text-align:center}
+.iconwall .ic{width:24px;height:24px;color:var(--t1)}
+
+.twocol{display:grid;grid-template-columns:1fr 1fr;gap:44px;margin-top:36px}
+@media(max-width:860px){.twocol{grid-template-columns:1fr;gap:32px}}
+.bullets,.steps,.qs{margin:0;padding-left:1.15em;display:grid;gap:11px}
+.bullets{list-style:none;padding:0}
+.bullets li{font-size:14px;line-height:1.6;color:var(--t2);padding-left:16px;position:relative}
+.bullets li::before{content:"";position:absolute;left:0;top:.6em;width:6px;height:6px;border-radius:50%;background:var(--bleu)}
+.bullets b,.steps b,.qs b{color:var(--t1);font-weight:600}
+.steps li,.qs li{font-size:14px;line-height:1.6;color:var(--t2)}
+.steps li::marker,.qs li::marker{color:var(--bleu);font-weight:700}
+.mini{width:100%;border-collapse:collapse;font-size:13.5px}
+.mini td{padding:9px 0;border-bottom:1px solid var(--filet);color:var(--t2)}
+.mini td:last-child{color:var(--t1);font-weight:600}
+
+.rulebox{margin-top:36px;border:1px solid var(--filet);border-radius:var(--r2);background:var(--surf);padding:26px 28px}
+.rulebox h3{font:650 17px/1.3 var(--ui);margin:0 0 16px}
+.rulebox ol{margin:0;padding-left:1.2em;display:grid;gap:12px;max-width:88ch}
+.rulebox li{font-size:14px;line-height:1.6;color:var(--t2)}
+.rulebox li::marker{color:var(--bleu);font-weight:700}
+.rulebox b{color:var(--t1);font-weight:600}
+
+/* ═══════════ CADRES ═══════════ */
+.frame{margin:0;border:1px solid var(--filet);border-radius:var(--r3);overflow:hidden;background:var(--surf);box-shadow:var(--e1)}
+.chrome{display:flex;align-items:center;gap:7px;padding:11px 16px;background:var(--surf2);border-bottom:1px solid var(--filet)}
+.chrome i{width:10px;height:10px;border-radius:50%;background:var(--filet);border:1px solid color-mix(in srgb,var(--t3) 30%,transparent)}
+.chrome span{margin-left:10px;font:500 11.5px/1 var(--ui);color:var(--t3)}
+
+/* ═══════════ PROTOTYPE — BASE ═══════════ */
+.s-app{display:flex;background:var(--papier);font:400 14px/1.5 var(--ui);color:var(--t1);min-height:640px;font-variant-numeric:tabular-nums}
+.s-app *,.s-app-m *{box-sizing:border-box}
+.s-app button,.s-app-m button,.s-app input,.s-app-m input,.s-app select,.s-app-m select{font:inherit;color:inherit}
+
+/* boutons */
+.s-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:40px;padding:0 14px;border:1px solid var(--filet);background:var(--surf);color:var(--t1);border-radius:var(--r1);font:600 13.5px/1 var(--ui);cursor:pointer;white-space:nowrap;position:relative}
+.s-btn:hover{border-color:color-mix(in srgb,var(--t3) 45%,transparent);background:var(--surf2)}
+.s-btn .ic{width:17px;height:17px}
+.s-pri{background:var(--bleu);border-color:var(--bleu);color:var(--on-bleu)}
+.s-pri:hover{background:color-mix(in srgb,var(--bleu) 88%,#000);border-color:color-mix(in srgb,var(--bleu) 88%,#000)}
+.s-ghost{background:transparent;border-color:transparent;color:var(--t2)}
+.s-ghost:hover{background:var(--surf2);border-color:transparent}
+.s-dgr{color:var(--rouge);border-color:color-mix(in srgb,var(--rouge) 40%,transparent)}
+.s-dgr:hover{background:var(--rouge-w);border-color:var(--rouge)}
+.s-btn[disabled]{opacity:.42;cursor:not-allowed}
+.s-sm{height:32px;padding:0 10px;font-size:12.5px}
+.s-lg{height:48px;padding:0 20px;font-size:15px}
+.s-full{width:100%}
+.s-icon{width:40px;padding:0}
+.s-icon.s-sm{width:32px}
+.s-icon.is-on{background:var(--surf2);border-color:color-mix(in srgb,var(--t3) 45%,transparent)}
+.s-link{background:none;border:none;padding:0;color:var(--bleu);font:600 13px/1 var(--ui);cursor:pointer;text-align:left}
+.s-link:hover{text-decoration:underline}
+.s-dot{position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:var(--rouge);border:1.5px solid var(--surf)}
+.s-dot-s{position:static;border:none;width:8px;height:8px;flex:none;background:var(--bleu)}
+
+/* champs */
+.s-field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.s-field label{font:600 12.5px/1.3 var(--ui);color:var(--t1)}
+.s-in{height:40px;width:100%;padding:0 12px;border:1px solid var(--filet);background:var(--surf);border-radius:var(--r1);font:400 14px/1 var(--ui);color:var(--t1)}
+.s-in::placeholder{color:var(--t3)}
+.s-in:focus{outline:none;border-color:var(--bleu);box-shadow:0 0 0 3px var(--bleu-w)}
+.s-in.s-err{border-color:var(--rouge);box-shadow:0 0 0 3px var(--rouge-w)}
+.s-inw{position:relative;display:flex;align-items:center}
+.s-inw > .ic{position:absolute;left:12px;color:var(--t3);pointer-events:none}
+.s-inw .s-in{padding-left:38px}
+.s-inw.s-grow{flex:1}
+.s-reveal{position:absolute;right:4px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--t3);cursor:pointer;border-radius:var(--r1)}
+.s-selw{position:relative;display:flex;align-items:center}
+.s-selw select{appearance:none;padding-right:34px}
+.s-selw > .ic{position:absolute;right:10px;color:var(--t3);pointer-events:none;width:17px;height:17px}
+.s-hint{display:flex;align-items:center;gap:5px;font:400 12px/1.4 var(--ui);color:var(--t2)}
+.s-hint .ic{width:14px;height:14px;color:var(--vert)}
+.s-hint b{color:var(--t1);font-weight:600}
+.s-errm{display:flex;align-items:center;gap:5px;font:500 12px/1.4 var(--ui);color:var(--rouge)}
+.s-errm .ic{width:14px;height:14px}
+
+/* pastilles */
+.s-tag{display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:999px;font:600 11.5px/1 var(--ui);white-space:nowrap;background:var(--surf2);color:var(--t2);border:1px solid transparent}
+.s-tag i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.s-ok{background:var(--vert-w);color:var(--vert);border-color:color-mix(in srgb,var(--vert) 22%,transparent)}
+.s-wa{background:var(--ambre-w);color:var(--ambre);border-color:color-mix(in srgb,var(--ambre) 22%,transparent)}
+.s-no{background:var(--rouge-w);color:var(--rouge);border-color:color-mix(in srgb,var(--rouge) 22%,transparent)}
+.s-in-tag,.s-tag.s-in{background:var(--bleu-w);color:var(--bleu);border-color:var(--bleu-b)}
+.s-nu{background:var(--surf2);color:var(--t3);border-color:var(--filet)}
+
+/* alertes */
+.s-alert{display:flex;gap:11px;padding:13px 15px;border-radius:var(--r2);border:1px solid var(--filet);background:var(--surf2);align-items:flex-start}
+.s-alert .ic{width:18px;height:18px;margin-top:1px}
+.s-alert b{display:block;font:600 13.5px/1.4 var(--ui);color:var(--t1)}
+.s-alert span{display:block;font:400 13px/1.5 var(--ui);color:var(--t2);margin-top:2px}
+.s-alert i{font-style:normal;font-family:ui-monospace,monospace;font-size:11.5px;color:var(--t3)}
+.s-a-ok{background:var(--vert-w);border-color:color-mix(in srgb,var(--vert) 24%,transparent)}.s-a-ok > .ic{color:var(--vert)}
+.s-a-wa{background:var(--ambre-w);border-color:color-mix(in srgb,var(--ambre) 24%,transparent)}.s-a-wa > .ic{color:var(--ambre)}
+.s-a-no{background:var(--rouge-w);border-color:color-mix(in srgb,var(--rouge) 24%,transparent)}.s-a-no > .ic{color:var(--rouge)}
+.s-a-in{background:var(--bleu-w);border-color:var(--bleu-b)}.s-a-in > .ic{color:var(--bleu)}
+
+/* tableau */
+.s-tablewrap{overflow-x:auto}
+.s-table{width:100%;border-collapse:collapse;font-size:13.5px}
+.s-table th{text-align:left;font:600 10.5px/1 var(--ui);letter-spacing:.07em;text-transform:uppercase;color:var(--t3);padding:11px 12px;border-bottom:1px solid var(--filet);white-space:nowrap;background:var(--surf)}
+.s-table td{padding:11px 12px;border-bottom:1px solid var(--filet2);color:var(--t2);vertical-align:middle}
+.s-table tbody tr:hover{background:var(--surf2)}
+.s-table tbody tr.is-sel{background:var(--bleu-w)}
+.s-table-lg td{padding:9px 12px;height:56px}
+.s-strong{color:var(--t1);font-weight:600}
+.s-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-variant-numeric:tabular-nums}
+.s-r{text-align:right}
+.s-num{color:var(--t3);font-family:ui-monospace,monospace;font-size:12px;width:44px}
+.s-bad{color:var(--rouge);font-weight:600}
+.s-chk{width:38px}
+.s-cb{display:block;width:16px;height:16px;border:1.5px solid color-mix(in srgb,var(--t3) 55%,transparent);border-radius:4px;background:var(--surf)}
+.s-cb.is-on{background:var(--bleu);border-color:var(--bleu);position:relative}
+.s-cb.is-on::after{content:"";position:absolute;left:4.5px;top:1px;width:4px;height:8px;border:solid var(--surf);border-width:0 2px 2px 0;transform:rotate(42deg)}
+.s-cb.is-part{background:var(--bleu);border-color:var(--bleu);position:relative}
+.s-cb.is-part::after{content:"";position:absolute;left:3px;top:6px;width:8px;height:2px;background:var(--surf);border-radius:1px}
+.s-act{white-space:nowrap;text-align:right;position:relative}
+.s-act .s-btn+.s-btn{margin-left:5px}
+.s-person{display:flex;align-items:center;gap:10px}
+.s-person b{display:block;font:600 13.5px/1.35 var(--ui);color:var(--t1)}
+.s-person span{display:block;font:400 11.5px/1.35 var(--ui);color:var(--t3)}
+.s-tut b{display:block;font:500 13px/1.35 var(--ui);color:var(--t1)}
+.s-tut span{display:block;font:400 11.5px/1.35 var(--ui);color:var(--t3)}
+.s-tut em{display:block;font:500 11px/1.35 var(--ui);color:var(--bleu);font-style:normal;margin-top:2px}
+.s-tut-void b{color:var(--ambre);font-weight:600}
+.s-cls{display:inline-flex;align-items:center;gap:6px;font:500 12.5px/1 var(--ui);color:var(--t2);white-space:nowrap}
+.s-cls::before{content:"";width:8px;height:8px;border-radius:3px;background:var(--c)}
+.s-av{width:34px;height:34px;flex:none;border-radius:10px;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c);display:flex;align-items:center;justify-content:center;font:700 12px/1 var(--ui);border:1px solid color-mix(in srgb,var(--c) 22%,transparent);cursor:default}
+.s-av-lg{width:46px;height:46px;font-size:15px;border-radius:12px}
+
+/* menu contextuel */
+.s-menu{position:absolute;right:0;top:46px;z-index:20;width:236px;background:var(--surf);border:1px solid var(--filet);border-radius:var(--r2);box-shadow:var(--e2);padding:5px;text-align:left}
+.s-menu a{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:var(--r1);font:500 13px/1.3 var(--ui);color:var(--t1);cursor:pointer}
+.s-menu a:hover{background:var(--surf2)}
+.s-menu .ic{width:16px;height:16px;color:var(--t3)}
+.s-menu-s{font:600 10px/1 var(--ui);letter-spacing:.07em;text-transform:uppercase;color:var(--t3);padding:11px 9px 6px;margin-top:4px;border-top:1px solid var(--filet2)}
+.s-menu-d{color:var(--rouge)}
+.s-menu-d .ic{color:var(--rouge)}
+
+/* ═══════════ RAIL / MENU ═══════════ */
+.s-side{width:252px;flex:none;background:var(--rail);color:var(--rail-t);display:flex;flex-direction:column;padding:14px 10px}
+.s-side-brand{display:flex;align-items:center;gap:10px;padding:4px 6px 16px}
+.s-side-brand b{display:block;font:650 15px/1.2 var(--ui);letter-spacing:-.01em;color:#fff}
+.s-side-brand em{display:flex;align-items:center;gap:6px;font:500 11.5px/1.4 var(--ui);font-style:normal;color:var(--rail-t2)}
+.s-side-brand em i{width:7px;height:7px;border-radius:50%;background:var(--c);box-shadow:0 0 0 2px rgba(255,255,255,.14)}
+.s-shield{width:32px;height:32px;flex:none;border-radius:9px;background:linear-gradient(160deg,#3B69E3,#1E3EA8);display:flex;align-items:center;justify-content:center}
+.s-shield svg{width:19px;height:19px;fill:none;stroke:#fff;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.s-shield.sm{width:30px;height:30px}
+.s-cmd{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 10px;margin-bottom:12px;background:var(--rail-h);border:1px solid var(--rail-b);border-radius:var(--r1);color:var(--rail-t2);font:400 13px/1 var(--ui);cursor:pointer}
+.s-cmd .ic{width:16px;height:16px}
+.s-cmd kbd{margin-left:auto;font:600 10px/1 var(--ui);background:rgba(255,255,255,.09);border:1px solid var(--rail-b);border-radius:4px;padding:4px 5px;color:var(--rail-t2)}
+.s-nav{display:flex;flex-direction:column;gap:1px;flex:1;overflow:hidden}
+.s-nav-i,.s-nav-h{display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 10px;background:none;border:none;border-radius:var(--r1);color:var(--rail-t2);font:500 13px/1 var(--ui);cursor:pointer;text-align:left}
+.s-nav-i:hover,.s-nav-h:hover{background:var(--rail-h);color:#fff}
+.s-nav-i.is-on{background:rgba(255,255,255,.11);color:#fff;font-weight:600}
+.s-nav-i .ic,.s-nav-h .ic{width:17px;height:17px}
+.s-caret{margin-left:auto;transition:transform .2s}
+.is-open > .s-nav-h{color:#fff}
+.is-open > .s-nav-h .s-caret{transform:rotate(180deg)}
+.s-badge{margin-left:auto;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--rouge);color:var(--on-bleu);font:700 10.5px/19px var(--ui);text-align:center}
+.s-badge-q{margin-left:auto;margin-right:8px;background:var(--rail-h);color:var(--rail-t2);border:1px solid var(--rail-b);line-height:17px}
+.s-nav-sub{display:flex;flex-direction:column;gap:1px;padding:3px 0 6px 26px;margin-left:9px;border-left:1px solid var(--rail-b)}
+.s-nav-sub a{display:block;padding:7px 9px;border-radius:var(--r1);font:400 12.5px/1.2 var(--ui);color:var(--rail-t2);cursor:pointer}
+.s-nav-sub a:hover{background:var(--rail-h);color:#fff}
+.s-nav-sub a.is-on{background:rgba(255,255,255,.11);color:#fff;font-weight:600}
+.s-side-foot{border-top:1px solid var(--rail-b);padding-top:10px;margin-top:10px}
+.s-me{display:flex;align-items:center;gap:9px;width:100%;padding:6px;background:none;border:none;border-radius:var(--r1);cursor:pointer;text-align:left}
+.s-me:hover{background:var(--rail-h)}
+.s-me b{display:block;font:600 12.5px/1.3 var(--ui);color:#fff}
+.s-me span{display:block;font:400 11px/1.3 var(--ui);color:var(--rail-t2)}
+.s-me .ic{margin-left:auto;width:16px;height:16px;color:var(--rail-t2)}
+.s-me .s-av{background:rgba(255,255,255,.12);color:#fff;border-color:var(--rail-b)}
+
+/* ═══════════ ZONE PRINCIPALE ═══════════ */
+.s-main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--papier)}
+.s-top{display:flex;align-items:center;gap:14px;padding:14px 24px;border-bottom:1px solid var(--filet);background:var(--surf)}
+.s-top h1{font:650 21px/1.2 var(--ui);letter-spacing:-.015em;margin:0;flex:1}
+.s-top-r{display:flex;align-items:center;gap:9px}
+.s-date{font:400 12.5px/1 var(--ui);color:var(--t3)}
+.s-sync{display:inline-flex;align-items:center;gap:6px;font:500 11.5px/1 var(--ui);color:var(--vert);background:var(--vert-w);padding:6px 10px;border-radius:999px;border:1px solid color-mix(in srgb,var(--vert) 22%,transparent)}
+.s-sync i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.s-sync-off{color:var(--ambre);background:var(--ambre-w);border-color:color-mix(in srgb,var(--ambre) 26%,transparent)}
+.s-page{padding:22px 24px 30px;display:flex;flex-direction:column;gap:18px}
+.s-card{background:var(--surf);border:1px solid var(--filet);border-radius:var(--r2);padding:18px 20px}
+.s-card.s-flush{padding:0}
+.s-card-h{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.s-card-h h2{font:600 15px/1.3 var(--ui);margin:0;flex:1}
+.s-count{font:700 12px/1 var(--ui);color:var(--bleu);background:var(--bleu-w);border:1px solid var(--bleu-b);padding:5px 9px;border-radius:999px}
+
+/* matin */
+.s-morning-b{display:grid;grid-template-columns:230px 1fr;gap:26px;align-items:end}
+.s-morning-n{display:flex;gap:22px}
+.s-morning-n div b{display:block;font:700 27px/1 var(--ui);letter-spacing:-.02em;color:var(--t1)}
+.s-morning-n div span{display:block;font:400 11.5px/1.4 var(--ui);color:var(--t3);margin-top:4px}
+.s-bars{display:flex;align-items:flex-end;gap:6px;height:74px;position:relative;padding-bottom:20px}
+.s-bars i{flex:1;height:var(--h);background:var(--bleu);opacity:.32;border-radius:3px 3px 0 0;min-height:3px}
+.s-bars i.on{opacity:1}
+.s-bars-x{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;font:400 10.5px/1 var(--ui);color:var(--t3)}
+@media(max-width:900px){.s-morning-b{grid-template-columns:1fr;gap:18px}}
+
+.s-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+@media(max-width:900px){.s-stats{grid-template-columns:repeat(2,1fr)}}
+.s-stat{display:flex;flex-direction:column;gap:5px;padding:16px 18px}
+.s-stat-l{font:600 11px/1.3 var(--ui);letter-spacing:.06em;text-transform:uppercase;color:var(--t3)}
+.s-stat b{font:700 25px/1.1 var(--ui);letter-spacing:-.02em;color:var(--t1)}
+.s-stat b em{font:500 14px/1 var(--ui);font-style:normal;color:var(--t3)}
+.s-stat-d{font:400 12px/1.4 var(--ui);color:var(--t3)}
+.s-up{color:var(--vert)}
+.s-dn{color:var(--rouge)}
+
+.s-cols{display:grid;grid-template-columns:1.15fr 1fr;gap:18px}
+@media(max-width:900px){.s-cols{grid-template-columns:1fr}}
+.s-todo{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.s-todo li{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--filet2)}
+.s-todo li:first-child{border-top:none;padding-top:0}
+.s-todo b{display:block;font:600 13.5px/1.35 var(--ui);color:var(--t1)}
+.s-todo span{display:block;font:400 12px/1.4 var(--ui);color:var(--t3);margin-top:2px}
+.s-todo li > div{flex:1;min-width:0}
+.s-todo .ic{color:var(--t3);width:17px;height:17px}
+.s-kv{list-style:none;margin:0;padding:0}
+.s-kv li{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--filet2);font-size:13.5px;color:var(--t2)}
+.s-kv b{color:var(--t1);font-weight:600;font-size:14px}
+.s-kv-t{border-bottom:none;border-top:1px solid var(--filet);margin-top:3px;padding-top:11px}
+.s-kv-t span{font-weight:600;color:var(--t1)}
+.s-kv-t b{font-size:17px}
+
+/* barres d'outils */
+.s-tabs{display:flex;gap:4px;border-bottom:1px solid var(--filet);margin-bottom:-4px}
+.s-tabs button{background:none;border:none;padding:9px 14px 12px;font:600 13.5px/1 var(--ui);color:var(--t2);cursor:pointer;border-bottom:2px solid transparent;display:flex;align-items:center;gap:7px}
+.s-tabs button em{font:600 11px/1 var(--ui);font-style:normal;color:var(--t3);background:var(--surf2);padding:4px 7px;border-radius:999px}
+.s-tabs .is-on{color:var(--bleu);border-bottom-color:var(--bleu)}
+.s-tabs .is-on em{color:var(--bleu);background:var(--bleu-w)}
+.s-toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.s-toolbar .s-selw{min-width:168px}
+.s-seg{display:flex;border:1px solid var(--filet);border-radius:var(--r1);overflow:hidden;background:var(--surf);margin-left:auto}
+.s-seg button{width:38px;height:40px;border:none;background:none;color:var(--t3);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.s-seg .is-on{background:var(--bleu-w);color:var(--bleu)}
+.s-selbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;background:var(--bleu-w);border:1px solid var(--bleu-b);border-radius:var(--r2);font-size:13.5px}
+.s-selbar b{color:var(--bleu);font-weight:600}
+.s-selbar-a{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.s-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid var(--filet);font-size:12.5px;color:var(--t3)}
+.s-pager-b{display:flex;gap:8px}
+
+/* connexion */
+.s-login{min-height:600px}
+.s-login-side{width:44%;background:var(--encre);color:#fff;padding:40px 40px;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.s-grid-motif{position:absolute;inset:0;opacity:.5;background-image:radial-gradient(circle at 1px 1px,rgba(255,255,255,.10) 1.4px,transparent 0),linear-gradient(115deg,rgba(59,105,227,.28),transparent 62%);background-size:22px 22px,100% 100%}
+.s-login-side > *:not(.s-grid-motif){position:relative}
+.s-brandmark{display:flex;align-items:center;gap:11px;margin-bottom:auto}
+.s-brandmark b{font:650 18px/1 var(--ui);letter-spacing:-.01em;color:#fff}
+.s-login-claim{font:650 clamp(22px,2.4vw,30px)/1.25 var(--ui);letter-spacing:-.02em;color:#fff;margin:36px 0 30px;max-width:14ch}
+.s-login-pts{list-style:none;margin:0 0 auto;padding:0;display:flex;flex-direction:column;gap:16px}
+.s-login-pts li{display:flex;gap:12px;align-items:flex-start}
+.s-login-pts .ic{color:#fff;opacity:.72;margin-top:1px;width:18px;height:18px}
+.s-login-pts b{display:block;font:600 13.5px/1.4 var(--ui);color:#fff}
+.s-login-pts span{display:block;font:400 12.5px/1.5 var(--ui);color:#9AA5BD}
+.s-login-foot{font:400 11.5px/1.4 var(--ui);color:#9AA5BD;margin:34px 0 0}
+.s-login-main{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 32px;background:var(--surf)}
+.s-login-card{width:100%;max-width:352px}
+.s-login-card h1{font:650 26px/1.2 var(--ui);letter-spacing:-.02em;margin:0 0 6px}
+.s-login-sub{font:400 14px/1.5 var(--ui);color:var(--t2);margin:0 0 26px}
+.s-login-links{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:16px;color:var(--t3);font-size:12px}
+.s-login-bottom{display:flex;gap:9px;justify-content:center;margin-top:30px;padding-top:20px;border-top:1px solid var(--filet)}
+@media(max-width:820px){.s-login{flex-direction:column}.s-login-side{width:100%;padding:28px}.s-login-claim{margin:22px 0 20px}}
+
+/* navigation — figures */
+.navgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(292px,1fr));gap:26px}
+.navfig{margin:0}
+.navfig figcaption{font:400 13px/1.55 var(--ui);color:var(--t2);margin-bottom:12px}
+.navfig figcaption b{display:block;font:600 14px/1.4 var(--ui);color:var(--t1)}
+.s-app-mini{min-height:0;border:1px solid var(--filet);border-radius:var(--r2);overflow:hidden}
+.s-app-mini .s-side{width:100%;height:398px}
+.s-pal{background:var(--surf);border:1px solid var(--filet);border-radius:var(--r2);box-shadow:var(--e2);padding:6px;height:398px;overflow:hidden}
+.s-pal-in{display:flex;align-items:center;gap:9px;padding:11px 12px;border-bottom:1px solid var(--filet);margin:-6px -6px 6px;color:var(--t1);font-size:14.5px}
+.s-pal-in .ic{color:var(--t3)}
+.s-pal-in kbd{margin-left:auto;font:600 10px/1 var(--ui);background:var(--surf2);border:1px solid var(--filet);border-radius:4px;padding:4px 6px;color:var(--t3)}
+.s-caret-t{display:inline-block;width:1.5px;height:15px;background:var(--bleu);margin-left:1px;vertical-align:-3px;animation:blink 1.1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.s-pal-sec{font:600 10px/1 var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--t3);padding:12px 10px 7px}
+.s-pal-i{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r1);font:400 13.5px/1.3 var(--ui);color:var(--t1);cursor:pointer}
+.s-pal-i .ic{width:17px;height:17px;color:var(--t3)}
+.s-pal-i b{font-weight:700;color:var(--bleu)}
+.s-pal-i em{margin-left:auto;font:400 11px/1 var(--ui);font-style:normal;color:var(--t3)}
+.s-pal-i.is-on{background:var(--bleu-w)}
+.s-railwrap{display:flex;height:398px;border:1px solid var(--filet);border-radius:var(--r2);overflow:hidden;background:var(--papier)}
+.s-rail{width:76px;flex:none;background:var(--rail);display:flex;flex-direction:column;align-items:center;gap:3px;padding:14px 6px}
+.s-rail .s-shield{margin-bottom:12px}
+.s-rail a{position:relative;width:100%;display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 2px;border-radius:var(--r1);color:var(--rail-t2);cursor:pointer}
+.s-rail a:hover{background:var(--rail-h);color:#fff}
+.s-rail a.is-on{background:rgba(255,255,255,.11);color:#fff}
+.s-rail small{font:500 9.5px/1.2 var(--ui);text-align:center}
+.s-rail .s-badge{position:absolute;top:5px;right:14px;margin:0;min-width:16px;height:16px;font-size:9.5px;line-height:16px}
+.s-flyout{width:186px;flex:none;background:var(--surf);border-right:1px solid var(--filet);padding:14px 8px;display:flex;flex-direction:column;gap:1px}
+.s-flyout b{font:600 11px/1 var(--ui);letter-spacing:.07em;text-transform:uppercase;color:var(--t3);padding:0 9px 10px}
+.s-flyout a{padding:8px 9px;border-radius:var(--r1);font:500 13px/1.3 var(--ui);color:var(--t1);cursor:pointer}
+.s-flyout a:hover{background:var(--surf2)}
+.s-bnwrap{display:flex;flex-direction:column;gap:14px}
+
+/* barre du bas */
+.s-bn{display:flex;background:var(--surf);border:1px solid var(--filet);border-radius:var(--r2);overflow:hidden}
+.s-bn a{position:relative;flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 2px;color:var(--t3);cursor:pointer;min-height:56px}
+.s-bn a.is-on{color:var(--bleu)}
+.s-bn a.is-on::before{content:"";position:absolute;top:0;left:22%;right:22%;height:2px;background:var(--bleu);border-radius:0 0 2px 2px}
+.s-bn small{font:500 10px/1.2 var(--ui);text-align:center}
+.s-bn .s-badge{position:absolute;top:5px;right:16px;margin:0;min-width:16px;height:16px;font-size:9.5px;line-height:16px}
+.s-bn-d{background:#141C31;border-color:rgba(255,255,255,.09)}
+.s-bn-d a{color:#7B879F}
+.s-bn-d a.is-on{color:#7D9CF7}
+.s-bn-d a.is-on::before{background:#7D9CF7}
+
+/* cartes miniatures */
+.s-mini-cards{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.s-card2{display:flex;gap:12px;align-items:center;background:var(--surf);border:1px solid var(--filet);border-radius:var(--r2);padding:13px 15px}
+.s-card2 b{display:block;font:600 13.5px/1.35 var(--ui);color:var(--t1)}
+.s-card2 > div > span:not(.s-tag){display:block;font:400 12px/1.5 var(--ui);color:var(--t3);margin-bottom:6px}
+
+/* ═══════════ TÉLÉPHONE ═══════════ */
+.phones{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:32px;justify-items:center}
+.phone{margin:0;max-width:390px}
+.ph{position:relative;width:100%;max-width:390px;aspect-ratio:390/800;background:var(--encre);border-radius:38px;padding:9px;box-shadow:var(--e2)}
+.ph-notch{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:96px;height:22px;background:var(--encre);border-radius:999px;z-index:5}
+.ph-scr{width:100%;height:100%;border-radius:30px;overflow:hidden;display:flex;flex-direction:column}
+.phone figcaption{font:400 13px/1.55 var(--ui);color:var(--t2);margin-top:16px}
+.phone figcaption b{display:block;font:600 14px/1.4 var(--ui);color:var(--t1);margin-bottom:2px}
+
+.s-app-m{background:var(--papier);color:var(--t1);font:400 14px/1.5 var(--ui);font-variant-numeric:tabular-nums}
+.s-app-dark{background:#0B1020;color:#E8ECF6}
+.s-mtop{display:flex;align-items:center;gap:10px;padding:38px 16px 12px;background:var(--surf);border-bottom:1px solid var(--filet);flex:none}
+.s-mtop > div{flex:1;min-width:0}
+.s-mtop b{display:block;font:650 16px/1.25 var(--ui);letter-spacing:-.01em}
+.s-mtop span{display:block;font:400 11.5px/1.4 var(--ui);color:var(--t3)}
+.s-mtop-t{text-align:center}
+.s-mtop-d{background:#141C31;border-bottom-color:rgba(255,255,255,.09);color:#E8ECF6}
+.s-mtop-d span{color:#9AA5BD}
+.s-mpage{flex:1;overflow:hidden;padding:14px 14px 8px;display:flex;flex-direction:column;gap:12px}
+.s-mpage-t{padding:0 14px 8px;gap:0}
+.s-msec{padding:14px 15px}
+.s-msec .s-card-h{margin-bottom:10px}
+.s-msec .s-card-h h2{font-size:13.5px}
+.s-kid{background:var(--encre);border-radius:var(--r2);padding:14px 15px;color:#fff}
+.s-kid-h{display:flex;align-items:center;gap:11px;margin-bottom:11px}
+.s-kid-h b{display:block;font:600 14.5px/1.3 var(--ui);color:#fff}
+.s-kid-h span{display:block;font:400 11.5px/1.4 var(--ui);color:#9AA5BD}
+.s-kid .s-av{background:rgba(255,255,255,.13);color:#fff;border-color:rgba(255,255,255,.16)}
+.s-kid-row{display:flex;gap:7px;flex-wrap:wrap}
+.s-todo-m li{padding:9px 0}
+.s-todo-m li:first-child{padding-top:0}
+.s-fee{display:flex;align-items:flex-start;gap:10px;margin-bottom:11px}
+.s-fee > div{flex:1;min-width:0}
+.s-fee b{display:block;font:700 18px/1.2 var(--ui);letter-spacing:-.01em}
+.s-fee span{display:block;font:400 11.5px/1.4 var(--ui);color:var(--t3);margin-top:3px}
+.s-prog{height:6px;border-radius:999px;background:var(--surf2);overflow:hidden}
+.s-prog i{display:block;height:100%;width:var(--p);background:var(--ambre);border-radius:999px}
+.s-prog-l{display:block;font:400 11px/1.4 var(--ui);color:var(--t3);margin-top:6px}
+
+.s-viewport{flex:1;position:relative;background:#060B18;overflow:hidden;min-height:130px}
+.s-corners i{position:absolute;width:32px;height:32px;border:2.5px solid #7D9CF7;border-radius:4px}
+.s-corners i:nth-child(1){top:24px;left:34px;border-right:none;border-bottom:none}
+.s-corners i:nth-child(2){top:24px;right:34px;border-left:none;border-bottom:none}
+.s-corners i:nth-child(3){bottom:24px;left:34px;border-right:none;border-top:none}
+.s-corners i:nth-child(4){bottom:24px;right:34px;border-left:none;border-top:none}
+.s-scanline{position:absolute;left:34px;right:34px;top:50%;height:2px;background:linear-gradient(90deg,transparent,#7D9CF7,transparent);box-shadow:0 0 14px rgba(125,156,247,.8)}
+.s-result{background:#141C31;border-top:2px solid var(--rouge);padding:16px 15px;flex:none}
+.s-result-h{display:flex;align-items:center;gap:12px;margin-bottom:13px}
+.s-result-h b{display:block;font:650 15px/1.3 var(--ui);color:#E8ECF6}
+.s-result-h span{display:block;font:400 12px/1.4 var(--ui);color:#9AA5BD}
+.s-result-v{display:flex;gap:11px;align-items:flex-start;background:rgba(245,128,143,.13);border:1px solid rgba(245,128,143,.34);border-radius:var(--r2);padding:12px 13px}
+.s-result-v .ic{color:#F5808F;width:19px;height:19px;margin-top:1px}
+.s-result-v b{display:block;font:650 13.5px/1.4 var(--ui);color:#F5808F}
+.s-result-v span{display:block;font:400 12.5px/1.5 var(--ui);color:#C6CFE2;margin-top:3px}
+.s-result-a{margin-top:13px}
+.s-result-a .s-btn{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16);color:#E8ECF6}
+.s-result-a small{display:block;font:400 11px/1.5 var(--ui);color:#7B879F;text-align:center;margin-top:8px}
+.s-msearch{padding:10px 14px;background:var(--surf);border-bottom:1px solid var(--filet);flex:none}
+.s-chips{display:flex;gap:7px;padding:11px 14px;overflow:hidden;background:var(--surf);border-bottom:1px solid var(--filet);flex:none}
+.s-chips button{height:30px;padding:0 12px;border:1px solid var(--filet);background:var(--surf);border-radius:999px;font:500 12.5px/1 var(--ui);color:var(--t2);cursor:pointer;white-space:nowrap;flex:none}
+.s-chips .is-on{background:var(--bleu);border-color:var(--bleu);color:var(--on-bleu)}
+.s-mrow{display:flex;align-items:center;gap:11px;padding:12px 0;border-bottom:1px solid var(--filet2);cursor:pointer}
+.s-mrow > div{flex:1;min-width:0}
+.s-mrow b{display:block;font:600 13.5px/1.35 var(--ui);color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s-mrow > div > span:not(.s-tag){display:block;font:400 11.5px/1.4 var(--ui);color:var(--t3);margin:1px 0 5px}
+.s-mrow > .ic{color:var(--t3);width:17px;height:17px}
+.s-app-m .s-bn{border:none;border-top:1px solid var(--filet);border-radius:0;flex:none;padding-bottom:16px}
+.s-app-m .s-bn-d{border-top-color:rgba(255,255,255,.09)}
+
+@media(max-width:760px){
+  .wrap{padding:0 16px 72px}
+  .lede{padding:48px 0 32px}
+  .s-app{min-height:0}
+  .s-side{display:none}
+  .s-page{padding:16px}
+  .s-top{padding:12px 16px}
+  .s-date,.s-sync{display:none}
+}
+</style>
