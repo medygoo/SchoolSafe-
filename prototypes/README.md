@@ -21,6 +21,7 @@ suffit ; pour le **voir**, il faut ouvrir le fichier localement.
 |---|---|
 | `01-registre.html` | un **document** : le système de design complet, puis cinq écrans dessinés en statique |
 | `02-mosaique.html` | une **application manipulable** : six profils, menus réels, navigation, formulaires, tout fonctionne en JavaScript pur |
+| `03-copilote.html` | une **application manipulable** : les 53 destinations de Direction 1 et les 44 de Direction 2, regroupées par domaine ; un panneau de copilote latéral ; les quatre autres rôles gardent leur liste plate, sans domaines inventés |
 
 Dans `02-mosaique.html`, les endroits utiles à la lecture du code :
 
@@ -29,6 +30,27 @@ Dans `02-mosaique.html`, les endroits utiles à la lecture du code :
 - `const V = {}` — une fonction par écran (`V.dashboard`, `V.students`, `V.caisse`,
   `V.scanner`, `V.messages`, `V.attendance`, `V.enfants`, `V.systeme`)
 - `function mark()` — le bouclier et ses modules QR, redessinés en SVG d'après le logo
+
+Dans `03-copilote.html`, les endroits utiles à la lecture du code :
+
+- `const NAV = {…}` — **extrait de `window.NAV` dans `dist/index.html`**, pas
+  retapé à la main : un script Python a parcouru le vrai fichier et en a sorti
+  les 76 destinations et leurs 6 rôles (`direction`, `direction2`, `direction3`
+  pour la Caisse, `enseignant`, `parent`, `gardien`) le 22 août 2026. Si l'app
+  change ses menus, cette liste se périme — elle ne se corrige pas à l'œil,
+  elle se réextrait.
+- `const GROUPES = […]` — le regroupement des 53 destinations de Direction 1
+  (et par filtrage, des 44 de Direction 2) en 11 domaines. C'est un choix
+  éditorial, pas une donnée de l'application : ChatGPT ou Loms peuvent le
+  redécouper autrement sans toucher à `NAV`.
+- **Pourquoi Caisse, Enseignant, Parent et Gardien n'ont pas de domaines** :
+  15, 21, 19 et 10 destinations tiennent dans une seule liste. Leur inventer
+  des groupes aurait habillé un vide, pas simplifié quelque chose de réel —
+  la même leçon que `CLAUDE.md` répète pour les données inventées.
+- le panneau **Copilote**, à droite : une proposition d'assistant qui
+  renvoie vers un écran réel plutôt que de répondre à la place de
+  l'application. Il ne répond à rien ici — chaque échange est scripté, et
+  le dit explicitement dans son propre texte.
 
 ---
 
